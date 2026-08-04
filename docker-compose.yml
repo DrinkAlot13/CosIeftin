@@ -1,0 +1,19 @@
+# Local: `docker compose up -d --build`
+# Unraid: use the CI-built image (comment out `build:`), map the two volumes.
+services:
+  cosmic:
+    build: .
+    image: ghcr.io/YOUR_GITHUB_USERNAME/cosmic:latest
+    container_name: cosmic
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "file:/data/cosmic.db"
+      # Set a long random string in production (used to sign the login session cookie):
+      AUTH_SECRET: "change-me-to-a-long-random-string"
+      SITE_URL: "http://localhost:3000"
+    volumes:
+      - ./data:/data                                  # SQLite DB (persists across updates)
+      - ./product-images:/app/public/product-images   # downloaded product photos
