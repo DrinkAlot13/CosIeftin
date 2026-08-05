@@ -14,8 +14,9 @@
     "scrape:auchan": "tsx scripts/scrape-auchan.ts",
     "scrape:freshful": "tsx scripts/scrape-freshful.ts",
     "scrape:megaimage": "tsx scripts/scrape-megaimage.ts",
+    "scrape:carrefour": "tsx scripts/scrape-carrefour.ts",
     "download-images": "tsx scripts/download-images.ts",
-    "scrape:all": "tsx scripts/scrape-auchan.ts && tsx scripts/scrape-freshful.ts && tsx scripts/scrape-megaimage.ts && tsx scripts/download-images.ts",
+    "scrape:all": "tsx scripts/scrape-auchan.ts && tsx scripts/scrape-freshful.ts && tsx scripts/scrape-megaimage.ts && tsx scripts/scrape-carrefour.ts && tsx scripts/download-images.ts",
     "setup": "prisma db push --force-reset --skip-generate && tsx scripts/seed-catalog.ts && tsx scripts/seed-admin.ts",
     "refresh": "npm run setup && npm run scrape:all"
   },
