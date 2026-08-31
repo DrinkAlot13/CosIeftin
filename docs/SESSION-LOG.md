@@ -254,3 +254,86 @@ Zero `pool.map(` remain in `scripts/`.
 
 **Tests** — 406 passed, 0 failed. Golden set unchanged at **97.3%, 2 false matches**.
 Typecheck clean.
+
+---
+
+## Phase 4 — search quality, measured for the first time
+
+**Start** 07:05 · **End** 08:20
+
+Search quality had never been measured. The scoring lived inside `searchProducts`, wrapped
+around a Prisma call, so checking whether "lapte zuzu" returns the right milk needed a
+database, a scrape and a running app. Nobody was going to do that on every change, so every
+adjustment to the weights was a guess with no way to tell a fix from a regression.
+
+### What changed
+
+- Scoring extracted to `src/lib/search/rank.ts`, pure and testable.
+- **40 real Romanian queries** (`tests/fixtures/search/queries.ts`), each stating *why* it is in
+  the set: no-diacritic spellings, diacritic spellings, product+brand, brand alone, phone-keyboard
+  misspellings, sizes in the query, near-miss discrimination, and degenerate input.
+- The test catalog is **1,028 real product names** from the live database, including 400
+  unrelated products as distractors — without those, precision is untested and a ranker that
+  returns everything scores perfectly.
+- `npm run audit:search` runs the same 40 against the **whole live catalog** (21,353 products).
+- `npm run audit:search-curve` sweeps the threshold and reports the tradeoff.
+
+### The defect the fixture alone did not catch
+
+Against 1,028 names, 39/40 passed. Against the real 21,353, `"lpate"` returned **1,195 products
+led by "Spinari si spate de pui"**.
+
+The curve showed the threshold was the wrong knob:
+
+| threshold | recall | top-1 | median hits |
+|---|---|---|---|
+| 0.35 | 36/36 | 34/36 | 383 |
+| 0.45 | 34/36 | 33/36 | 278 |
+| 0.55–1.05 | 33/36 | 33/36 | 187 |
+
+Raising it **cost recall and bought nothing**. So it was not raised.
+
+The actual cause was two compounding bugs:
+
+1. **Plain Levenshtein charges a transposition two edits.** "lpate" is a transposition of
+   "lapte" — the commonest way to mistype it — so the misspelling was scored as *closer* to
+   "spate", an unrelated word one substitution away. Replaced with **Damerau-Levenshtein**,
+   where a transposition costs one.
+2. **Typo similarity alone both qualified a result and ranked it.** No string metric can break
+   the "lpate" tie — it is genuinely one edit from both words. What breaks it is the catalog:
+   milk heads hundreds of products, "spate" a handful. So the query is now **corrected before
+   scoring**, against the catalog's own head-noun vocabulary, weighted by frequency — edit
+   distance proposes, prior frequency disposes. A token the catalog already knows is never
+   touched, so a real query cannot be "corrected" into a different one.
+
+Also added a **head-noun bonus**: what a product IS beats what it contains, so "lapte" ranks
+milk above milk chocolate. It is a boost and not a filter, because "lapte de cocos" is a
+genuine head-noun match that a shopper genuinely wants.
+
+### After
+
+| | before | after |
+|---|---|---|
+| recall (live catalog) | 36/36 | 36/36 |
+| **top-1 accuracy** | **34/36** | **36/36** |
+| top-1 misses | `lpate`, `cicolata` | none |
+
+36/36 on both at **every threshold from 0.35 to 1.05**, so the threshold is no longer a
+correctness lever at all. Left at **0.35**, the value with maximum recall — conservative, and
+**provisional**: it now governs only how long the tail is, not whether the right answer is
+found.
+
+### Logged, not decided
+
+- **`"lpate"` now returns "Lapte de corp Lactovit" first — body lotion.** Its head noun really
+  is "lapte", so no string signal can separate it from drinking milk. The fix is category
+  signal, and **search ignores `Category` entirely** today. That is the next measurement to add
+  (precision@10 by category), not a weight to fiddle with.
+- **Search reads the whole grocery catalog on every request** and scores it in Node: 164 ms to
+  load, ~530 ms to score, per query. Fine at this size, will not survive traffic. The Postgres
+  cutover (pg_trgm + unaccent) is where this stops being a full scan — which is the stated
+  reason for Phase 3 in the first place.
+
+**Dependencies added** — none.
+
+**Tests** — 486 passed, 0 failed. Golden set unchanged at 97.3%.

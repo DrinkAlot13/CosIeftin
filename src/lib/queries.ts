@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { jaccard, levenshtein, normalizeText, tokenize } from "@/lib/matching";
+import { normalizeText } from "@/lib/matching";
+import { rankSearch } from "@/lib/search/rank";
 import { buildDailyLowSeries, dropPercent, summarize } from "@/lib/pricing";
 
 const activeInclude = { where: { merchant: { active: true } }, include: { merchant: true } } as const;
@@ -156,59 +157,17 @@ export async function getAlternatives(productId: number, limit = 8, strictness: 
 }
 export type AltProduct = Awaited<ReturnType<typeof getAlternatives>>[number];
 
-function typoScore(qTokens: Set<string>, tTokens: string[]): number {
-  if (qTokens.size === 0) return 0;
-  let sum = 0;
-  for (const q of qTokens) {
-    let best = 0;
-    for (const t of tTokens) {
-      const sim = 1 - levenshtein(q, t) / Math.max(q.length, t.length);
-      if (sim > best) best = sim;
-    }
-    sum += best;
-  }
-  return sum / qTokens.size;
-}
-
 export async function searchProducts(query: string) {
   const q = query.trim();
   if (!q) return [];
-  const products = await prisma.product.findMany({ where: { section: "grocery" }, include: { offers: activeInclude, category: true } });
-  const nq = normalizeText(q);
-  const qTokens = tokenize(q);
-
-  // Brand-aware: if the query names a brand we actually carry (e.g. "ulei baneasa"),
-  // restrict results to that brand instead of showing every oil. Build the set of
-  // known brands from the catalog, then see which of them the query mentions.
-  const brandNorms = new Set<string>(); // full normalized brand strings ("napolact", "de silva")
-  const brandTokens = new Set<string>(); // individual brand tokens ("baneasa", "zuzu")
-  for (const p of products) {
-    if (!p.brand) continue;
-    const nb = normalizeText(p.brand);
-    if (nb.length >= 3) brandNorms.add(nb);
-    for (const t of tokenize(p.brand)) if (t.length >= 3) brandTokens.add(t);
-  }
-  const namedBrands = new Set<string>();
-  for (const nb of brandNorms) if (nq.includes(nb)) namedBrands.add(nb);
-  for (const t of qTokens) if (brandTokens.has(t)) namedBrands.add(t);
-  const requiredBrands = [...namedBrands];
-
-  const scored = products
-    .map((p) => {
-      const hay = normalizeText(`${p.brand ?? ""} ${p.name}`);
-      const tTokens = [...tokenize(`${p.brand ?? ""} ${p.name}`)];
-      let score = 0;
-      if (hay.includes(nq)) score += 1;
-      if (hay.startsWith(nq)) score += 0.3;
-      score += jaccard(qTokens, new Set(tTokens)) * 0.8;
-      score += typoScore(qTokens, tTokens) * 0.6;
-      return { p, score, hay };
-    })
-    .filter((x) => x.score >= 0.35)
-    // When the query names a brand, keep only products of that brand.
-    .filter((x) => requiredBrands.length === 0 || requiredBrands.some((b) => x.hay.includes(b)))
-    .sort((a, b) => b.score - a.score);
-  return decorate(scored.map((x) => x.p)).filter((p) => p.summary.offerCount > 0);
+  const products = await prisma.product.findMany({
+    where: { section: "grocery" },
+    include: { offers: activeInclude, category: true },
+  });
+  // The scoring lives in lib/search/rank.ts so that search quality can be measured without a
+  // database. See tests/search-quality.test.ts (40 real queries) and `npm run audit:search`.
+  const ranked = rankSearch(q, products);
+  return decorate(ranked.map((r) => r.item)).filter((p) => p.summary.offerCount > 0);
 }
 
 export type ProductCardData = Awaited<ReturnType<typeof searchProducts>>[number];

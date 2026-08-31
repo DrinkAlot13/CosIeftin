@@ -59,7 +59,9 @@
     "verify:code": "npm run typecheck && npm run check:parsepricelei && npm test",
     "audit:promo": "tsx scripts/audit-promo-packs.ts",
     "backfill:unitsize": "tsx scripts/backfill-unitsize.ts",
-    "gen:postgres": "tsx scripts/gen-postgres-schema.ts"
+    "gen:postgres": "tsx scripts/gen-postgres-schema.ts",
+    "audit:search": "tsx scripts/audit-search.ts",
+    "audit:search-curve": "tsx scripts/audit-search-curve.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
