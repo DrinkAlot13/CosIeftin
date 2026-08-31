@@ -1,0 +1,452 @@
+{
+  "Kefir Muller, 2 x 500 g": {
+    "value": 1000,
+    "unit": "G",
+    "packCount": 2,
+    "packSize": 500,
+    "paidCount": 2,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Amestec tartinabil sarat Lurpak, 200 g": {
+    "value": 200,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 200,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Iaurt cu specific grecesc 10% grasime, 400g Auchan": {
+    "value": 400,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 400,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Iaurt Olympus , 2% grasime, 150 g": {
+    "value": 150,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 150,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Iaurt de baut Danonino, capsuni-banane si piersici-caise, 6 x 100 g": {
+    "value": 600,
+    "unit": "G",
+    "packCount": 6,
+    "packSize": 100,
+    "paidCount": 6,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Oua de gaina ECO Filiera Auchan, marime M, cod 0, 10 bucati": {
+    "value": 10,
+    "unit": "BUC",
+    "packCount": 1,
+    "packSize": 10,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Pulpe inferioare de pui La Provincia, +/- 1 kg": {
+    "value": 1000,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 1000,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Pui grill Auchan, hranit cu porumb si cereale, +/- 1.6 kg": {
+    "value": 1600,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 1600,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Sunca Praga feliata Auchan, 100 g": {
+    "value": 100,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 100,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Prosciutto crudo busuioc San Michele, 90 g": {
+    "value": 90,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 90,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Salam rustic Cris-Tim, 100 g": {
+    "value": 100,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 100,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Salam din Casa Meda, 400 g": {
+    "value": 400,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 400,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Jumari Secuiesti, 200 g": {
+    "value": 200,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 200,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Pastrav eviscerat Romania, +/- 1.5 kg": {
+    "value": 1500,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 1500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Sardeluta marinata in ulei picant Deltaica, 165 g": {
+    "value": 165,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 165,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Lipii cu busuioc si spanac Dijo, 4 x 62.5 g": {
+    "value": 250,
+    "unit": "G",
+    "packCount": 4,
+    "packSize": 62.5,
+    "paidCount": 4,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Cozonac de post cu nuca, rahat si stafide Auchan, 500 g": {
+    "value": 500,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Ecler cu aroma de ciocolata Auchan, 2 bucati, 200 g": {
+    "value": 200,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 200,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Struguri albi Seedless, 300 g": {
+    "value": 300,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 300,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Dovleac placintar, +/- 3 kg": {
+    "value": 3000,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 3000,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Mix de salata Endivia Mix Eisberg, 140g": {
+    "value": 140,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 140,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Apa carbogazoasa minerala San Benedetto, 1.5 l": {
+    "value": 1500,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 1500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Apa minerala naturala plata Borsec Blue, 0.33 l": {
+    "value": 330,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 330,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bautura necarbogazoasa cu extract de ceai negru si aroma de piersici Fuzetea, 1.5 l": {
+    "value": 1500,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 1500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Suc de mere cu morcovi Ana Are, 1 l": {
+    "value": 1000,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 1000,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bautura necarbogazoasa cu extract de ceai negru si aroma de fructe de padure Nestea, 0.5 l": {
+    "value": 500,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Sirop de afine Auchan, 0.75 l": {
+    "value": 750,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 750,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bautura necarbogazoasa cu suc si pulpa de grapefruit Cappy Pulpy, 0.33 l": {
+    "value": 330,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 330,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bautura carbogazoasa fara alcool Zonin Zero, cupaj alb, 0.75 l": {
+    "value": 750,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 750,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bere blonda Paulaner Munchner Hell, 0.5 l": {
+    "value": 500,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bere blonda pasteurizata Zimbru, pet, 2 l": {
+    "value": 2000,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 2000,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bere blonda Amstel, doza, 0.5 l": {
+    "value": 500,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bere neagra Kozel, 6 x 0.33 l": {
+    "value": 1980,
+    "unit": "ML",
+    "packCount": 6,
+    "packSize": 330,
+    "paidCount": 6,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bere blonda Ursus, 0.5 l": {
+    "value": 500,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Bautura cappucino cu lapte Muller, 0.25 l": {
+    "value": 250,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 250,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Paste fainoase Auchan spirale, 400 g": {
+    "value": 400,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 400,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Praf pentru desert Dr.Oetker Creme Ole cu banane si ciocolata, 110 g": {
+    "value": 110,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 110,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Sare de lamaie Auchan, 8g": {
+    "value": 8,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 8,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Otet balsamic cu miere Greek Land, 250 ml": {
+    "value": 250,
+    "unit": "ML",
+    "packCount": 1,
+    "packSize": 250,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Orez rosu Auchan, 500 g": {
+    "value": 500,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Ciuperci taiate Home Garden, 280 g": {
+    "value": 280,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 280,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Ton file in ulei de masline Auchan, 190 g": {
+    "value": 190,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 190,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Pasta cu ficat de pui Campofrio 150g": {
+    "value": 150,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 150,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Pate cu pui Auchan, 120 g": {
+    "value": 120,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 120,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Conopida in otet Auchan La Masa in Romania, 700 g": {
+    "value": 700,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 700,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Miere de tei Auchan, 950 g": {
+    "value": 950,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 950,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Fulgi de ovaz Fortin, 500 g": {
+    "value": 500,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 500,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Mix pentru gustare de ovaz cu zmeura Dr.Oetker Vitalis, 55 g": {
+    "value": 55,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 55,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Cereale mic dejun Chocapic Nestle, aroma ciocolata, 250 g": {
+    "value": 250,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 250,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  },
+  "Grisine cu sare Pouce, 90 g": {
+    "value": 90,
+    "unit": "G",
+    "packCount": 1,
+    "packSize": 90,
+    "paidCount": 1,
+    "freeCount": 0,
+    "isPromoPack": false
+  }
+}

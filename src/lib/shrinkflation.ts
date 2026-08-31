@@ -67,6 +67,19 @@ export function detectShrinkflation(observations: PackObservation[]): Shrinkflat
   if (units.size > 1) return null;
   const unit = parsed[0].q.unit;
 
+  // A PROMOTIONAL pack anywhere in the window disqualifies the whole series.
+  //
+  // "(7+1) x 125 g" is 1000 g while the offer runs and 875 g — or whatever the shelf pack is —
+  // when it ends. That transition looks exactly like shrinkflation: the pack got smaller and
+  // the per-unit price rose. It is promo expiry, and publishing it as shrinkflation would be
+  // accusing a retailer of something that did not happen.
+  //
+  // Refusing on ANY promo observation, not merely on a promo→plain transition, costs us the
+  // ability to detect real shrinkflation on a product that is permanently sold in a promo
+  // pack. Given that this feature ships behind a flag and a human review, a missed finding is
+  // the cheaper error by a wide margin.
+  if (parsed.some((x) => x.q.isPromoPack)) return null;
+
   const first = parsed[0];
   const last = parsed[parsed.length - 1];
   const oldPackSize = first.q.value;

@@ -156,4 +156,36 @@ describe("shrinkflation — only on strong evidence", () => {
   it("ignores products whose size cannot be parsed", () => {
     expect(detectShrinkflation([obs("Cafea", 3000, 40), obs("Cafea", 3000, 20), obs("Cafea", 3000, 5)])).toBe(null);
   });
+
+  // The reason parseQuantity had to learn promo packs BEFORE this feature could ship.
+  it("REFUSES to judge a promo pack ending — that is expiry, not shrinkflation", () => {
+    // 8 pots for the price of 7, then back to the ordinary 6-pack. Pack down 25%, per-unit
+    // price up: every numeric bar for shrinkflation is cleared, and it did not happen.
+    const f = detectShrinkflation([
+      obs("Iaurt natur Activia, (7+1) x 125 g", 1600, 40),
+      obs("Iaurt natur Activia, (7+1) x 125 g", 1600, 30),
+      obs("Iaurt natur Activia, 6 x 125 g", 1500, 12),
+      obs("Iaurt natur Activia, 6 x 125 g", 1500, 4),
+    ]);
+    expect(f).toBe(null);
+  });
+
+  it("REFUSES when a promo pack STARTS mid-window too", () => {
+    expect(detectShrinkflation([
+      obs("Bere blonda Ciuc, 8 x 0.5 l", 4000, 40),
+      obs("Bere blonda Ciuc, 5+1 x 0.5 l", 3600, 20),
+      obs("Bere blonda Ciuc, 5+1 x 0.5 l", 3600, 5),
+    ])).toBe(null);
+  });
+
+  it("still fires on a genuine shrink between two NON-promo packs", () => {
+    const f = detectShrinkflation([
+      obs("Ciocolata Milka 100 g", 800, 40),
+      obs("Ciocolata Milka 85 g", 800, 20),
+      obs("Ciocolata Milka 85 g", 800, 5),
+    ]);
+    expect(f).toBeTruthy();
+    expect(f!.oldPackSize).toBe(100);
+    expect(f!.newPackSize).toBe(85);
+  });
 });

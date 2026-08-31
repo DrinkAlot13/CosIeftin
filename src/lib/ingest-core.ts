@@ -5,6 +5,7 @@
 
 import { prisma } from "./db";
 import { bestFuzzyMatch, signature, type Candidate } from "./matching";
+import { parseQuantity } from "./units/parseQuantity";
 
 export type ScrapedItem = {
   name: string;
@@ -18,25 +19,26 @@ export type ScrapedItem = {
 
 export type Unit = "kg" | "l" | "buc";
 
-/** Parse a pack size ("1,5 L", "500 g", "6x0,5 L", "10 buc") into base unit + amount. */
+/**
+ * Parse a pack size ("1,5 L", "500 g", "6x0,5 L", "10 buc") into base unit + amount.
+ *
+ * RETIRED as an implementation — this is now a thin adapter over `parseQuantity`, which is the
+ * single size parser. It kept its own regexes until Phase 1a, and the two quietly disagreed on
+ * 611 of 34,263 catalog names (1.78%): every promotional pack, every "24 plicuri x 15 g" coffee
+ * box, and — worst — "Albrau,0.5 l", where `[\d.]+` captured ",0.5", parseFloat read it as 0,
+ * and the product got a unitSize of ZERO, dividing by zero in its per-unit price.
+ *
+ * Two parsers for one question means one of them is wrong and nothing says which. This shape
+ * (canonical G/ML/BUC in, kg/l/buc out) is kept only because the Product schema stores those
+ * three units; it discards packCount and the promo flag, so anything that needs the pack SHAPE
+ * must call `parseQuantity` directly.
+ */
 export function parseSize(text: string): { unit: Unit; unitSize: number } | null {
-  const s = text.toLowerCase().replace(/,/g, ".");
-  const conv = (q: number, u: string): { unit: Unit; unitSize: number } => {
-    if (u === "ml") return { unit: "l", unitSize: q / 1000 };
-    if (u === "cl") return { unit: "l", unitSize: q / 100 };
-    if (u === "l") return { unit: "l", unitSize: q };
-    if (u === "kg") return { unit: "kg", unitSize: q };
-    return { unit: "kg", unitSize: q / 1000 }; // g / gr
-  };
-  // "6x0.5 L", "4 x 330 ml", "2×1,5l"
-  const mp = s.match(/(\d+)\s*[x×]\s*([\d.]+)\s*(ml|cl|kg|gr|g|l)\b/);
-  if (mp) return conv(parseInt(mp[1], 10) * parseFloat(mp[2]), mp[3]);
-  // "500 g", "1,5 L", "75 cl", "250gr"
-  const single = s.match(/([\d.]+)\s*(ml|cl|kg|gr|g|l)\b/);
-  if (single) return conv(parseFloat(single[1]), single[2]);
-  const count = s.match(/(\d+)\s*(buc|role|rola|plicuri|pl|bucati|bucăți|capsule|comprimate|tablete|doze)\b/);
-  if (count) return { unit: "buc", unitSize: parseInt(count[1], 10) };
-  return null;
+  const q = parseQuantity(text);
+  if (!q) return null;
+  if (q.unit === "BUC") return { unit: "buc", unitSize: q.value };
+  // G and ML are canonical in the small unit; the Product schema stores the large one.
+  return { unit: q.unit === "G" ? "kg" : "l", unitSize: q.value / 1000 };
 }
 
 function slugify(s: string): string {

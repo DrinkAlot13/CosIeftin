@@ -65,3 +65,126 @@ proof, not decoration.
 - Backups are local only. Off-machine copy is a decision for the owner (see report).
 
 **Tests** — not re-run in this phase (no application code touched; scripts only).
+
+### One thing had to change to commit at all
+
+The pre-commit hook ran `npm run verify`, which now includes `audit:db`. The audit fails on
+legacy rows, so **every code commit was blocked by the state of the database** — including this
+one. A commit changes code; it cannot change data. Split into `verify:code` (typecheck + tests,
+what the hook runs) and `verify` (that plus `audit:db`, what the nightly and CI run). The data
+gate did not get weaker; it stopped standing in the wrong doorway.
+
+---
+
+## Phase 1a — parseQuantity: Romanian promo-pack notation
+
+**Start** 03:52 · **End** 05:10
+
+The DB audit flagged Activia yoghurt at 14,63 lei against a 2,59 cross-store median. Not a price
+bug: `(7+1) x 125 g` parsed as a single 125 g pot, so its lei/kg came out eight times too high.
+Nothing else in the system could have caught that — the price was right, the name was right, and
+only the two together were wrong.
+
+### The contract
+
+`parseQuantity` now returns `{ value, unit, packCount, packSize, paidCount, freeCount, isPromoPack }`,
+with `packCount === paidCount + freeCount` as an invariant (tested across ten notations).
+
+Parsing runs in two stages — promotional shape first, then the base pack from what is left.
+The other order lets a promo's own digits be misread as the pack: `4+2 x 125 g` reads as a plain
+`2 x 125 g` two-pack under the multipack rule.
+
+| notation | reading |
+|---|---|
+| `(7+1) x 125 g` | 8 pots, 1000 g, paid 7 free 1 |
+| `4+2 x 125 g` | 6 pots, 750 g |
+| `2+1 gratis` | multiplies the size stated elsewhere in the name |
+| `1+1 gratis` (no size) | 2 BUC — not a guessed mass |
+| `3 la prețul de 2` | 3 items, 2 paid; both diacritic spellings and the diacritic-free scrape |
+| `2 x 500 g + 1 gratis` | 3 × 500 g — free items join the stated pack, not extra copies of it |
+| `6 x 1,5 L` | 6-pack, **not** a promo |
+| `pachet 2 buc`, `set 3 buc`, `bax 24` | pack of pieces |
+| `12 role`, `10 buc` | count |
+| `Lapte 1,5% grăsime 1 L` | 1000 ML — the percentage is still not a size |
+
+**A bare `N+M` is deliberately NOT a promotion.** `Omega 3+6+9`, `ECO Avocado 90 Gr+`, `3+ ani`
+are all real catalog strings. A promo must attach a size or carry a free-word. Guessing here
+corrupts a real quantity, which is worse than missing a promo label.
+
+### Blast radius (`npm run audit:promo`, read-only)
+
+**73 of 34,263 products (0.21%)** read a different total quantity — every unit price computed
+from them was wrong, by 6× to 8×.
+
+| merchant | products | promo packs | quantity changed |
+|---|---|---|---|
+| auchan | 9,039 | 67 | 68 |
+| mega-image | 2,721 | 53 | 53 |
+| freshful | 1,878 | 12 | 13 |
+| sezamo | 9,036 | 6 | 9 |
+| carrefour | 2,728 | 4 | 4 |
+| metro | 6,433 | 3 | 3 |
+| kaufland, penny, dcneu, farmaciatei, finestore, lemanoir | — | 0 | 0 |
+
+All 73 are in `grocery`; beer and mineral-water six-packs dominate. Nothing was written — a
+re-scrape (Phase 1c) applies it.
+
+### Three further bugs, found by measuring instead of assuming
+
+Comparing the old and new readings across all 34,263 names surfaced defects nobody had reported:
+
+1. **`24 plicuri x 15 g` → 360 *pieces***. The reversed-multipack rule claimed it and threw the
+   grams away. Every instant-coffee and tea box in the catalog. Fixed by widening the forward
+   rule's counting nouns and forbidding the reversed rule to fire when the trailing number
+   carries a mass or volume — but not when it carries a count, because `10 g x 3 bucati` is
+   three 10 g sachets and must still parse.
+2. **`Albrau,0.5 l` → unitSize 0.** `[\d.,]+` captured `",0.5"`; `parseFloat` read it as 0.
+   A zero unitSize is a division by zero in every per-unit price derived from it. The number
+   pattern is now `(\d+(?:[.,]\d+)?)` — a number and nothing but.
+3. **`Cub Knorr 6 l, cu pui 108 g` → 6 l.** The 6 l is what the stock cube *makes*. Now 108 g.
+
+### parseSize: retired
+
+The brief said retire it if the two parsers disagree. They disagreed on **611 of 34,263 names
+(1.78%)** — all promo packs, all sachet boxes, the zero-unitSize case, and 96 bin-bag products
+where `60L, 20 bucati` was priced per litre of bag capacity instead of per bag.
+
+`parseSize` is now a thin adapter over `parseQuantity`. Agreement is 34,263/34,263 by
+construction.
+
+Its drift-guard test would then have been tautological — a test that can only pass, which is
+worse than none because it looks like protection. Replaced with: (a) a structural check that no
+second implementation grows back inside `ingest-core.ts`, and (b) a **frozen reading** of the
+50 real names, so any future change to the shared parser shows up as a diff.
+
+### isPromoPack wired into shrinkflation
+
+This is why 1a had to precede Phase 2. A promo ending shrinks the pack and raises the per-unit
+price — it clears every numeric bar the detector has, and it is not shrinkflation. Any promo
+observation in the window now disqualifies the whole series. That costs real findings on
+permanently-promo packs; against a feature that ships behind a flag and a human review, a
+missed finding is much the cheaper error.
+
+### Logged, not decided
+
+- **`Pulpe de pui … Family Pack, +/- 1 .3 kg`** — the source string is corrupt. Old read 0.3 kg,
+  new reads 3 kg; the truth is presumably 1.3 kg. One product. Deciding whether `1 .3` means
+  `1.3` is guessing, so it is flagged rather than special-cased.
+- **~10 cosmetics gift sets** (`NIVEA CASETA CADOU (CR MAINI100ML+CR100ML+BL250ML+LIP4.8G…)`)
+  have no single size by nature. Last-declared-size wins, which is arbitrary but consistent.
+  A real fix means a multi-component quantity type — out of scope, worth a decision.
+- **`Zahar vanilinat Cosmin, 48 g, 6 plicuri`** now reads 6 buc, not 48 g, because the last
+  declared size wins. That rule is what makes `60L, 20 bucati` bin bags and `1,5% grăsime 1 L`
+  milk both come out right, so it stays.
+
+### New: `npm run audit:promo`
+
+Read-only. Reconstructs the pre-1a reading, runs both over the live catalog, and reports the
+difference per merchant and per section. Kept so the Phase 1c re-scrape can be verified against
+a measured expectation rather than a hope.
+
+**Dependencies added** — none.
+
+**Tests** — 395 passed, 0 failed. Golden set unchanged at **97.3%, 2 false matches** (the
+CLAUDE.md invariant). Typecheck clean. Added `toEqual` to the test runner (structural equality;
+it had only `toBe`).

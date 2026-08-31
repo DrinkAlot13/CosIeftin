@@ -140,3 +140,132 @@ describe("parseQuantity — promotional 'N+M' multipacks (found by the DB audit)
   });
   it("a single item is unaffected", () => expect(parseQuantity("Lapte 1L")!.packCount).toBe(1));
 });
+
+// Every notation named in the Phase 1a spec, plus the guards that stop the parser from
+// inventing promotions. `isPromoPack` is the field shrinkflation detection depends on: an
+// 8x125 -> 7x125 transition is promo expiry, not a shrunk pack, and only this flag can tell
+// the two apart.
+describe("parseQuantity — the full promo-pack contract", () => {
+  it("packCount always equals paidCount + freeCount", () => {
+    for (const name of [
+      "Iaurt (7+1) x 125 g", "Iaurt 4+2 x 125 g", "Cafea 250 g 2+1 gratis",
+      "Sampon 400 ml 1+1 gratis", "Ciocolata 100 g 3 la pretul de 2",
+      "Bere 6 x 1,5 L", "Detergent 2 x 500 g + 1 gratis", "Faina 1 kg",
+      "Servetele pachet 2 buc", "Hartie igienica 12 role",
+    ]) {
+      const q = parseQuantity(name)!;
+      expect(q.packCount).toBe(q.paidCount + q.freeCount);
+    }
+  });
+
+  it("(7+1) x 125 g — pays for 7, takes home 8", () => {
+    const q = parseQuantity("Iaurt natur Activia, (7+1) x 125 g")!;
+    expect(q.paidCount).toBe(7); expect(q.freeCount).toBe(1);
+    expect(q.packCount).toBe(8); expect(q.value).toBe(1000);
+    expect(q.isPromoPack).toBeTruthy();
+  });
+
+  it("4+2 x 125 g — pays for 4, takes home 6", () => {
+    const q = parseQuantity("Iaurt 4+2 x 125 g")!;
+    expect(q.paidCount).toBe(4); expect(q.freeCount).toBe(2);
+    expect(q.value).toBe(750); expect(q.isPromoPack).toBeTruthy();
+  });
+
+  it('"2+1 gratis" multiplies the size stated elsewhere in the name', () => {
+    const q = parseQuantity("Cafea Jacobs 250 g 2+1 gratis")!;
+    expect(q.paidCount).toBe(2); expect(q.freeCount).toBe(1);
+    expect(q.packCount).toBe(3); expect(q.value).toBe(750);
+    expect(q.packSize).toBe(250); expect(q.unit).toBe("G");
+  });
+
+  it('"1+1 gratis" is a two-pack', () => {
+    const q = parseQuantity("Sampon Head&Shoulders 400 ml 1+1 GRATIS")!;
+    expect(q.packCount).toBe(2); expect(q.value).toBe(800);
+    expect(q.paidCount).toBe(1); expect(q.freeCount).toBe(1);
+  });
+
+  it('"gratuit" and "cadou" are the same offer', () => {
+    expect(parseQuantity("Gel de dus 250 ml 1+1 gratuit")!.packCount).toBe(2);
+    expect(parseQuantity("Crema 50 ml 2+1 cadou")!.packCount).toBe(3);
+  });
+
+  it('"3 la prețul de 2" — three items, two paid', () => {
+    const q = parseQuantity("Ciocolata Milka 100 g, 3 la prețul de 2")!;
+    expect(q.packCount).toBe(3); expect(q.paidCount).toBe(2); expect(q.freeCount).toBe(1);
+    expect(q.value).toBe(300); expect(q.isPromoPack).toBeTruthy();
+  });
+
+  it("…and in the diacritic-free spelling scrapers actually emit", () => {
+    const q = parseQuantity("Ciocolata 100 g 3 la pretul de 2")!;
+    expect(q.packCount).toBe(3); expect(q.paidCount).toBe(2);
+  });
+
+  it('"6 x 1,5 L" is a multipack and NOT a promo', () => {
+    const q = parseQuantity("Apa minerala Borsec 6 x 1,5 L")!;
+    expect(q.packCount).toBe(6); expect(q.value).toBe(9000);
+    expect(q.paidCount).toBe(6); expect(q.freeCount).toBe(0);
+    expect(q.isPromoPack).toBeFalsy();
+  });
+
+  it('"2 x 500 g + 1 gratis" adds one item of the pack\'s own size', () => {
+    const q = parseQuantity("Detergent 2 x 500 g + 1 gratis")!;
+    expect(q.packCount).toBe(3); expect(q.paidCount).toBe(2); expect(q.freeCount).toBe(1);
+    expect(q.packSize).toBe(500); expect(q.value).toBe(1500);
+  });
+
+  it('"1+1 gratis" with no size at all is two pieces, not a guessed mass', () => {
+    const q = parseQuantity("Periuta de dinti Oral-B 1+1 gratis")!;
+    expect(q.unit).toBe("BUC"); expect(q.packCount).toBe(2);
+    expect(q.paidCount).toBe(1); expect(q.freeCount).toBe(1);
+  });
+
+  it("a promo on a multipack counts whole packs", () => {
+    const q = parseQuantity("Hartie igienica 8 role 2+1 gratis")!;
+    expect(q.packCount).toBe(3); expect(q.value).toBe(24); expect(q.unit).toBe("BUC");
+  });
+
+  it("pack words: pachet / set / bax", () => {
+    expect(parseQuantity("Servetele pachet 2 buc")!.packCount).toBe(2);
+    expect(parseQuantity("Set 3 buc prosoape")!.packCount).toBe(3);
+    expect(parseQuantity("Bere Ciuc bax 24")!.value).toBe(24);
+    expect(parseQuantity("Bere Ciuc bax 24")!.unit).toBe("BUC");
+  });
+
+  it("a bax that states the bottle size is a real multipack", () => {
+    const q = parseQuantity("Apa Dorna bax 24 x 0,5 l")!;
+    expect(q.packCount).toBe(24); expect(q.value).toBe(12000);
+  });
+
+  it("counting nouns: 12 role, 10 buc", () => {
+    expect(parseQuantity("Hartie igienica Zewa 12 role")!.value).toBe(12);
+    expect(parseQuantity("Oua de gaina 10 buc")!.value).toBe(10);
+  });
+
+  it("a percentage in the name is still not a size", () => {
+    const q = parseQuantity("Lapte Zuzu 1,5% grăsime 1 L")!;
+    expect(q.value).toBe(1000); expect(q.unit).toBe("ML"); expect(q.isPromoPack).toBeFalsy();
+  });
+});
+
+// The parser must not invent promotions. Romanian labels are full of innocent plus signs, and
+// a false promo corrupts a real quantity — worse than missing a promo label entirely.
+describe("parseQuantity — a bare plus sign is not a promotion", () => {
+  it("Omega 3+6+9 is not a 3-paid-6-free offer", () => {
+    const q = parseQuantity("Omega 3+6+9 Doppelherz, 60 capsule")!;
+    expect(q.isPromoPack).toBeFalsy();
+    expect(q.value).toBe(60); expect(q.unit).toBe("BUC");
+  });
+  it('"90 Gr+" grading is not a promotion', () => {
+    const q = parseQuantity("ECO Avocado 90 Gr+ 1 buc")!;
+    expect(q.isPromoPack).toBeFalsy();
+  });
+  it("an age label is not a promotion", () => {
+    const q = parseQuantity("Puzzle 3+ ani, 250 g")!;
+    expect(q.isPromoPack).toBeFalsy();
+    expect(q.value).toBe(250);
+  });
+  it("a plain product keeps paidCount = packCount and freeCount = 0", () => {
+    const q = parseQuantity("Faina alba 1 kg")!;
+    expect(q.paidCount).toBe(1); expect(q.freeCount).toBe(0); expect(q.isPromoPack).toBeFalsy();
+  });
+});

@@ -29,11 +29,28 @@ export function expect(actual: unknown) {
       const a = Number(actual);
       if (!Number.isFinite(a) || Math.abs(a - exp) > Math.pow(10, -digits) / 2) throw new Error(`expected ~${exp}, got ${actual}`);
     },
+    /** Structural equality. Key order does not matter; NaN equals NaN. */
+    toEqual(exp: unknown) {
+      if (!deepEqual(actual, exp)) throw new Error(`expected ${JSON.stringify(exp)}, got ${JSON.stringify(actual)}`);
+    },
     toBeTruthy() { if (!actual) throw new Error(`expected truthy, got ${JSON.stringify(actual)}`); },
     toBeFalsy() { if (actual) throw new Error(`expected falsy, got ${JSON.stringify(actual)}`); },
     toBeGreaterThan(n: number) { if (!(Number(actual) > n)) throw new Error(`expected > ${n}, got ${actual}`); },
     toBeLessThan(n: number) { if (!(Number(actual) < n)) throw new Error(`expected < ${n}, got ${actual}`); },
   };
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a as object);
+  const kb = Object.keys(b as object);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =>
+    Object.prototype.hasOwnProperty.call(b, k) &&
+    deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+  );
 }
 
 async function main() {

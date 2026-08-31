@@ -88,8 +88,20 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 
 ## Units
 - Canonical units: `G`, `ML`, `BUC`. Everything normalizes to these.
-- Multipacks (`"6x1.5L"`, `"3 buc x 100g"`) must expand to total quantity AND
-  retain the pack shape. Do not silently treat 6x1.5L as 1.5L.
+- **`src/lib/units/parseQuantity.ts` is the ONLY size parser.** `parseSize` in `ingest-core.ts`
+  is a thin adapter over it (kg/l/buc, because that is what the Product schema stores) and must
+  stay one. Two parsers for one question means one is wrong and nothing says which — they
+  disagreed on 1.78% of the catalog before being merged, including a `unitSize` of **zero**.
+- Multipacks (`"6x1.5L"`, `"3 buc x 100g"`, `"24 plicuri x 15 g"`) must expand to total quantity
+  AND retain the pack shape. Do not silently treat 6x1.5L as 1.5L.
+- **Promotional packs are their own thing.** `(7+1) x 125 g`, `2+1 gratis`, `3 la prețul de 2`
+  all expand to what the shopper takes home, and set `isPromoPack` with `paidCount`/`freeCount`
+  kept apart. `packCount === paidCount + freeCount` always.
+- **A bare `N+M` is NOT a promotion.** `Omega 3+6+9`, `90 Gr+`, `3+ ani` are not offers. A promo
+  must attach a pack size (`4+2 x 125 g`) or carry a free-word (`2+1 gratis`). Inventing one
+  corrupts a real quantity, which is worse than missing a label.
+- **`isPromoPack` disqualifies a shrinkflation finding.** A promo ending shrinks the pack and
+  raises the per-unit price — it clears every numeric bar and it is not shrinkflation.
 
 ## Style
 - TypeScript strict. No `any`. Zod at every trust boundary (scraper output,
