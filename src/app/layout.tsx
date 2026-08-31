@@ -29,7 +29,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="ro">
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-        <div className="demo-banner">⚠️ Prototip cu date demonstrative — prețurile afișate sunt fictive, pentru testare.</div>
         <Header categories={categories} />
         <main>{children}</main>
         <Footer categories={categories} />

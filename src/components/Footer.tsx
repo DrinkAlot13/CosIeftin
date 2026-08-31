@@ -27,10 +27,11 @@ export function Footer({ categories }: { categories: MenuCategory[] }) {
         </div>
       </div>
       <div className="container footer-note">
-        <strong>Date demonstrative.</strong> Prototip: prețurile afișate sunt fictive, pentru testare, și nu reprezintă
-        oferte reale ale magazinelor menționate. CoșMic este un comparator — comenzile se fac pe site-ul magazinului.
+        <strong>Prețuri colectate automat.</strong> Prețurile sunt preluate din sursele publice ale magazinelor
+        și pot fi diferite de cele din magazin în momentul cumpărării. Verifică întotdeauna prețul final pe
+        site-ul magazinului. CoșMic este un comparator — comenzile se fac pe site-ul magazinului.
         {" · "}
-        <Link href="/admin" style={{ color: "var(--primary)" }}>Admin (demo)</Link>
+        <Link href="/admin" style={{ color: "var(--primary)" }}>Admin</Link>
       </div>
     </footer>
   );

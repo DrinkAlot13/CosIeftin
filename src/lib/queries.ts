@@ -249,11 +249,25 @@ export async function getBasketProducts(slugs: string[]) {
   });
 }
 
+/**
+ * The three numbers on the homepage. Every one of them counts only what a shopper could
+ * actually act on right now.
+ *
+ * The previous version counted any grocery offer from any merchant, which meant a merchant we
+ * had switched OFF still counted as a store, and a price last seen months ago still counted as
+ * a price. Those are not lies a visitor can check, which is exactly why they have to be right.
+ */
+const liveOffer = {
+  isStale: false,
+  merchant: { active: true },
+  product: { section: "grocery" },
+} as const;
+
 export async function countStats() {
   const [products, offers, chains] = await Promise.all([
-    prisma.product.count({ where: { section: "grocery", offers: { some: {} } } }),
-    prisma.offer.count({ where: { product: { section: "grocery" } } }),
-    prisma.merchant.count({ where: { offers: { some: { product: { section: "grocery" } } } } }),
+    prisma.product.count({ where: { section: "grocery", offers: { some: liveOffer } } }),
+    prisma.offer.count({ where: liveOffer }),
+    prisma.merchant.count({ where: { active: true, offers: { some: { isStale: false, product: { section: "grocery" } } } } }),
   ]);
   return { products, offers, chains };
 }
