@@ -1,0 +1,1934 @@
+[
+ {
+  "label": "nivea-gel",
+  "rows": [
+   {
+    "name": "Gel de dus Nivea Men Deep Clean 3 in 1 Real Madrid, 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "5900017106960"
+   },
+   {
+    "name": "Gel de dus Nivea Men Pure Impact, 500ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "4005808628087"
+   },
+   {
+    "name": "Gel de dus Nivea Creme Soft, 750ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "grocery",
+    "ean": "9005800218540"
+   },
+   {
+    "name": "Gel de dus Nivea Men Total Relax, 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800376783"
+   },
+   {
+    "name": "Gel de dus Nivea Men Energy, 500ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "4005900047700"
+   },
+   {
+    "name": "Gel de dus Nivea Creme Aloe, 750ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "grocery",
+    "ean": "4005900648181"
+   },
+   {
+    "name": "Gel de dus Nivea Care&Coconut, 750ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "grocery",
+    "ean": "4005900555915"
+   },
+   {
+    "name": "Gel de dus Nivea lemongrass & oil, 500ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800307503"
+   },
+   {
+    "name": "Gel de dus Nivea Hawaii Flower & Oil, 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800307510"
+   },
+   {
+    "name": "Gel de dus Nivea Men Deep Clean 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "5900017062266"
+   },
+   {
+    "name": "Gel de dus Nivea Men Sensitive, 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800286570"
+   },
+   {
+    "name": "Gel de dus Nivea Men Active Clean, 500ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800243306"
+   },
+   {
+    "name": "Gel de dus Nivea Creme Care, 750ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "grocery",
+    "ean": "9005800223063"
+   },
+   {
+    "name": "Gel de dus Nivea Men Protect & Care, 500ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800224473"
+   },
+   {
+    "name": "Gel de dus Nivea Happy Time, 750 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "grocery",
+    "ean": "9005800263694"
+   },
+   {
+    "name": "Gel de dus Nivea Floral Moon Orchid & Blueberry, 250 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "9005800398891"
+   },
+   {
+    "name": "Gel de dus Nivea Solar Sparks Exotic Fruits, 250 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "9005800398952"
+   },
+   {
+    "name": "Gel de dus Nivea Starlight Garden Apple & Muguet, 250 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "9005800398969"
+   },
+   {
+    "name": "Gel de dus Nivea Men Deep Sport Maxxtech 3 in 1, 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800379401"
+   },
+   {
+    "name": "Gel de dus Nivea Care & Orange 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800263687"
+   },
+   {
+    "name": "Gel de dus Nivea Men Cool Marine, 250 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "9005800378794"
+   },
+   {
+    "name": "Gel de dus Nivea Men Pure Impact 3 in 1, 250 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "4005808781416"
+   },
+   {
+    "name": "Gel de dus Nivea Power Refresh, 500 ml",
+    "brand": "Nivea",
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": "9005800286556"
+   }
+  ]
+ },
+ {
+  "label": "chio",
+  "rows": [
+   {
+    "name": "Chipsuri cu smantana si ceapa Chio, 170 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.17,
+    "section": "grocery",
+    "ean": "5941445677691"
+   },
+   {
+    "name": "Chipsuri cu sare Chio, 170 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.17,
+    "section": "grocery",
+    "ean": "5941445677684"
+   },
+   {
+    "name": "Chipsuri cu cascaval Chio, 170 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.17,
+    "section": "grocery",
+    "ean": "5941445677677"
+   },
+   {
+    "name": "Chipsuri cu sare de mare Chio Intense, 120 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.12,
+    "section": "grocery",
+    "ean": "5941445677479"
+   },
+   {
+    "name": "Chipsuri cu paprica Chio, 170 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.17,
+    "section": "grocery",
+    "ean": "5941445677660"
+   },
+   {
+    "name": "Chipsuri cu smantana si ceapa Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445677653"
+   },
+   {
+    "name": "Chipsuri cu sare Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445677646"
+   },
+   {
+    "name": "Chipsuri cu smantana si patrunjel Chio Intense, 120 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.12,
+    "section": "grocery",
+    "ean": "5941445677462"
+   },
+   {
+    "name": "Chipsuri cu pui la rotisor Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445677639"
+   },
+   {
+    "name": "Chipsuri cu cascaval Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445677622"
+   },
+   {
+    "name": "Chipsuri cu barbeque Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445677615"
+   },
+   {
+    "name": "Chipsuri cu paprica Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445677608"
+   },
+   {
+    "name": "Chipsuri cu sare Snack Chio, 65 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.065,
+    "section": "grocery",
+    "ean": "5941445671897"
+   },
+   {
+    "name": "Chipsuri cu gust de cartofi si cascaval Chio Chips Snack, 65 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.065,
+    "section": "grocery",
+    "ean": "5941445671880"
+   },
+   {
+    "name": "Chipsuri cu cascaval si chili Chio Intense, 120 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.12,
+    "section": "grocery",
+    "ean": "5941445677448"
+   },
+   {
+    "name": "Chipsuri cu paprika Chio Intense, 120 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.12,
+    "section": "grocery",
+    "ean": "5941445677431"
+   },
+   {
+    "name": "Chipsuri cu gust de gust de ardei verde si ardei iute jalapeno Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445678452"
+   },
+   {
+    "name": "Chipsuri rumenite la cuptor cu sare de mare Chio Oven, 100 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": "5996253002401"
+   },
+   {
+    "name": "Chipsuri rumenite la cuptor cu gust de smantana si ceapa Chio Oven, 100 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": "5996253002340"
+   },
+   {
+    "name": "Chipsuri cu sare de mare Chio Intense Party Pack, 160 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.16,
+    "section": "grocery",
+    "ean": "5941445677714"
+   },
+   {
+    "name": "Chipsuri cu smantana si patrunjel Chio Intense Party Pack, 160 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.16,
+    "section": "grocery",
+    "ean": "5941445677707"
+   },
+   {
+    "name": "Chipsuri cu gust de sos barbecue si miere Chio, 125 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.125,
+    "section": "grocery",
+    "ean": "5941445678469"
+   },
+   {
+    "name": "Pachet chipsuri la cuptor cu sare Chio Oven, 2 x 100 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.2,
+    "section": "grocery",
+    "ean": "5941445678612"
+   },
+   {
+    "name": "Pachet chipsuri la cuptor cu aroma de smantana si ceapa Chio Oven, 2 x 100 g",
+    "brand": "Chio",
+    "unit": "kg",
+    "unitSize": 0.2,
+    "section": "grocery",
+    "ean": "5941445678599"
+   }
+  ]
+ },
+ {
+  "label": "freshful-eco",
+  "rows": [
+   {
+    "name": "ECO Turmeric 70 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.07,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Rucola 100 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Mere rosii (pachet de 2 sau 4 mere) 400 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.4,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Avocado 1 buc",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Baby Spanac 100 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Germeni de grau 100 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Baby Batavia rosie si verde 100 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Ceapa galbena 0,75 kg",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.75,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Morcovi din Italia 450 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.45,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Avocado  90 Gr+ 1 buc",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Mere rosii Gala 400 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.4,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Valeriana 100 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Usturoi 150 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.15,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Germeni de lucerna 50 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.05,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Amestec de germeni 100 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Microverdeturi de creson 80 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.08,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Castraveti cornichon romanesti 500 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Microverdeturi de gulie rosie 80 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.08,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Germeni de ridiche 60 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.06,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Ceapa rosie 500 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Mere Early Crunch 400 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.4,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Microverdeturi de rucola 80 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.08,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Ceapa galbena 500 g",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.5,
+    "section": "grocery",
+    "ean": null
+   },
+   {
+    "name": "ECO Castraveti bucata 1 buc",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": null
+   }
+  ]
+ },
+ {
+  "label": "zarea",
+  "rows": [
+   {
+    "name": "Zarea Zero alcool Sauvignon Blanc Alb 0.75L",
+    "brand": "Cramele Recas",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Zarea Zero alcool Cabernet Sauvignon Rosu 0.75L",
+    "brand": "San Marzano",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Zarea Zero alcool Rose 0.75L",
+    "brand": "Sigillum Moldaviae",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin rose Zarea, Sange De Taur, Dulce, 0.75L",
+    "brand": "Basilescu",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Zarea Best Wishes Alb Demisec 11% alc. Vin Spumant 0.75L",
+    "brand": "Paw Patrol",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin Spumant Rose Zarea Gurmet Feteasca Neagra, Dulce, 8%, 0.75l",
+    "brand": "Paw Patrol",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin Spumant Alb Zarea Gurment Muscat Ottonel, Dulce, 7.5%, 0.75l",
+    "brand": "Paw Patrol",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin Spumant Zarea Feteasca Regala, Alb ExtraSec, 0.75l",
+    "brand": "Vintense",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Zarea Cristal Demisec 3L, Demisec",
+    "brand": "Vintense",
+    "unit": "l",
+    "unitSize": 3,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Zarea Ice Rose Vin Spumant, Demisec 0.75L",
+    "brand": "Piper-Heidsieck",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Zarea Ice Alb Vin Spumant, Demisec 0.75L",
+    "brand": "Piper-Heidsieck",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant Zarea, Dulce Bella Vita Asti, Alb, 0.75L",
+    "brand": "Martini",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant rose Zarea, fara alcool, 0.75L",
+    "brand": "Martini",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Prosecco Zarea 0.75 L",
+    "brand": "Louis Roederer",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant alb Prosecco DOC Zarea, demisec, 0.75 L",
+    "brand": "Louis Roederer",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Sampanie Moet & Chandon Nectar Imprial+Cutie, 12%, 0.75l",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin Spumant Silvania Premium Rose, Demisec, 0.75l",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin Spumant J.P. Chenet Ice Edition, Demisec, 0.75l",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant Asti Martini Dolce, 0.2 l",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant rosu Riunite Lambrusco Emilia 0.75L",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant Cavicchioli Lambrusco Rose, D.O.C. demisec, 0.75L",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Prosecco Cavicchioli Mondena DOC, 0.75L",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Prosecco Maschio Valdobiadenne Millesimato DOCG, 375ml",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.375,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Vin spumant rose sec Maschio Pinot Rosa Frizzante 200ml",
+    "brand": "Zarea",
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "alcohol",
+    "ean": null
+   }
+  ]
+ },
+ {
+  "label": "domperignon",
+  "rows": [
+   {
+    "name": "Dom Perignon Brut 0.75L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Dom Perignon Brut Cutie Cadou 0.75L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Dom Perignon Brut Magnum 1.5L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 1.5,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Dom Perignon Brut Neon 0.75L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Dom Perignon Brut Neon Magnum 1.5L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 1.5,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Dom Perignon Rose 0.75L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   },
+   {
+    "name": "Dom Perignon Rose Cutie Cadou 0.75L",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.75,
+    "section": "alcohol",
+    "ean": null
+   }
+  ]
+ },
+ {
+  "label": "lapte",
+  "rows": [
+   {
+    "name": "Lapte de consum integral Napolact, 3.5% grasime, 1.5 l",
+    "brand": "Napolact",
+    "unit": "l",
+    "unitSize": 1.5,
+    "section": "grocery",
+    "ean": "5941065015194"
+   },
+   {
+    "name": "Lapte UHT integral Auchan, 3.5% grasime, 1 l",
+    "brand": "Auchan",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5949084019025"
+   },
+   {
+    "name": "Lapte UHT semidegresat Auchan, 1.5% grasime, 1 l",
+    "brand": "Auchan",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5949084019018"
+   },
+   {
+    "name": "Lapte de consum integral Napolact, 3.5% grasime, 1 l",
+    "brand": "Napolact",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5941065002873"
+   },
+   {
+    "name": "Lapte semidegresat Pouce, 1.5% grasime, 1 l",
+    "brand": "Pouce",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5949084031225"
+   },
+   {
+    "name": "Branza Fagaras Covalact, din lapte de vaca, 2 bucati",
+    "brand": "Covalact",
+    "unit": "buc",
+    "unitSize": 2,
+    "section": "grocery",
+    "ean": "5941173405900"
+   },
+   {
+    "name": "Lapte de vaca integral Laptaria cu caimac, 3.8 - 4.1% grasime, 1 l",
+    "brand": "Laptaria cu caimac",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5941905044018"
+   },
+   {
+    "name": "Lapte de consum integral Auchan, 3.5% grasime, 1 l",
+    "brand": "Auchan",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5949084014884"
+   },
+   {
+    "name": "Lapte de consum integral BIO Napolact, 3.8% grasime, 1 l",
+    "brand": "Napolact",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5941065009810"
+   },
+   {
+    "name": "Lapte integral Pouce, 3.5% grasime, 1 l",
+    "brand": "Pouce",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5949084031294"
+   },
+   {
+    "name": "Lapte de consum semidegresat ZuZu, 1.5% grasime, 1 l",
+    "brand": "ZuZu",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5941355000671"
+   },
+   {
+    "name": "Branza Fagaras din lapte de vaca Auchan, 8% grasime, 200 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.2,
+    "section": "grocery",
+    "ean": "5949084017441"
+   },
+   {
+    "name": "Lapte de consum semidegresat Auchan, 1.5% grasime, 1 l",
+    "brand": "Auchan",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5949084014877"
+   },
+   {
+    "name": "Lapte de consum semidegresat ZuZu, 1.5% grasime, 1.8 l",
+    "brand": "ZuZu",
+    "unit": "l",
+    "unitSize": 1.8,
+    "section": "grocery",
+    "ean": "5941355009346"
+   },
+   {
+    "name": "Lapte de consum integral ZuZu, 3.5% grasime, 1.8 l",
+    "brand": "ZuZu",
+    "unit": "l",
+    "unitSize": 1.8,
+    "section": "grocery",
+    "ean": "5941355009353"
+   },
+   {
+    "name": "Lapte de consum semidegresat LaDorna, fara lactoza, 1.5% grasime, 1 l",
+    "brand": "LaDorna",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5941192109537"
+   },
+   {
+    "name": "Lapte de capra integral Olympus, 3.7% grasime, 1 l",
+    "brand": "Olympus",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5202178040627"
+   },
+   {
+    "name": "Lapte de consum integral BIO Napolact, 3.8% grasime, 1.5 l",
+    "brand": "Napolact",
+    "unit": "l",
+    "unitSize": 1.5,
+    "section": "grocery",
+    "ean": "5941065015156"
+   },
+   {
+    "name": "Kefir din lapte de vaca Artesana, 350 ml",
+    "brand": "Artesana",
+    "unit": "l",
+    "unitSize": 0.35,
+    "section": "grocery",
+    "ean": "5941905049280"
+   },
+   {
+    "name": "Lapte de consum integral Olympus, 3.7% grasime, 1 l",
+    "brand": "Olympus",
+    "unit": "l",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "5941875900376"
+   }
+  ]
+ },
+ {
+  "label": "oua",
+  "rows": [
+   {
+    "name": "Oua de gaina, Auchan, marime M, cod 1, 10 bucati",
+    "brand": "Auchan",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5949084015164"
+   },
+   {
+    "name": "Oua de gaina, Toneli, marime L, cod 1, 15 bucati",
+    "brand": "Toneli",
+    "unit": "buc",
+    "unitSize": 15,
+    "section": "grocery",
+    "ean": "5941262000238"
+   },
+   {
+    "name": "Oua de gaina ECO Filiera Auchan, marime M, cod 0, 10 bucati",
+    "brand": "Filiera Auchan",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5949084015188"
+   },
+   {
+    "name": "Oua de gaina, Avicola, marime M, cod 1, 10 bucati",
+    "brand": "Avicola Rojiste",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5941893290015"
+   },
+   {
+    "name": "Oua de gaina George Standard Lucky Premium, marimea M, cod 3, 30 bucati",
+    "brand": "George Standard",
+    "unit": "buc",
+    "unitSize": 30,
+    "section": "grocery",
+    "ean": "4841224001697"
+   },
+   {
+    "name": "Oua de gaina Auchan La Masa in Romania, marime L, cod 2 , 20 bucati",
+    "brand": "Filiera Auchan",
+    "unit": "buc",
+    "unitSize": 20,
+    "section": "grocery",
+    "ean": "5949084018059"
+   },
+   {
+    "name": "Oua de gaina Regalina, marime M, cod 2, 20 bucati",
+    "brand": "Regalina",
+    "unit": "buc",
+    "unitSize": 20,
+    "section": "grocery",
+    "ean": "6425639102316"
+   },
+   {
+    "name": "Oua de gaina Toneli, marime M/L, cod 1, 10 bucati",
+    "brand": "Toneli",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5941262002065"
+   },
+   {
+    "name": "Oua de gaina Pouce, marimea M, cod 2, 30 bucati",
+    "brand": "Pouce",
+    "unit": "buc",
+    "unitSize": 30,
+    "section": "grocery",
+    "ean": "5949084031645"
+   },
+   {
+    "name": "Oua de gaina Toneli, marimea M/L, cod 1, 20 bucati",
+    "brand": "Toneli",
+    "unit": "buc",
+    "unitSize": 20,
+    "section": "grocery",
+    "ean": "5941262002171"
+   },
+   {
+    "name": "Oua BIO de gaina Toneli, marime M, cod 0, 10 bucati",
+    "brand": "Toneli",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5941262001648"
+   },
+   {
+    "name": "Oua de gaina, Avicola, marime L, cod 1, 6 bucati",
+    "brand": "Avicola Rojiste",
+    "unit": "buc",
+    "unitSize": 6,
+    "section": "grocery",
+    "ean": "5941893290060"
+   },
+   {
+    "name": "Oua de gaina, Regalina, marime M, cod 2, 10 bucati",
+    "brand": "Regalina",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "6425639102309"
+   },
+   {
+    "name": "Oua de Sibiu, marime L, cod 2, 10 bucati",
+    "brand": "Oua de Sibiu",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5941878100254"
+   },
+   {
+    "name": "Oua de gaina, Oua de Tara, marime M, cod 0, 10 bucati",
+    "brand": "Oua de tara",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "2000001395349"
+   },
+   {
+    "name": "Oua de gaina, Toneli, marime L, cod 2, 10 bucati",
+    "brand": "Toneli",
+    "unit": "buc",
+    "unitSize": 10,
+    "section": "grocery",
+    "ean": "5941262000047"
+   }
+  ]
+ },
+ {
+  "label": "dcneu-nivea",
+  "rows": [
+   {
+    "name": "NIVEA AFTER SHAVE 100ML DEEP",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE 100ML FRESH KICK",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE 100ML SENSITIVE",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE 100ML SKIN PROTECTION",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML PROTECT CARE",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML SENSITIVE",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML SENSITIVE COOLING",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML SENSITIVE RECOVERY",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML SILVER PROTECT",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE 100ML HYDROCARE",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML ANTI-AGE HYALURON",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA AFTER SHAVE BALSAM 100ML HYDRO CARE",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR ORIGINAL CARE",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR SOFT ROSE",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR HYDRO CARE",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR PRINCESS CANDY APPLE",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR PRINCESS VANILIE",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR PRINCESS WATERMELON SORBET",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA LIP CARE 4.8GR PRINCESS WILD CRANBERRY",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA BALSAM 200ML DIAMOND GLOSS",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA BALSAM 200ML REPAIR PROTECT",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA BALSAM PAR 200ML COLOR CARE PROTECT",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA BALSAM PAR 200ML HYDRATION HIALURON",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "dcneu",
+    "ean": null
+   },
+   {
+    "name": "NIVEA CASETA CADOU (DEO50+SG250) MEN PURE IMPACT",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "dcneu",
+    "ean": null
+   }
+  ]
+ },
+ {
+  "label": "cosmetice",
+  "rows": [
+   {
+    "name": "Refill Ser anti-age Densitium Bi-serum, 2x15 ml, SVR",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.03,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Refill Crema de fata redensificatoare si hidratanta...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Refill Balsam de noapte pentru fata Baume Nuit Densitium,...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Ser anti-age reincarcabil Densitium Bi-serum, 2x15...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Apa micelara Sensifine Ar, 100 ml, Svr",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Apa micelara Physiopure, 100 ml, Svr",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Gel de dus lavant pentru piele uscata si sensibila...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Ulei de dus pentru fata si corp Topialyse, 100 ml,...",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Crema cu protectie solara SPF 50 Uveblock Velvet,...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Gel calmant dupa plaja Uveblock After Sun, 200 ml,...",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Refill Crema anti-imbatranire pentru ten uscat Densitium...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Crema calmanta si hidratanta Sensifine Extreme, 30...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Pachet deodorant roll-on Spirial, 50 + 50 ml, Svr",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.05,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Gel contur ochi cu acid hyaluronic Isdinceutics, 15...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Gel de curatare spumant pentru piele normal-grasa,...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Serum antirid fortifiant Liftactiv Collagen Specialist...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Apa termala din Transilvania, 2 x 250 ml, Beyus",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.5,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Pachet Apa termala spray, 150 + 150 ml, Avene",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.15,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Apa micelara pentru pielea grasa cu tendinta acneica...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Blue Cap crema, 50 g, Catalysis",
+    "brand": null,
+    "unit": "kg",
+    "unitSize": 0.05,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Ser concentrat antioxidant Ampoule Vitamina C, 30...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Apa termala din Transilvania, 150 ml, Beyus",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.15,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Sampon intensiv anti-matreata Ivadermaseb, 200 ml,...",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.2,
+    "section": "cosmetice",
+    "ean": null
+   },
+   {
+    "name": "Crema de noapte cu melatonina Mineral 89, 50 ml, Vichy",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.05,
+    "section": "cosmetice",
+    "ean": null
+   }
+  ]
+ },
+ {
+  "label": "farmacie",
+  "rows": [
+   {
+    "name": "Seboderm Med, 20 mg/ml șampon, 120 ml, Slavia Pharm",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.12,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Tonotil-N, 10 flacoane buvabile, Vianex SA",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Crema rectala Procto-Glyvenol, 50 mg + 20 mg/g, 30...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Adagin forte, 400 mg, 10 comprimate filmate, Teva",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Magnerot, 500 mg, 100 comprimate, Worwag Pharma",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Larofen Plus raceala si gripa, 200 mg/30 mg, 20 comprimate...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Coldact Sinus, 500 mg/30 mg, 20 comprimate filmate,...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Nurofen Immedia Ultra, 400 mg, 24 drajeuri, Reckitt...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Kitonail, 80 mg/g, 3,3 ml, Angelini",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.0033,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Fasconal, 20 comprimate, Gedeon Richter",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Strepsils Intensiv miere si lamaie, 8,75 mg, 24 pastile,...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Trachisan fara zahar, 20 comprimate de supt, Engelhard...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Lagosa, 150 mg, 50 drajeuri, Worwag Pharma",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Xylo-nasal picături nazale, soluţie, 1mg/ml, 10 ml,...",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.01,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Rinoxin solutie nazala, 0,5 mg/ml,, 10 ml, Tis Farmaceutic",
+    "brand": null,
+    "unit": "l",
+    "unitSize": 0.01,
+    "section": "farmacie",
+    "ean": null
+   },
+   {
+    "name": "Spray oral cu nicotina si aroma de menta, 1 mg, 13.2...",
+    "brand": null,
+    "unit": "buc",
+    "unitSize": 1,
+    "section": "farmacie",
+    "ean": null
+   }
+  ]
+ },
+ {
+  "label": "apa",
+  "rows": [
+   {
+    "name": "Salata icre de crap cu ceapa Bonito, 310 g",
+    "brand": "Bonito",
+    "unit": "kg",
+    "unitSize": 0.31,
+    "section": "grocery",
+    "ean": "5941880904390"
+   },
+   {
+    "name": "Salata icre de crap cu ceapa Auchan, 70 g",
+    "brand": "Pouce",
+    "unit": "kg",
+    "unitSize": 0.07,
+    "section": "grocery",
+    "ean": "2000003254422"
+   },
+   {
+    "name": "Salata icre de crap cu ceapa Bonito, 150 g",
+    "brand": "Bonito",
+    "unit": "kg",
+    "unitSize": 0.15,
+    "section": "grocery",
+    "ean": "5941880904352"
+   },
+   {
+    "name": "Salata icre de crap cu ceapa Auchan, 135 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.135,
+    "section": "grocery",
+    "ean": "5949084018998"
+   },
+   {
+    "name": "Salata icre de crap cu ceapa Deltaica, 100 g",
+    "brand": "Deltaica",
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": "5949036400710"
+   },
+   {
+    "name": "Salata icre de hering cu ceapa Auchan, 70 g",
+    "brand": "Pouce",
+    "unit": "kg",
+    "unitSize": 0.07,
+    "section": "grocery",
+    "ean": "2000003254439"
+   },
+   {
+    "name": "Salata icre de crap si ceapa Negro, 75 g",
+    "brand": "Negro",
+    "unit": "kg",
+    "unitSize": 0.075,
+    "section": "grocery",
+    "ean": "5941330004496"
+   },
+   {
+    "name": "Salata icre de hering cu ceapa Auchan, 70 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.07,
+    "section": "grocery",
+    "ean": "2000002150312"
+   },
+   {
+    "name": "Salata icre hering cu ceapa Bonito, 310 g",
+    "brand": "Bonito",
+    "unit": "kg",
+    "unitSize": 0.31,
+    "section": "grocery",
+    "ean": "5941880904406"
+   },
+   {
+    "name": "Salata cu icre stiuca si ceapa Bonito Exclusiv, 160 g",
+    "brand": "Bonito",
+    "unit": "kg",
+    "unitSize": 0.16,
+    "section": "grocery",
+    "ean": "5941880904338"
+   },
+   {
+    "name": "Salata cu icre hering si ceapa Bonito, 150 g",
+    "brand": "Bonito",
+    "unit": "kg",
+    "unitSize": 0.15,
+    "section": "grocery",
+    "ean": "5941880904369"
+   },
+   {
+    "name": "Salata icre de crap cu ceapa Doripesco, 190 g",
+    "brand": "Doripesco",
+    "unit": "kg",
+    "unitSize": 0.19,
+    "section": "grocery",
+    "ean": "6422497001133"
+   },
+   {
+    "name": "Salata icre cu crap cu ceapa Gastronatura, 140 g",
+    "brand": "Gastronatura",
+    "unit": "kg",
+    "unitSize": 0.14,
+    "section": "grocery",
+    "ean": "5941330008883"
+   },
+   {
+    "name": "Salata cu icre hering si ceapa Salmaris, 110 g",
+    "brand": "Salmaris",
+    "unit": "kg",
+    "unitSize": 0.11,
+    "section": "grocery",
+    "ean": "5941880902679"
+   },
+   {
+    "name": "Salata icre de hering cu ceapa Auchan, 135 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.135,
+    "section": "grocery",
+    "ean": "5949084019001"
+   },
+   {
+    "name": "Salata icre de crap cu ceapa Auchan, 70 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.07,
+    "section": "grocery",
+    "ean": "2000002150305"
+   }
+  ]
+ },
+ {
+  "label": "cafea",
+  "rows": [
+   {
+    "name": "Prajitura duo cafea si ciocolata Auchan, 1 bucata, 100 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": "2732754000002"
+   },
+   {
+    "name": "Ecler cu aroma de cafea Auchan, 2 bucati, 200 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.2,
+    "section": "grocery",
+    "ean": "2732734000008"
+   },
+   {
+    "name": "Ecler cu aroma de cafea Auchan, 100 g",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 0.1,
+    "section": "grocery",
+    "ean": "2732733000009"
+   },
+   {
+    "name": "Tort duo cafea si ciocolata Auchan, +/- 1 kg",
+    "brand": "Auchan",
+    "unit": "kg",
+    "unitSize": 1,
+    "section": "grocery",
+    "ean": "2133050000008"
+   },
+   {
+    "name": "Cafea Flat White Mizo UHT, 250 ml",
+    "brand": "Mizo",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "5998200483868"
+   },
+   {
+    "name": "Cafea espresso Mizo UHT, 250 ml",
+    "brand": "Mizo",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "5998200483943"
+   },
+   {
+    "name": "Bautura din lapte cu cafea Frappuccino Starbucks, 250 ml",
+    "brand": "Starbucks",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "5711953097911"
+   },
+   {
+    "name": "Bautura din lapte cu cafea Frappuccino Starbucks, aroma de caramel, 250 ml",
+    "brand": "Starbucks",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "5711953151941"
+   },
+   {
+    "name": "Bautura lactata cu extract de cafea si gust de vanilie Muller Ice Coffee Clasic, 400 g",
+    "brand": "Muller",
+    "unit": "kg",
+    "unitSize": 0.4,
+    "section": "grocery",
+    "ean": "4025500297206"
+   },
+   {
+    "name": "Cafea 5 To Go Ready To Drink Espresso Macchiato, 230 ml",
+    "brand": "5 To Go",
+    "unit": "l",
+    "unitSize": 0.23,
+    "section": "grocery",
+    "ean": "5900197029158"
+   },
+   {
+    "name": "Bautura din lapte cu cafea Frappuccino Starbucks, aroma de vanilie, 250 ml",
+    "brand": "Starbucks",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "5711953097898"
+   },
+   {
+    "name": "Bautura lactata cu extract de cafea si gust de alune de padure Muller Ice Coffee, 400 g",
+    "brand": "Muller",
+    "unit": "kg",
+    "unitSize": 0.4,
+    "section": "grocery",
+    "ean": "4025500297350"
+   },
+   {
+    "name": "Bautura energizanta, baza cafea, Cappuccino Cafemio, 0,25l",
+    "brand": "Cafemio",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "90169533"
+   },
+   {
+    "name": "Bautura carbogazoasa pe baza de cafea 5 To Go Italian Sparkling Espresso, 0.25 l",
+    "brand": "5 To Go",
+    "unit": "l",
+    "unitSize": 0.25,
+    "section": "grocery",
+    "ean": "5941938600007"
+   },
+   {
+    "name": "Cafea 5 To Go Ready To Drink Latte Macchiato, 230 ml",
+    "brand": "5 To Go",
+    "unit": "l",
+    "unitSize": 0.23,
+    "section": "grocery",
+    "ean": "5900197029141"
+   },
+   {
+    "name": "Cafea 5 To Go Ready To Drink Cappuccino, 230 ml",
+    "brand": "5 To Go",
+    "unit": "l",
+    "unitSize": 0.23,
+    "section": "grocery",
+    "ean": "5900197029134"
+   }
+  ]
+ }
+]

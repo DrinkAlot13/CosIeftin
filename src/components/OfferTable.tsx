@@ -1,3 +1,4 @@
+import { StoreTypeBadge } from "@/components/StoreTypeBadge";
 import { AVAILABILITY_LABELS, formatPerUnit, formatRON } from "@/lib/format";
 import type { OfferRow } from "@/lib/queries";
 
@@ -26,6 +27,7 @@ export function OfferTable({ offers, unit }: { offers: OfferRow[]; unit: string 
               <tr key={o.id} className={isBest ? "best" : undefined}>
                 <td>
                   <span className="m-name">{o.merchant.name}</span>
+                  <div style={{ marginTop: 3 }}><StoreTypeBadge type={o.merchant.storeType} /></div>
                   {o.packLabel && <div className="m-net">{o.packLabel}</div>}
                 </td>
                 <td className="hide-sm">

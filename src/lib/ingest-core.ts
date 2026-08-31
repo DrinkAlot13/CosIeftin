@@ -21,27 +21,20 @@ export type Unit = "kg" | "l" | "buc";
 /** Parse a pack size ("1,5 L", "500 g", "6x0,5 L", "10 buc") into base unit + amount. */
 export function parseSize(text: string): { unit: Unit; unitSize: number } | null {
   const s = text.toLowerCase().replace(/,/g, ".");
-
-  const mp = s.match(/(\d+)\s*[x×]\s*([\d.]+)\s*(ml|l|kg|g)\b/);
-  if (mp) {
-    const n = parseInt(mp[1], 10);
-    const q = parseFloat(mp[2]);
-    const u = mp[3];
-    if (u === "ml") return { unit: "l", unitSize: (n * q) / 1000 };
-    if (u === "l") return { unit: "l", unitSize: n * q };
-    if (u === "g") return { unit: "kg", unitSize: (n * q) / 1000 };
-    return { unit: "kg", unitSize: n * q };
-  }
-  const single = s.match(/([\d.]+)\s*(ml|l|kg|g)\b/);
-  if (single) {
-    const q = parseFloat(single[1]);
-    const u = single[2];
+  const conv = (q: number, u: string): { unit: Unit; unitSize: number } => {
     if (u === "ml") return { unit: "l", unitSize: q / 1000 };
+    if (u === "cl") return { unit: "l", unitSize: q / 100 };
     if (u === "l") return { unit: "l", unitSize: q };
-    if (u === "g") return { unit: "kg", unitSize: q / 1000 };
-    return { unit: "kg", unitSize: q };
-  }
-  const count = s.match(/(\d+)\s*(buc|role|rola|plicuri|pl|bucati|bucăți)\b/);
+    if (u === "kg") return { unit: "kg", unitSize: q };
+    return { unit: "kg", unitSize: q / 1000 }; // g / gr
+  };
+  // "6x0.5 L", "4 x 330 ml", "2×1,5l"
+  const mp = s.match(/(\d+)\s*[x×]\s*([\d.]+)\s*(ml|cl|kg|gr|g|l)\b/);
+  if (mp) return conv(parseInt(mp[1], 10) * parseFloat(mp[2]), mp[3]);
+  // "500 g", "1,5 L", "75 cl", "250gr"
+  const single = s.match(/([\d.]+)\s*(ml|cl|kg|gr|g|l)\b/);
+  if (single) return conv(parseFloat(single[1]), single[2]);
+  const count = s.match(/(\d+)\s*(buc|role|rola|plicuri|pl|bucati|bucăți|capsule|comprimate|tablete|doze)\b/);
   if (count) return { unit: "buc", unitSize: parseInt(count[1], 10) };
   return null;
 }

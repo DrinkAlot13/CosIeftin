@@ -4,11 +4,28 @@
 
 const STOP = new Set(["cu", "de", "si", "la", "un", "o", "pentru", "the", "for", "and", "nou", "noua"]);
 
+// Romanian uses comma-below ș/ț (U+0219/U+021B), but a lot of Romanian sites still emit the
+// Turkish cedilla ş/ţ (U+015F/U+0163) — different codepoints that NFD does NOT unify (only the
+// cedilla pair decomposes). Left unhandled, "brânzǎ Făgăraş" and "brânză Făgăraș" never match
+// and search silently misses. Fold both families to plain ASCII first.
+const RO_FOLD: Record<string, string> = {
+  "ș": "s", "ț": "t", "Ș": "S", "Ț": "T", // comma-below ș ț Ș Ț
+  "ş": "s", "ţ": "t", "Ş": "S", "Ţ": "T", // cedilla     ş ţ Ş Ţ
+  "ă": "a", "Ă": "A", "â": "a", "Â": "A", // ă Ă â Â
+  "î": "i", "Î": "I",                                 // î Î
+};
+
+/** Fold Romanian diacritics (both comma-below and cedilla forms) to ASCII. */
+export function foldDiacritics(s: string): string {
+  return s
+    .replace(/[ȘșȚțŞşŢţĂăÂâÎî]/g, (c) => RO_FOLD[c] ?? c)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 /** Lowercase, strip diacritics, join storage sizes (128 gb -> 128gb), keep alnum. */
 export function normalizeText(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  return foldDiacritics(s)
     .toLowerCase()
     .replace(/(\d+)\s*(gb|tb|mb)\b/g, "$1$2")
     .replace(/[^a-z0-9]+/g, " ")

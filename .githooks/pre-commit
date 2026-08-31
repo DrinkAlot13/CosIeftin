@@ -1,0 +1,21 @@
+#!/bin/sh
+# CoșMic pre-commit gate: typecheck + the golden-set matcher tests + the price-parser tests.
+#
+# Deliberately `verify:code`, NOT `verify`. A commit changes CODE; it cannot change the state
+# of the database. Blocking a code commit because the DB still holds rows written by an older
+# scraper conflates two different gates and makes the hook impossible to satisfy — you would
+# have to run a full scrape to commit a typo fix.
+#
+# Data quality is gated by `npm run audit:db`, which runs in `npm run verify` and after every
+# nightly scrape. That is where stale rows must be answered for.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+
+echo "[pre-commit] typecheck + tests…"
+npm run --silent verify:code || {
+  echo ""
+  echo "[pre-commit] BLOCKED — typecheck or tests failed (see above)."
+  echo "             These guard price parsing and product matching."
+  exit 1
+}
+echo "[pre-commit] ok"

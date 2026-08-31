@@ -6,15 +6,16 @@
 // Run: npm run scrape:carrefour
 
 import { chromium } from "playwright";
-import { ITEMS, type ItemDef } from "../src/data/catalog";
 import { prisma } from "../src/lib/db";
-import { parseSize } from "../src/lib/ingest-core";
-import { normalizeText } from "../src/lib/matching";
+import { parsePriceLei, parsePriceDetailed } from "../src/lib/price/parsePrice";
+import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 const BASE = "https://carrefour.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-// Leaf food/household categories covering our pre-set items.
+// Leaf food/household categories. carrefour.ro sells shelf-stable groceries only
+// (fresh dairy/produce/meat live on Bringo), so this is the pantry + drinks + cleaning
+// catalog — paginated deeply via Magento's ?p=N.
 const CATS = [
   "bacanie-carrefour/alimente/ulei",
   "bacanie-carrefour/alimente/paste-fainoase",
@@ -23,44 +24,29 @@ const CATS = [
   "bacanie-carrefour/alimente/zahar-si-ingrediente-prajituri",
   "bacanie-carrefour/alimente/lapte-si-derivate-lapte-uht",
   "bacanie-carrefour/alimente/cafea/cafea-macinata",
+  "bacanie-carrefour/alimente/cafea/cafea-boabe",
   "bacanie-carrefour/alimente/ceai",
   "bacanie-carrefour/alimente/cereale-si-musli",
+  "bacanie-carrefour/alimente/prajituri",
+  "bacanie-carrefour/alimente/sosuri",
+  "bacanie-carrefour/alimente/ciocolata",
+  "bacanie-carrefour/alimente/bomboane",
+  "bacanie-carrefour/alimente/biscuiti-si-napolitane",
+  "bacanie-carrefour/alimente/produse-de-post",
   "bacanie-carrefour/bauturi-nealcoolice/apa",
   "bacanie-carrefour/bauturi-nealcoolice/sucuri-carbogazoase",
   "bacanie-carrefour/bauturi-nealcoolice/sucuri-si-nectaruri",
   "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/detergent-pentru-rufe",
   "casa-gradina-si-petshop/produse-curatenie-pentru-casa/servetele-si-produse-din-hartie/hartie-igienica",
 ];
+const MAX_PAGES = 13; // ?p=1..13 (24/page); stops early when a page adds nothing new.
 
-type Cand = { name: string; brand: string; price: number; available: boolean; url: string; image: string | null };
+// The pool IS a StoreProduct list — using the shared type means provenance fields
+// (rawPriceText, productUrl, reference price) can never be silently dropped here.
+type Cand = StoreProduct;
 
-function parsePrice(text: string): number {
-  const ms = [...text.matchAll(/(\d+)\s+(\d{2})\s*lei/gi)].map((m) => parseFloat(`${m[1]}.${m[2]}`));
-  if (ms.length) return Math.min(...ms);
-  const m2 = text.match(/(\d+)[.,](\d{2})/);
-  return m2 ? parseFloat(`${m2[1]}.${m2[2]}`) : 0;
-}
-
-function pickBest(item: ItemDef, cands: Cand[]): Cand | null {
-  const head = normalizeText(item.name).split(" ")[0];
-  const sizeOk = cands.filter((c) => {
-    if (normalizeText(c.name).split(" ")[0] !== head) return false;
-    const s = parseSize(c.name);
-    return s && s.unit === item.unit && Math.abs(s.unitSize - item.unitSize) <= item.unitSize * 0.06 + 1e-9;
-  });
-  let pool = sizeOk;
-  if (item.brand) {
-    const nb = normalizeText(item.brand);
-    const branded = pool.filter((c) => normalizeText(c.brand).includes(nb) || normalizeText(c.name).includes(nb));
-    if (branded.length === 0) return null;
-    pool = branded;
-  }
-  const priced = pool.filter((c) => c.price > 0);
-  if (priced.length === 0) return null;
-  const avail = priced.filter((c) => c.available);
-  const finalPool = avail.length > 0 ? avail : priced;
-  return finalPool.reduce((a, b) => (b.price < a.price ? b : a));
-}
+// Prices go through the ONE parser (CLAUDE.md → Prices). It returns null on ambiguity,
+// and an unparseable card is skipped rather than published as 0.
 
 async function main() {
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
@@ -74,35 +60,47 @@ async function main() {
 
   const pool: Cand[] = [];
   const seen = new Set<string>();
+  const scrapePage = () =>
+    page.$$eval("li.product[data-product-id]", (els) =>
+      els.map((el) => {
+        const q = (s: string) => el.querySelector(s);
+        const name = (q("a[title]")?.getAttribute("title") || q('[class*="name" i] a')?.textContent || q('[class*="name" i]')?.textContent || "").replace(/\s+/g, " ").trim();
+        const priceText = (q('[class*="price" i]')?.textContent || "").replace(/\s+/g, " ").trim();
+        const img = (q("img")?.getAttribute("src") || q("img")?.getAttribute("data-src") || "").trim();
+        const brand = el.querySelector("[data-brand]")?.getAttribute("data-brand") || "";
+        const dim = el.querySelector("[data-dimension10]")?.getAttribute("data-dimension10") || "available";
+        const linkEl = el.querySelector('a[href]:not([href^="javascript"])');
+        const link = linkEl?.getAttribute("href") || "";
+        return { id: el.getAttribute("data-product-id"), name, priceText, img, brand, available: dim !== "not available", link };
+      }),
+    );
+
   for (const cat of CATS) {
-    try {
-      await page.goto(`${BASE}/${cat}`, { waitUntil: "domcontentloaded", timeout: 45000 });
-      await page.waitForTimeout(6000);
-      const raw = await page.$$eval("li.product[data-product-id]", (els) =>
-        els.map((el) => {
-          const q = (s: string) => el.querySelector(s);
-          const name = (q("a[title]")?.getAttribute("title") || q('[class*="name" i] a')?.textContent || q('[class*="name" i]')?.textContent || "").replace(/\s+/g, " ").trim();
-          const priceText = (q('[class*="price" i]')?.textContent || "").replace(/\s+/g, " ").trim();
-          const img = (q("img")?.getAttribute("src") || q("img")?.getAttribute("data-src") || "").trim();
-          const brand = el.querySelector("[data-brand]")?.getAttribute("data-brand") || "";
-          const dim = el.querySelector("[data-dimension10]")?.getAttribute("data-dimension10") || "available";
-          const linkEl = el.querySelector('a[href]:not([href^="javascript"])');
-          const link = linkEl?.getAttribute("href") || "";
-          return { id: el.getAttribute("data-product-id"), name, priceText, img, brand, available: dim !== "not available", link };
-        }),
-      );
-      let added = 0;
-      for (const r of raw) {
-        const key = String(r.id ?? r.name);
-        if (!r.name || seen.has(key)) continue;
-        seen.add(key);
-        pool.push({ name: r.name, brand: r.brand, price: parsePrice(r.priceText), available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null });
-        added++;
+    let catAdded = 0;
+    let lastPage = 0;
+    for (let p = 1; p <= MAX_PAGES; p++) {
+      try {
+        await page.goto(`${BASE}/${cat}${p > 1 ? `?p=${p}` : ""}`, { waitUntil: "domcontentloaded", timeout: 45000 });
+        await page.waitForTimeout(p === 1 ? 6000 : 3500);
+        const raw = await scrapePage();
+        if (raw.length === 0) break; // past the last page
+        let pageAdded = 0;
+        for (const r of raw) {
+          const key = String(r.id ?? r.name);
+          if (!r.name || seen.has(key)) continue;
+          seen.add(key);
+          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null });
+          pageAdded++;
+          catAdded++;
+        }
+        lastPage = p;
+        if (pageAdded === 0) break; // page had only products we've already seen
+      } catch (e) {
+        console.log(`  ${cat} p${p} eroare: ${(e as Error).message.slice(0, 40)}`);
+        break;
       }
-      console.log(`  ${cat.split("/").pop()!.padEnd(28)} +${added} (pool ${pool.length})`);
-    } catch (e) {
-      console.log(`  ${cat} eroare: ${(e as Error).message.slice(0, 50)}`);
     }
+    console.log(`  ${cat.split("/").pop()!.padEnd(28)} +${catAdded} (pool ${pool.length}, ${lastPage}p)`);
   }
   await browser.close();
   console.log(`Pooled ${pool.length} Carrefour products.`);
@@ -112,25 +110,11 @@ async function main() {
     update: { active: true, name: "Carrefour", websiteUrl: BASE, color: "#0050aa" },
     create: { slug: "carrefour", name: "Carrefour", websiteUrl: BASE, color: "#0050aa" },
   });
-  await prisma.priceHistory.deleteMany({ where: { offer: { merchantId: merchant.id } } });
-  await prisma.offer.deleteMany({ where: { merchantId: merchant.id } });
-
-  let matched = 0;
-  for (const item of ITEMS) {
-    const best = pickBest(item, pool);
-    if (!best) { console.log(`  · ${item.name.padEnd(34)} -> fără potrivire`); continue; }
-    const product = await prisma.product.findUnique({ where: { slug: item.slug } });
-    if (!product) continue;
-    if (best.image && !product.image) await prisma.product.update({ where: { id: product.id }, data: { image: best.image } }).catch(() => {});
-    const ppu = item.unitSize > 0 ? best.price / item.unitSize : best.price;
-    const offer = await prisma.offer.create({
-      data: { productId: product.id, merchantId: merchant.id, price: best.price, pricePerUnit: ppu, packLabel: item.packLabel, availability: best.available ? "in stock" : "out of stock", url: best.url, currency: "RON", matchedBy: "scraper" },
-    });
-    await prisma.priceHistory.create({ data: { offerId: offer.id, price: best.price } });
-    matched++;
-    console.log(`  ✓ ${item.name.padEnd(34)} -> ${best.price} lei  (${best.name})`);
-  }
-  console.log(`\nCarrefour: ${matched}/${ITEMS.length} produse cu preț real ingerate.`);
+  const r = await matchPoolToCatalog(
+    merchant.id,
+    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, image: c.image })),
+  );
+  console.log(`\nCarrefour: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }
 

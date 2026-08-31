@@ -1,19 +1,22 @@
 // REAL scraper: Mega Image (mega-image.ro — SAP Hybris + Apollo GraphQL, behind
 // Akamai bot manager and store-gated). Plain fetch won't work (needs a real browser
-// session + a selected store), so we drive a real Chromium (Playwright): navigate
-// each category page, INTERCEPT the GetCategoryProductSearch GraphQL responses the
-// page itself fetches, scroll to load more, pool + match our pre-set items.
+// session + a selected store), so we drive a real Chromium (Playwright): navigate a
+// category page ONCE to establish the Akamai/store session, then REPLAY the site's own
+// GetCategoryProductSearch persisted-query (a GET) in-page, paginating pageNumber
+// through every page of every top category (plainChildCategories pulls their subcats).
 //
 // Run: npm run scrape:megaimage   (Playwright + Chromium must be installed)
 
-import { chromium } from "playwright";
-import { ITEMS, type ItemDef } from "../src/data/catalog";
+import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
-import { parseSize } from "../src/lib/ingest-core";
-import { normalizeText } from "../src/lib/matching";
+import { matchPoolToCatalog } from "../src/lib/scrape-util";
 
 const BASE = "https://www.mega-image.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+// Persisted-query hash for GetCategoryProductSearch (captured from the live site).
+const HASH = "d8bff3916275ffeb6f51604d36d7a3aa2f9cd92847487a7f2e3bdf6bb2115cdd";
+const PAGE_SIZE = 20; // the API rejects pageSize > 20 (HTTP 500), so we page through
+const MAX_PAGES = 65; // safety cap (up to 1300 products/category)
 
 // Top-level category code + URL path (plainChildCategories includes their subcategories).
 const CATS = [
@@ -29,7 +32,7 @@ const CATS = [
   { code: "013", path: "Curatenie-si-nealimentare" },
 ];
 
-type Cand = { name: string; brand: string; code: string; price: number; available: boolean; url: string; image: string | null };
+type Cand = { name: string; brand: string; code: string; price: number; available: boolean; url: string; image: string | null ; productUrl?: string | null; rawPriceText?: string | null };
 
 function firstImage(images: unknown): string | null {
   if (!Array.isArray(images)) return null;
@@ -39,61 +42,75 @@ function firstImage(images: unknown): string | null {
   return pick.url.startsWith("http") ? pick.url : BASE + pick.url;
 }
 
-function pickBest(item: ItemDef, cands: Cand[]): Cand | null {
-  const head = normalizeText(item.name).split(" ")[0];
-  const sizeOk = cands.filter((c) => {
-    if (normalizeText(c.name).split(" ")[0] !== head) return false;
-    const s = parseSize(c.name);
-    return s && s.unit === item.unit && Math.abs(s.unitSize - item.unitSize) <= item.unitSize * 0.06 + 1e-9;
-  });
-  let pool = sizeOk;
-  if (item.brand) {
-    const nb = normalizeText(item.brand);
-    const branded = pool.filter((c) => normalizeText(c.brand).includes(nb) || normalizeText(c.name).includes(nb));
-    if (branded.length === 0) return null;
-    pool = branded;
-  }
-  const priced = pool.filter((c) => c.price > 0);
-  if (priced.length === 0) return null;
-  const avail = priced.filter((c) => c.available);
-  const finalPool = avail.length > 0 ? avail : priced;
-  return finalPool.reduce((a, b) => (b.price < a.price ? b : a));
+function apiUrl(category: string, pageNumber: number): string {
+  const variables = { lang: "ro", searchQuery: "", category, pageNumber, pageSize: PAGE_SIZE, filterFlag: true, fields: "PRODUCT_TILE", plainChildCategories: true };
+  const extensions = { persistedQuery: { version: 1, sha256Hash: HASH } };
+  return `${BASE}/api/v1/?operationName=GetCategoryProductSearch&variables=${encodeURIComponent(JSON.stringify(variables))}&extensions=${encodeURIComponent(JSON.stringify(extensions))}`;
 }
+
+/** Replay the persisted query in-page (carries the session cookies + Akamai token). */
+async function fetchPage(page: Page, category: string, pageNumber: number): Promise<any> {
+  const url = apiUrl(category, pageNumber);
+  return page.evaluate(async (u) => {
+    try {
+      const r = await fetch(u, { headers: { "apollographql-client-name": "ro-mi-web-stores", "x-apollo-operation-name": "GetCategoryProductSearch" } });
+      return r.ok ? await r.json() : { __err: r.status };
+    } catch (e) {
+      return { __err: String(e) };
+    }
+  }, url);
+}
+
+/** Pull products + pagination.totalPages out of a GraphQL response. */
+function extract(json: any, pool: Cand[], seen: Set<string>): { added: number; totalPages: number } {
+  let added = 0;
+  let totalPages = 1;
+  (function walk(o: any, d: number) {
+    if (!o || typeof o !== "object" || d > 12) return;
+    if (o.pagination && typeof o.pagination.totalPages === "number") totalPages = o.pagination.totalPages;
+    if (Array.isArray(o)) { for (const x of o) walk(x, d + 1); return; }
+    if (o.name && o.code && o.price && typeof o.price === "object" && typeof o.price.value === "number") {
+      const code = String(o.code);
+      if (!seen.has(code)) {
+        seen.add(code);
+        const abs = o.url ? (String(o.url).startsWith("http") ? o.url : BASE + o.url) : BASE;
+        pool.push({ name: o.name, brand: o.manufacturerName || "", code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), image: firstImage(o.images) });
+        added++;
+      }
+    }
+    for (const k of Object.keys(o)) walk(o[k], d + 1);
+  })(json, 0);
+  return { added, totalPages };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
   const ctx = await browser.newContext({ userAgent: UA, locale: "ro-RO", viewport: { width: 1366, height: 900 }, extraHTTPHeaders: { "accept-language": "ro-RO,ro;q=0.9" } });
   const page = await ctx.newPage();
 
+  // Navigate once so Akamai (_abck/bm_sz) and the store-selection cookie are set; then
+  // all category API calls made in-page inherit that session.
+  await page.goto(`${BASE}/${CATS[0].path}/c/${CATS[0].code}`, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.waitForTimeout(6000);
+
   const pool: Cand[] = [];
   const seen = new Set<string>();
-  page.on("response", async (r) => {
-    if (!r.url().includes("GetCategoryProductSearch")) return;
-    let j: unknown;
-    try { j = await r.json(); } catch { return; }
-    (function walk(o: any, d: number) {
-      if (!o || typeof o !== "object" || d > 12) return;
-      if (Array.isArray(o)) { for (const x of o) walk(x, d + 1); return; }
-      if (o.name && o.code && o.price && typeof o.price === "object" && typeof o.price.value === "number") {
-        const code = String(o.code);
-        if (!seen.has(code)) {
-          seen.add(code);
-          pool.push({ name: o.name, brand: o.manufacturerName || "", code, price: o.price.value, available: o.available !== false, url: o.url ? (String(o.url).startsWith("http") ? o.url : BASE + o.url) : BASE, image: firstImage(o.images) });
-        }
-      }
-      for (const k of Object.keys(o)) walk(o[k], d + 1);
-    })(j, 0);
-  });
-
   for (const c of CATS) {
-    try {
-      await page.goto(`${BASE}/${c.path}/c/${c.code}`, { waitUntil: "domcontentloaded", timeout: 45000 });
-      await page.waitForTimeout(6000);
-      for (let s = 0; s < 3; s++) { await page.mouse.wheel(0, 5000); await page.waitForTimeout(2500); }
-      console.log(`  ${c.path.padEnd(38)} pool ${pool.length}`);
-    } catch (e) {
-      console.log(`  ${c.path.padEnd(38)} eroare: ${(e as Error).message.slice(0, 60)}`);
+    let totalPages = 1;
+    let catAdded = 0;
+    for (let pn = 0; pn < MAX_PAGES; pn++) {
+      const json = await fetchPage(page, c.code, pn);
+      if (!json || json.__err) { if (pn === 0) console.log(`  ${c.path.padEnd(38)} err ${json?.__err}`); break; }
+      const { added, totalPages: tp } = extract(json, pool, seen);
+      totalPages = tp;
+      catAdded += added;
+      if (pn + 1 >= totalPages) break;
+      await sleep(300);
     }
+    console.log(`  ${c.path.padEnd(38)} +${catAdded} (pool ${pool.length}, ${totalPages}p)`);
+    await sleep(300);
   }
   await browser.close();
   console.log(`Pooled ${pool.length} Mega Image products.`);
@@ -103,25 +120,14 @@ async function main() {
     update: { active: true, name: "Mega Image", websiteUrl: BASE, color: "#e2001a" },
     create: { slug: "mega-image", name: "Mega Image", websiteUrl: BASE, color: "#e2001a" },
   });
-  await prisma.priceHistory.deleteMany({ where: { offer: { merchantId: merchant.id } } });
-  await prisma.offer.deleteMany({ where: { merchantId: merchant.id } });
-
-  let matched = 0;
-  for (const item of ITEMS) {
-    const best = pickBest(item, pool);
-    if (!best) { console.log(`  · ${item.name.padEnd(34)} -> fără potrivire`); continue; }
-    const product = await prisma.product.findUnique({ where: { slug: item.slug } });
-    if (!product) continue;
-    if (best.image && !product.image) await prisma.product.update({ where: { id: product.id }, data: { image: best.image } }).catch(() => {});
-    const ppu = item.unitSize > 0 ? best.price / item.unitSize : best.price;
-    const offer = await prisma.offer.create({
-      data: { productId: product.id, merchantId: merchant.id, price: best.price, pricePerUnit: ppu, packLabel: item.packLabel, availability: best.available ? "in stock" : "out of stock", url: best.url, currency: "RON", matchedBy: "scraper" },
-    });
-    await prisma.priceHistory.create({ data: { offerId: offer.id, price: best.price } });
-    matched++;
-    console.log(`  ✓ ${item.name.padEnd(34)} -> ${best.price} lei  (${best.name})`);
-  }
-  console.log(`\nMega Image: ${matched}/${ITEMS.length} produse cu preț real ingerate.`);
+  const r = await matchPoolToCatalog(
+    merchant.id,
+    // Carry provenance explicitly. Re-mapping the pool into a narrower object here is
+    // how productUrl and rawPriceText were silently dropped: the fields were set on the
+    // pool, and this line quietly discarded them on the way to the matcher.
+    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, productUrl: c.productUrl ?? null, rawPriceText: c.rawPriceText ?? String(c.price), image: c.image })),
+  );
+  console.log(`\nMega Image: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }
 

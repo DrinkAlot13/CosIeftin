@@ -4,10 +4,50 @@ import { buildDailyLowSeries, dropPercent, summarize } from "@/lib/pricing";
 
 const activeInclude = { where: { merchant: { active: true } }, include: { merchant: true } } as const;
 
+/** Active grocery chains that actually have offers — for the "my stores" picker. */
+export async function getStoreList() {
+  const merchants = await prisma.merchant.findMany({
+    where: { active: true, offers: { some: { product: { section: "grocery" } } } },
+    select: { slug: true, name: true, color: true },
+    orderBy: { name: "asc" },
+  });
+  return merchants;
+}
+export type StoreListItem = Awaited<ReturnType<typeof getStoreList>>[number];
+
+/** Deals hub: grocery products with the biggest price gap between stores (buy-here-save-X),
+ *  plus real price drops as history accumulates. */
+export async function getDeals(limit = 60) {
+  const products = await prisma.product.findMany({
+    where: { section: "grocery", offers: { some: {} } },
+    include: { offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } } } }, category: true },
+  });
+  const rows = products
+    .map((p) => {
+      const summary = summarize(p.offers);
+      const inStock = p.offers.filter((o) => o.availability === "in stock");
+      const pool = inStock.length > 0 ? inStock : p.offers;
+      const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
+      const drop = dropPercent(buildDailyLowSeries(p.offers));
+      const savingsPct = summary.highest > 0 ? (summary.savings / summary.highest) * 100 : 0;
+      const cheapest = [...pool].sort((a, b) => a.price - b.price)[0];
+      return { ...p, summary, unitLowest, drop, savingsPct, cheapestStore: cheapest?.merchant.name ?? null, score: Math.max(savingsPct, drop) };
+    })
+    .filter((p) => p.summary.offerCount >= 2 && p.score >= 8)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return rows;
+}
+export type DealProduct = Awaited<ReturnType<typeof getDeals>>[number];
+
 export async function getMenuCategories() {
-  return prisma.category.findMany({ orderBy: { id: "asc" } });
+  return prisma.category.findMany({ where: { section: "grocery" }, orderBy: { id: "asc" } });
 }
 export type MenuCategory = Awaited<ReturnType<typeof getMenuCategories>>[number];
+
+export async function getAlcoholCategories() {
+  return prisma.category.findMany({ where: { section: "alcohol" }, orderBy: { id: "asc" } });
+}
 
 /** Add headline price + lowest price-per-unit to a product's offers. */
 function decorate<T extends { offers: { price: number; availability: string; pricePerUnit: number }[] }>(products: T[]) {
@@ -23,9 +63,9 @@ export type SortKey = "price-asc" | "unit-asc" | "name";
 
 export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") {
   const category = await prisma.category.findUnique({ where: { slug } });
-  if (!category) return null;
+  if (!category || category.section !== "grocery") return null; // alcohol lives on /alcool
   const products = await prisma.product.findMany({
-    where: { categoryId: category.id },
+    where: { categoryId: category.id, section: "grocery" },
     include: { offers: activeInclude, category: true },
   });
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
@@ -51,11 +91,70 @@ export async function getItemPage(slug: string) {
   const series = buildDailyLowSeries(offers);
   const inStock = offers.filter((o) => o.availability === "in stock");
   const bestOffer = inStock[0] ?? offers[0] ?? null;
-  return { product, offers, summary, series, bestOffer };
+
+  // "Best time to buy": compare today's lowest to its own price history.
+  const lows = series.map((s) => s.price);
+  const lowestEver = lows.length ? Math.min(...lows) : summary.lowest;
+  const avg = lows.length ? lows.reduce((a, b) => a + b, 0) / lows.length : summary.lowest;
+  const priceInsight = {
+    points: series.length,
+    lowestEver,
+    avg,
+    atLow: series.length >= 4 && summary.lowest <= lowestEver * 1.01,
+    belowAvgPct: series.length >= 4 && avg > 0 ? Math.max(0, ((avg - summary.lowest) / avg) * 100) : 0,
+  };
+  return { product, offers, summary, series, bestOffer, priceInsight };
 }
 
 export type ItemPage = NonNullable<Awaited<ReturnType<typeof getItemPage>>>;
 export type OfferRow = ItemPage["offers"][number];
+
+const ALT_STOP = new Set(["de", "cu", "la", "si", "din", "fara", "pentru", "sau", "un", "cel", "bio"]);
+function headNounOf(name: string): string {
+  return normalizeText(name).split(/\s+/).find((t) => t.length >= 3 && !ALT_STOP.has(t) && !/\d/.test(t)) ?? "";
+}
+
+/** Similar items: same section + same type (head-noun) + same size, other products — so a
+ *  shopper can find substitutes (other brands / shops), especially for single-shop items. */
+/** How willing the shopper is to swap a product for a cheaper equivalent.
+ *  "same-brand" — only other packs of the SAME brand (people are loyal to a coffee).
+ *  "equivalent" — any product with the same head-noun and size (the default).      */
+export type Strictness = "same-brand" | "equivalent";
+
+export async function getAlternatives(productId: number, limit = 8, strictness: Strictness = "equivalent") {
+  const p = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true, brand: true, unit: true, unitSize: true, section: true } });
+  if (!p) return [];
+  const head = headNounOf(p.name);
+  if (!head) return [];
+  const cands = await prisma.product.findMany({
+    where: {
+      section: p.section,
+      unit: p.unit,
+      id: { not: p.id },
+      offers: { some: {} },
+      unitSize: { gte: p.unitSize * 0.94, lte: p.unitSize * 1.06 },
+    },
+    include: { offers: activeInclude, category: true },
+    take: 500,
+  });
+  const nbrand = normalizeText(p.brand ?? "");
+  let matched = cands.filter((c) => normalizeText(c.name).split(/\s+/).some((t) => t === head));
+  // "same brand only": the shopper wants a better price on THIS product, not a substitute.
+  // With no brand on the source product there is nothing to hold constant, so the filter
+  // would silently return nothing — fall back to equivalents rather than an empty list.
+  if (strictness === "same-brand" && nbrand) {
+    matched = matched.filter((c) => normalizeText(c.brand ?? "") === nbrand || normalizeText(c.name).includes(nbrand));
+  }
+  const decorated = decorate(matched).filter((x) => x.summary.offerCount > 0);
+  // cheapest first; a different brand is a more useful "alternative" so nudge those up
+  decorated.sort((a, b) => {
+    const da = nbrand && normalizeText(a.brand ?? "") !== nbrand ? -0.001 : 0;
+    const db = nbrand && normalizeText(b.brand ?? "") !== nbrand ? -0.001 : 0;
+    return a.summary.lowest + da - (b.summary.lowest + db);
+  });
+  return decorated.slice(0, limit);
+}
+export type AltProduct = Awaited<ReturnType<typeof getAlternatives>>[number];
 
 function typoScore(qTokens: Set<string>, tTokens: string[]): number {
   if (qTokens.size === 0) return 0;
@@ -74,9 +173,26 @@ function typoScore(qTokens: Set<string>, tTokens: string[]): number {
 export async function searchProducts(query: string) {
   const q = query.trim();
   if (!q) return [];
-  const products = await prisma.product.findMany({ include: { offers: activeInclude, category: true } });
+  const products = await prisma.product.findMany({ where: { section: "grocery" }, include: { offers: activeInclude, category: true } });
   const nq = normalizeText(q);
   const qTokens = tokenize(q);
+
+  // Brand-aware: if the query names a brand we actually carry (e.g. "ulei baneasa"),
+  // restrict results to that brand instead of showing every oil. Build the set of
+  // known brands from the catalog, then see which of them the query mentions.
+  const brandNorms = new Set<string>(); // full normalized brand strings ("napolact", "de silva")
+  const brandTokens = new Set<string>(); // individual brand tokens ("baneasa", "zuzu")
+  for (const p of products) {
+    if (!p.brand) continue;
+    const nb = normalizeText(p.brand);
+    if (nb.length >= 3) brandNorms.add(nb);
+    for (const t of tokenize(p.brand)) if (t.length >= 3) brandTokens.add(t);
+  }
+  const namedBrands = new Set<string>();
+  for (const nb of brandNorms) if (nq.includes(nb)) namedBrands.add(nb);
+  for (const t of qTokens) if (brandTokens.has(t)) namedBrands.add(t);
+  const requiredBrands = [...namedBrands];
+
   const scored = products
     .map((p) => {
       const hay = normalizeText(`${p.brand ?? ""} ${p.name}`);
@@ -86,9 +202,11 @@ export async function searchProducts(query: string) {
       if (hay.startsWith(nq)) score += 0.3;
       score += jaccard(qTokens, new Set(tTokens)) * 0.8;
       score += typoScore(qTokens, tTokens) * 0.6;
-      return { p, score };
+      return { p, score, hay };
     })
     .filter((x) => x.score >= 0.35)
+    // When the query names a brand, keep only products of that brand.
+    .filter((x) => requiredBrands.length === 0 || requiredBrands.some((b) => x.hay.includes(b)))
     .sort((a, b) => b.score - a.score);
   return decorate(scored.map((x) => x.p)).filter((p) => p.summary.offerCount > 0);
 }
@@ -102,6 +220,7 @@ export async function suggestProducts(query: string, limit = 6) {
 
 export async function getHomeSections() {
   const products = await prisma.product.findMany({
+    where: { section: "grocery" },
     include: { offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } } } }, category: true },
   });
   const decorated = products.map((p) => ({
@@ -132,11 +251,58 @@ export async function getBasketProducts(slugs: string[]) {
 
 export async function countStats() {
   const [products, offers, chains] = await Promise.all([
-    prisma.product.count({ where: { offers: { some: {} } } }),
-    prisma.offer.count(),
-    prisma.merchant.count({ where: { offers: { some: {} } } }),
+    prisma.product.count({ where: { section: "grocery", offers: { some: {} } } }),
+    prisma.offer.count({ where: { product: { section: "grocery" } } }),
+    prisma.merchant.count({ where: { offers: { some: { product: { section: "grocery" } } } } }),
   ]);
   return { products, offers, chains };
+}
+
+/** Alcohol storefront: products in the "alcohol" section, decorated + sorted, with
+ *  optional category filter. Comparison across FineStore / Le Manoir. */
+export async function getAlcoholPage(sort: SortKey = "price-asc", categorySlug?: string) {
+  let categoryId: number | undefined;
+  if (categorySlug) {
+    const cat = await prisma.category.findUnique({ where: { slug: categorySlug } });
+    if (!cat || cat.section !== "alcohol") return { products: [], categories: await getAlcoholCategories() };
+    categoryId = cat.id;
+  }
+  const products = await prisma.product.findMany({
+    where: { section: "alcohol", ...(categoryId ? { categoryId } : {}) },
+    include: { offers: activeInclude, category: true },
+  });
+  const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
+  decorated.sort((a, b) => {
+    if (sort === "name") return a.name.localeCompare(b.name, "ro");
+    if (sort === "unit-asc") return a.unitLowest - b.unitLowest;
+    return a.summary.lowest - b.summary.lowest;
+  });
+  return { products: decorated, categories: await getAlcoholCategories() };
+}
+
+/** Sub-categories of a storefront section (for the filter chips). */
+export async function getSectionCategories(section: string) {
+  return prisma.category.findMany({ where: { section }, orderBy: { name: "asc" } });
+}
+
+/** A non-grocery storefront section (dcneu / cosmetice / farmacie), optional text + category. */
+export async function getSectionProducts(section: string, sort: SortKey = "price-asc", q?: string, categorySlug?: string) {
+  let categoryId: number | undefined;
+  if (categorySlug) {
+    const c = await prisma.category.findUnique({ where: { slug: categorySlug } });
+    if (c?.section === section) categoryId = c.id;
+  }
+  const products = await prisma.product.findMany({
+    where: { section, ...(categoryId ? { categoryId } : {}), ...(q ? { name: { contains: q } } : {}) },
+    include: { offers: activeInclude, category: true },
+  });
+  const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
+  decorated.sort((a, b) => {
+    if (sort === "name") return a.name.localeCompare(b.name, "ro");
+    if (sort === "unit-asc") return a.unitLowest - b.unitLowest;
+    return a.summary.lowest - b.summary.lowest;
+  });
+  return decorated;
 }
 
 export async function getAdminStats() {

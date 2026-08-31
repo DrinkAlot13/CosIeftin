@@ -1,33 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-const KEY = "cosmic_list";
-type Item = { slug: string; name: string; qty: number };
-
-function read(): Item[] {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
+import { addItem, CART_EVENT, getActive, removeItem } from "@/lib/carts";
 
 export function AddToList({ slug, name }: { slug: string; name: string }) {
   const [inList, setInList] = useState(false);
   useEffect(() => {
-    const sync = () => setInList(read().some((i) => i.slug === slug));
+    const sync = () => setInList(getActive().items.some((i) => i.slug === slug));
     sync();
-    window.addEventListener("cosmic-list", sync);
-    return () => window.removeEventListener("cosmic-list", sync);
+    window.addEventListener(CART_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(CART_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
   }, [slug]);
 
   function toggle() {
-    let items = read();
-    if (items.some((i) => i.slug === slug)) items = items.filter((i) => i.slug !== slug);
-    else items = [...items, { slug, name, qty: 1 }];
-    localStorage.setItem(KEY, JSON.stringify(items));
-    window.dispatchEvent(new Event("cosmic-list"));
+    if (getActive().items.some((i) => i.slug === slug)) removeItem(slug);
+    else addItem({ slug, name, qty: 1 });
   }
 
   return (

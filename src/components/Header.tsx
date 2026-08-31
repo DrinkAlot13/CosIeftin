@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { logout } from "@/app/actions";
+import { AlertsBell } from "@/components/AlertsBell";
 import { SearchAutocomplete } from "@/components/SearchAutocomplete";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getCurrentUser } from "@/lib/auth";
@@ -16,6 +17,7 @@ export async function Header({ categories }: { categories: MenuCategory[] }) {
         </Link>
         <SearchAutocomplete />
         <Link href="/lista" className="header-list-link">🛒 Lista</Link>
+        <AlertsBell />
         <ThemeToggle />
         <div className="header-account">
           {user ? (
@@ -32,16 +34,29 @@ export async function Header({ categories }: { categories: MenuCategory[] }) {
         </div>
       </div>
 
-      <nav className="catnav-wrap" aria-label="Categorii">
-        <div className="container">
+      <nav className="catnav-wrap" aria-label="Departamente">
+        <div className="container catnav-row">
           <ul className="catnav">
-            {categories.map((c) => (
-              <li key={c.id}>
-                <Link href={`/c/${c.slug}`}>
-                  <span aria-hidden>{c.icon}</span> {c.name}
-                </Link>
-              </li>
-            ))}
+            <li className="has-sub">
+              <Link href="/"><span aria-hidden>🍎</span> Alimentare <span className="caret" aria-hidden>▾</span></Link>
+              <ul className="submenu submenu-grid">
+                {categories.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/c/${c.slug}`}><span aria-hidden>{c.icon}</span> {c.name}</Link>
+                  </li>
+                ))}
+              </ul>
+            </li>
+            <li><Link href="/alcool"><span aria-hidden>🍷</span> Alcool</Link></li>
+            <li><Link href="/cosmetice"><span aria-hidden>💄</span> Cosmetice</Link></li>
+            <li><Link href="/farmacie"><span aria-hidden>💊</span> Farmacie</Link></li>
+            <li><Link href="/dcneu"><span aria-hidden>🏷️</span> DCNeu</Link></li>
+          </ul>
+          <ul className="catnav catnav-tools">
+            <li><Link href="/oferte"><span aria-hidden>🔥</span> Oferte</Link></li>
+            <li><Link href="/index-cosmic"><span aria-hidden>📊</span> Indexul CoșMic</Link></li>
+            <li><Link href="/retete"><span aria-hidden>🍳</span> Rețete</Link></li>
+            <li><Link href="/carduri"><span aria-hidden>💳</span> Carduri</Link></li>
           </ul>
         </div>
       </nav>

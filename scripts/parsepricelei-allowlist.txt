@@ -1,0 +1,33 @@
+# Files permitted to import/use parsePriceLei.
+#
+# parsePriceLei is TRANSITIONAL float-money debt: it exists only while the money columns
+# are still `Float` lei. Every entry here is a place that must switch to `parsePrice`
+# (integer bani) during the bani migration.
+#
+# REMOVAL CONDITION — delete parsePriceLei, this file, and
+# scripts/check-parsepricelei-allowlist.ts once BOTH hold:
+#   1. every money column is an integer `*Bani` column (Offer, PriceHistory, PriceAlert,
+#      PriceAnomaly …), and
+#   2. no reader converts back to lei except at the presentation layer (formatBani).
+#
+# Adding a line here is a deliberate act. Prefer parsePrice.
+
+# --- scrapers: write into Float lei columns via StoreProduct.price ---
+scripts/adapters/runner.ts
+scripts/scrape-carrefour.ts
+scripts/scrape-carrefour-alcohol.ts
+scripts/scrape-dcneu.ts
+scripts/scrape-dcneu-tiers.ts
+scripts/scrape-farmaciatei.ts
+scripts/scrape-finestore.ts
+scripts/scrape-kaufland.ts
+scripts/scrape-lemanoir.ts
+scripts/scrape-monitorul.ts
+
+# --- app code reading user-entered prices into Float columns ---
+src/app/api/telegram/route.ts     # PriceAlert.targetPrice is Float lei
+src/components/AlertsList.tsx     # localStorage alert targets are lei
+src/lib/receipt.ts                # ReceiptLine amounts are lei
+
+# --- infrastructure ---
+src/lib/price/parseTally.ts       # only mentions it in a doc comment example

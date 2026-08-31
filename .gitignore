@@ -16,3 +16,6 @@ public/product-images/
 
 .env.local
 .DS_Store
+backups/*.db
+backups/*.db.gz
+backups/history/*.csv

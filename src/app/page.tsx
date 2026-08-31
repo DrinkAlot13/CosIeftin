@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ProductCard } from "@/components/ProductCard";
 import { countStats, getHomeSections, getMenuCategories } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+// Prices refresh once a night, so serve these from cache and regenerate hourly —
+// nearly-free performance vs hitting the DB on every request.
+export const revalidate = 3600;
 
 export default async function HomePage() {
   const [{ featured, drops }, categories, stats] = await Promise.all([

@@ -1,0 +1,193 @@
+// PRODUCTION schema — PostgreSQL.
+//
+// Identical models to prisma/schema.prisma (SQLite, local dev); the differences are:
+//   • provider = "postgresql"
+//   • @db.Text on long free-text columns (SQLite has no length types)
+//   • real indexes on the columns the hot queries filter/sort by
+//
+// Migrate with:  npm run db:migrate-postgres   (see scripts/migrate-to-postgres.ts)
+//
+// Why Postgres before launch: SQLite + a nightly bulk write + concurrent reads is the first
+// outage. Postgres also brings pg_trgm + unaccent, which product search and matching want
+// anyway (accent-insensitive fuzzy search over 30k products).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  slug     String     @unique
+  name     String
+  icon     String?
+  section  String     @default("grocery")
+  parentId Int?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([section])
+}
+
+model Merchant {
+  id               Int             @id @default(autoincrement())
+  slug             String          @unique
+  name             String
+  websiteUrl       String
+  color            String?
+  storeType        String          @default("hybrid")
+  priceSource      String          @default("shelf")
+  active           Boolean         @default(true)
+  deliveryFee      Float?
+  freeDeliveryOver Float?
+  minOrder         Float?
+  lastOfferCount   Int             @default(0)
+  lastScrapeAt     DateTime?
+  offers           Offer[]
+  overrides        MatchOverride[]
+  createdAt        DateTime        @default(now())
+}
+
+model Product {
+  id         Int               @id @default(autoincrement())
+  slug       String            @unique
+  name       String
+  nameNorm   String?
+  brand      String?
+  ean        String?           @unique
+  section    String            @default("grocery")
+  unit       String            @default("buc")
+  unitSize   Float             @default(1)
+  image      String?           @db.Text
+  categoryId Int?
+  category   Category?         @relation(fields: [categoryId], references: [id])
+  offers     Offer[]
+  listItems  GroceryListItem[]
+  overrides  MatchOverride[]
+  alerts     PriceAlert[]
+  createdAt  DateTime          @default(now())
+
+  @@index([section])
+  @@index([nameNorm])
+  @@index([categoryId])
+  @@index([section, categoryId])
+}
+
+model Offer {
+  id           Int            @id @default(autoincrement())
+  productId    Int
+  product      Product        @relation(fields: [productId], references: [id])
+  merchantId   Int
+  merchant     Merchant       @relation(fields: [merchantId], references: [id])
+  price        Float
+  pricePerUnit Float          @default(0)
+  packLabel    String?
+  currency     String         @default("RON")
+  availability String         @default("in stock")
+  url          String         @db.Text
+  bulkTiers    String?        @db.Text
+  priceSource  String         @default("shelf")
+  validFrom    DateTime?
+  validTo      DateTime?
+  oldPrice     Float?
+  loyaltyPrice Float?
+  matchedBy    String         @default("fuzzy")
+  matchScore   Float?
+  flagged      Boolean        @default(false)
+  flagReason   String?
+  lastSeen     DateTime       @default(now())
+  history      PriceHistory[]
+
+  @@unique([productId, merchantId])
+  @@index([merchantId])
+  @@index([productId, price])
+  // the review queue reads this constantly
+  @@index([flagged])
+}
+
+model MatchOverride {
+  id         Int      @id @default(autoincrement())
+  merchantId Int
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  storeKey   String   @db.Text
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  decision   String   @default("confirm")
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@unique([merchantId, storeKey])
+  @@index([merchantId])
+}
+
+model PriceHistory {
+  id         Int      @id @default(autoincrement())
+  offerId    Int
+  offer      Offer    @relation(fields: [offerId], references: [id])
+  price      Float
+  recordedAt DateTime @default(now())
+
+  @@index([offerId, recordedAt])
+}
+
+model PriceAlert {
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  product        Product   @relation(fields: [productId], references: [id])
+  chatId         String
+  targetPrice    Float?
+  basePrice      Float
+  active         Boolean   @default(true)
+  lastNotifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([chatId, productId])
+  @@index([active])
+}
+
+model IndexSnapshot {
+  id        Int      @id @default(autoincrement())
+  day       String   @unique
+  total     Float
+  covered   Int
+  ofItems   Int
+  lines     String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([day])
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  passwordHash String
+  isAdmin      Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  lists        GroceryList[]
+}
+
+model GroceryList {
+  id        Int               @id @default(autoincrement())
+  userId    Int?
+  user      User?             @relation(fields: [userId], references: [id])
+  token     String            @unique
+  name      String            @default("Lista mea")
+  items     GroceryListItem[]
+  createdAt DateTime          @default(now())
+}
+
+model GroceryListItem {
+  id        Int         @id @default(autoincrement())
+  listId    Int
+  list      GroceryList @relation(fields: [listId], references: [id])
+  productId Int
+  product   Product     @relation(fields: [productId], references: [id])
+  qty       Int         @default(1)
+
+  @@unique([listId, productId])
+}

@@ -1,13 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToList } from "@/components/AddToList";
+import { BulkTiers } from "@/components/BulkTiers";
 import { OfferTable } from "@/components/OfferTable";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
+import { ProductCard } from "@/components/ProductCard";
 import { ProductImage } from "@/components/ProductImage";
+import { TrackPrice } from "@/components/TrackPrice";
 import { formatPerUnit, formatRON } from "@/lib/format";
-import { getItemPage } from "@/lib/queries";
+import { getAlternatives, getItemPage } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+// Prices refresh once a night, so serve these from cache and regenerate hourly —
+// nearly-free performance vs hitting the DB on every request.
+export const revalidate = 3600;
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
   const data = await getItemPage(params.slug);
@@ -21,7 +26,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function ItemPage({ params }: { params: { slug: string } }) {
   const data = await getItemPage(params.slug);
   if (!data) notFound();
-  const { product, offers, summary, bestOffer } = data;
+  const { product, offers, summary, bestOffer, priceInsight } = data;
+  const alternatives = await getAlternatives(product.id);
 
   const dateSet = new Set<string>();
   for (const o of offers) for (const h of o.history) dateSet.add(h.recordedAt.toISOString().slice(0, 10));
@@ -55,10 +61,15 @@ export default async function ItemPage({ params }: { params: { slug: string } })
             <span className="big">{formatRON(summary.lowest)}</span>
             {summary.savings > 0 && <span className="strike">{formatRON(summary.highest)}</span>}
           </div>
-          <div className="muted" style={{ marginBottom: 14 }}>
+          <div className="muted" style={{ marginBottom: 10 }}>
             {bestOffer && bestOffer.pricePerUnit > 0 ? `${formatPerUnit(bestOffer.pricePerUnit, product.unit)} · ` : ""}
             {summary.offerCount} magazine
           </div>
+          {priceInsight.atLow ? (
+            <div className="save-note" style={{ marginBottom: 14 }}>🔥 Moment bun de cumpărat — preț la minimul istoric{priceInsight.belowAvgPct > 3 ? ` (cu ${Math.round(priceInsight.belowAvgPct)}% sub media perioadei)` : ""}.</div>
+          ) : priceInsight.belowAvgPct > 6 ? (
+            <div className="save-note muted" style={{ marginBottom: 14 }}>📉 Sub media prețului cu {Math.round(priceInsight.belowAvgPct)}%.</div>
+          ) : null}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             {bestOffer && (
               <a className="btn btn-accent" href={bestOffer.url || "#"} target="_blank" rel="nofollow noopener">
@@ -66,7 +77,12 @@ export default async function ItemPage({ params }: { params: { slug: string } })
               </a>
             )}
             <AddToList slug={product.slug} name={product.name} />
+            <TrackPrice slug={product.slug} name={product.name} price={summary.lowest} />
           </div>
+          {(() => {
+            const t = offers.find((o) => o.bulkTiers && o.bulkTiers !== "[]");
+            return t ? <BulkTiers tiers={t.bulkTiers} store={t.merchant.name} /> : null;
+          })()}
         </div>
       </div>
 
@@ -82,6 +98,16 @@ export default async function ItemPage({ params }: { params: { slug: string } })
           <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Treci cu mouse-ul peste grafic pentru prețul fiecărui magazin.</p>
         </div>
       </section>
+
+      {alternatives.length > 0 && (
+        <section className="section">
+          <div className="section-head"><h2>🔄 Alternative similare</h2></div>
+          <p className="muted" style={{ marginTop: -8, marginBottom: 14 }}>Produse de același tip și mărime — poate le găsești mai ieftin sau în alt magazin.</p>
+          <div className="grid-products">
+            {alternatives.map((a) => <ProductCard key={a.id} p={a} />)}
+          </div>
+        </section>
+      )}
       <div style={{ height: 24 }} />
     </div>
   );

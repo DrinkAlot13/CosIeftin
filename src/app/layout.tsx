@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "./grocery.css";
 import { CookieConsent } from "@/components/CookieConsent";
+import { ServiceWorker } from "@/components/ServiceWorker";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { ListTray } from "@/components/ListTray";
@@ -34,6 +35,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <Footer categories={categories} />
         <ListTray />
         <CookieConsent />
+        <ServiceWorker />
       </body>
     </html>
   );

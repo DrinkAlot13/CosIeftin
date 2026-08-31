@@ -2,30 +2,32 @@
 // server-rendered into __NEXT_DATA__ on category pages (allowed by robots; the
 // /api/v2/shop JSON API is robots-DISALLOWED, so we parse the page instead).
 //
-// Fetches a set of department pages, pools the products, and matches our pre-set
-// items (head-noun + size + brand). Polite: ~10 requests, rate-limited, browser UA.
+// Department pages are slot-based (only preview a few products each), so we first
+// crawl the departments to DISCOVER their leaf subcategory pages (e.g.
+// /c/3-fructe-si-legume/302-legume-proaspete), then fetch each leaf (~60 products
+// SSR'd) and pool them all. Polite: rate-limited, browser UA.
 //
 // Run: npm run scrape:freshful   (after: npm run setup)
 
-import { ITEMS, type ItemDef } from "../src/data/catalog";
 import { prisma } from "../src/lib/db";
-import { parseSize } from "../src/lib/ingest-core";
-import { normalizeText } from "../src/lib/matching";
+import { matchPoolToCatalog } from "../src/lib/scrape-util";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const BASE = "https://www.freshful.ro";
-const DELAY_MS = 1500;
+const DELAY_MS = 700;
 
-// Departments covering our pre-set items.
+// Seed department pages; leaf subcategories are discovered from their slots.
 const DEPARTMENTS = [
   "1-brutarie-si-patiserie",
   "2-carne-si-peste",
   "3-fructe-si-legume",
   "4-lactate-branzeturi-si-oua",
   "5-mezeluri-si-ready-to-cook",
+  "6-congelate",
   "7-bauturi-si-tutun",
   "8-ceva-sarat",
   "9-ceva-dulce",
+  "10-bacanie",
   "11-cosmetice-si-ingrijire-personala",
   "13-detergent-si-igienizare",
 ];
@@ -40,19 +42,23 @@ function firstUrl(o: unknown): string | null {
   return null;
 }
 
-async function fetchDept(slug: string): Promise<Candidate[]> {
-  const res = await fetch(`${BASE}/c/${slug}`, { headers: { "user-agent": UA, "accept-language": "ro-RO" } });
+const LEAF_RE = /^\/c\/\d[\w-]*(?:\/\d[\w-]*){1,2}$/i; // /c/{dept}/{subcat}[/{sub}]
+
+// Fetch one /c/... page: return its products + any leaf subcategory paths it links to.
+async function fetchPage(path: string): Promise<{ products: Candidate[]; leaves: string[] }> {
+  const res = await fetch(`${BASE}${path}`, { headers: { "user-agent": UA, "accept-language": "ro-RO" } });
   if (!res.ok) throw new Error(`status ${res.status}`);
   const html = await res.text();
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if (!m) return [];
+  if (!m) return { products: [], leaves: [] };
   const data = JSON.parse(m[1]);
-  const out: Candidate[] = [];
+  const products: Candidate[] = [];
+  const leaves = new Set<string>();
   (function walk(o: any, d: number) {
-    if (!o || typeof o !== "object" || d > 18) return;
+    if (!o || typeof o !== "object" || d > 20) return;
     if (Array.isArray(o)) { for (const x of o) walk(x, d + 1); return; }
     if (typeof o.name === "string" && typeof o.price === "number" && "isAvailable" in o) {
-      out.push({
+      products.push({
         code: String(o.code ?? o.sku ?? o.slug ?? o.name),
         name: o.name,
         brand: o.brand ?? "",
@@ -62,30 +68,13 @@ async function fetchDept(slug: string): Promise<Candidate[]> {
         image: firstUrl(o.image),
       });
     }
-    for (const k of Object.keys(o)) walk(o[k], d + 1);
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (typeof v === "string" && LEAF_RE.test(v)) leaves.add(v);
+      else walk(v, d + 1);
+    }
   })(data.props?.pageProps ?? data, 0);
-  return out;
-}
-
-function pickBest(item: ItemDef, cands: Candidate[]): Candidate | null {
-  const head = normalizeText(item.name).split(" ")[0];
-  const sizeOk = cands.filter((c) => {
-    if (normalizeText(c.name).split(" ")[0] !== head) return false;
-    const s = parseSize(c.name);
-    return s && s.unit === item.unit && Math.abs(s.unitSize - item.unitSize) <= item.unitSize * 0.06 + 1e-9;
-  });
-  let pool = sizeOk;
-  if (item.brand) {
-    const nb = normalizeText(item.brand);
-    const branded = pool.filter((c) => normalizeText(c.brand).includes(nb) || normalizeText(c.name).includes(nb));
-    if (branded.length === 0) return null;
-    pool = branded;
-  }
-  const priced = pool.filter((c) => c.price > 0);
-  if (priced.length === 0) return null;
-  const avail = priced.filter((c) => c.available);
-  const finalPool = avail.length > 0 ? avail : priced;
-  return finalPool.reduce((a, b) => (b.price < a.price ? b : a));
+  return { products, leaves: [...leaves] };
 }
 
 async function main() {
@@ -95,45 +84,47 @@ async function main() {
     create: { slug: "freshful", name: "Freshful", websiteUrl: BASE, color: "#00a651" },
   });
 
-  // Pool products from all relevant departments.
   const pool: Candidate[] = [];
   const byCode = new Set<string>();
+  const addProducts = (cands: Candidate[]) => {
+    let added = 0;
+    for (const c of cands) if (!byCode.has(c.code)) { byCode.add(c.code); pool.push(c); added++; }
+    return added;
+  };
+
+  // Pass 1: crawl departments, collect products + discover leaf subcategories.
+  const leaves = new Set<string>();
   for (const dep of DEPARTMENTS) {
     try {
-      const cands = await fetchDept(dep);
-      for (const c of cands) if (!byCode.has(c.code)) { byCode.add(c.code); pool.push(c); }
-      console.log(`  ${dep.padEnd(38)} +${cands.length} (pool ${pool.length})`);
+      const { products, leaves: found } = await fetchPage(`/c/${dep}`);
+      const added = addProducts(products);
+      for (const l of found) leaves.add(l);
+      console.log(`  dept ${dep.padEnd(34)} +${added} (pool ${pool.length}, ${found.length} leaves)`);
     } catch (e) {
-      console.log(`  ${dep.padEnd(38)} eroare: ${(e as Error).message}`);
+      console.log(`  dept ${dep.padEnd(34)} eroare: ${(e as Error).message}`);
     }
     await sleep(DELAY_MS);
   }
 
-  // Clear Freshful's previous offers, then attach real ones.
-  await prisma.priceHistory.deleteMany({ where: { offer: { merchantId: merchant.id } } });
-  await prisma.offer.deleteMany({ where: { merchantId: merchant.id } });
-
-  let matched = 0;
-  for (const item of ITEMS) {
-    const best = pickBest(item, pool);
-    if (!best) { console.log(`  · ${item.name.padEnd(34)} -> fără potrivire`); continue; }
-    const product = await prisma.product.findUnique({ where: { slug: item.slug } });
-    if (!product) continue;
-    if (best.image && !product.image) await prisma.product.update({ where: { id: product.id }, data: { image: best.image } }).catch(() => {});
-    const ppu = item.unitSize > 0 ? best.price / item.unitSize : best.price;
-    const offer = await prisma.offer.create({
-      data: {
-        productId: product.id, merchantId: merchant.id, price: best.price, pricePerUnit: ppu,
-        packLabel: item.packLabel, availability: best.available ? "in stock" : "out of stock",
-        url: best.url, currency: "RON", matchedBy: "scraper",
-      },
-    });
-    await prisma.priceHistory.create({ data: { offerId: offer.id, price: best.price } });
-    matched++;
-    console.log(`  ✓ ${item.name.padEnd(34)} -> ${best.price} lei  (${best.name})`);
+  // Pass 2: fetch every discovered leaf subcategory page.
+  console.log(`\nDiscovered ${leaves.size} leaf subcategories; fetching...`);
+  for (const leaf of leaves) {
+    try {
+      const { products } = await fetchPage(leaf);
+      const added = addProducts(products);
+      if (added > 0) console.log(`  leaf ${leaf.replace("/c/", "").padEnd(48)} +${added} (pool ${pool.length})`);
+    } catch (e) {
+      console.log(`  leaf ${leaf} eroare: ${(e as Error).message}`);
+    }
+    await sleep(DELAY_MS);
   }
 
-  console.log(`\nFreshful: ${matched}/${ITEMS.length} produse cu preț real ingerate.`);
+  const r = await matchPoolToCatalog(
+    merchant.id,
+    // provenance travels with every offer: the deep link and the exact source string
+    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, productUrl: c.url === BASE ? null : c.url, rawPriceText: String(c.price), image: c.image })),
+  );
+  console.log(`\nFreshful: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }
 

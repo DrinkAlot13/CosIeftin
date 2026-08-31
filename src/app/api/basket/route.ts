@@ -27,7 +27,18 @@ export async function POST(req: NextRequest) {
     offers: p.offers.map((o) => ({
       price: o.price,
       availability: o.availability,
-      merchant: { id: o.merchant.id, slug: o.merchant.slug, name: o.merchant.name, color: o.merchant.color },
+      loyaltyPrice: o.loyaltyPrice,
+      priceSource: o.priceSource,
+      merchant: {
+        id: o.merchant.id,
+        slug: o.merchant.slug,
+        name: o.merchant.name,
+        color: o.merchant.color,
+        storeType: o.merchant.storeType,
+        deliveryFee: o.merchant.deliveryFee,
+        freeDeliveryOver: o.merchant.freeDeliveryOver,
+        minOrder: o.merchant.minOrder,
+      },
     })),
   }));
 
@@ -38,7 +49,9 @@ export async function POST(req: NextRequest) {
     })
     .filter(Boolean) as { productId: number; qty: number }[];
 
-  const result = optimizeBasket(pfb, input);
+  // the shopper tells us whether they carry the loyalty cards; without it we must NOT
+  // quote card prices, or every card store looks cheaper than it is for this shopper
+  const result = optimizeBasket(pfb, input, { useLoyalty: Boolean(body.useLoyalty) });
   const found = new Set(products.map((p) => p.slug));
   const unknown = slugs.filter((s) => !found.has(s));
   return NextResponse.json({ ...result, unknown });

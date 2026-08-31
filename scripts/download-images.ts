@@ -7,6 +7,11 @@ import { prisma } from "../src/lib/db";
 const DIR = path.join(process.cwd(), "public", "product-images");
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Self-host in bounded batches: the catalog is thousands of products, so we convert up
+// to LIMIT remote images per run and let repeated refreshes cover the rest. Until then,
+// remaining products render straight from their (remote) store image URL. Override with
+// IMG_LIMIT=all to fetch everything in one go.
+const LIMIT = process.env.IMG_LIMIT === "all" ? undefined : Number(process.env.IMG_LIMIT ?? 600);
 
 function ext(contentType: string): string {
   if (contentType.includes("png")) return "png";
@@ -17,7 +22,7 @@ function ext(contentType: string): string {
 
 async function main() {
   fs.mkdirSync(DIR, { recursive: true });
-  const products = await prisma.product.findMany({ where: { image: { startsWith: "http" } } });
+  const products = await prisma.product.findMany({ where: { image: { startsWith: "http" } }, take: LIMIT });
   let ok = 0;
   let fail = 0;
   for (const p of products) {

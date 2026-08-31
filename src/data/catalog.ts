@@ -9,7 +9,7 @@
 
 export type Unit = "kg" | "l" | "buc";
 
-export type CategoryDef = { slug: string; name: string; icon?: string; parentSlug?: string };
+export type CategoryDef = { slug: string; name: string; icon?: string; parentSlug?: string; section?: "grocery" | "alcohol" };
 
 export type ChainDef = {
   slug: string;
@@ -41,6 +41,18 @@ export const CATEGORIES: CategoryDef[] = [
   { slug: "legume-fructe", name: "Legume & Fructe", icon: "🥦" },
   { slug: "bacanie", name: "Băcănie", icon: "🧂" },
   { slug: "menaj", name: "Menaj & Igienă", icon: "🧴" },
+];
+
+// Separate "alcool" storefront (compared across specialist stores, never mixed
+// into the grocery views). Scrapers tag products with one of these category slugs.
+export const ALCOHOL_CATEGORIES: CategoryDef[] = [
+  { slug: "vin", name: "Vin", icon: "🍷", section: "alcohol" },
+  { slug: "whisky", name: "Whisky", icon: "🥃", section: "alcohol" },
+  { slug: "spirtoase", name: "Spirtoase", icon: "🍸", section: "alcohol" },
+  { slug: "lichior", name: "Lichior", icon: "🍶", section: "alcohol" },
+  { slug: "bere", name: "Bere", icon: "🍺", section: "alcohol" },
+  { slug: "sampanie", name: "Șampanie & Spumant", icon: "🍾", section: "alcohol" },
+  { slug: "alte-bauturi", name: "Alte băuturi", icon: "🍹", section: "alcohol" },
 ];
 
 export const CHAINS: ChainDef[] = [

@@ -1,22 +1,20 @@
-// Seeds ONLY the canonical catalog: categories + the pre-set items (no prices).
-// Prices/offers come exclusively from the real scrapers (scrape:auchan, scrape:freshful).
+// Seeds ONLY the categories (grocery + alcohol). The product catalog itself is built
+// from real data by the scrapers (Auchan is the grocery master; alcohol stores build
+// the alcohol catalog). No pre-set items, no prices.
 import { prisma } from "../src/lib/db";
-import { CATEGORIES, ITEMS } from "../src/data/catalog";
+import { CATEGORIES, ALCOHOL_CATEGORIES } from "../src/data/catalog";
 
 async function main() {
-  for (const c of CATEGORIES) {
+  const all = [...CATEGORIES, ...ALCOHOL_CATEGORIES];
+  for (const c of all) {
+    const section = c.section ?? "grocery";
     await prisma.category.upsert({
       where: { slug: c.slug },
-      update: { name: c.name, icon: c.icon ?? null },
-      create: { slug: c.slug, name: c.name, icon: c.icon ?? null },
+      update: { name: c.name, icon: c.icon ?? null, section },
+      create: { slug: c.slug, name: c.name, icon: c.icon ?? null, section },
     });
   }
-  for (const i of ITEMS) {
-    const cat = await prisma.category.findUnique({ where: { slug: i.categorySlug } });
-    const data = { name: i.name, brand: i.brand ?? null, unit: i.unit, unitSize: i.unitSize, categoryId: cat?.id ?? null };
-    await prisma.product.upsert({ where: { slug: i.slug }, update: data, create: { slug: i.slug, ...data } });
-  }
-  console.log(`Seeded ${CATEGORIES.length} categories + ${ITEMS.length} pre-set items (no prices — prices come from scrapers).`);
+  console.log(`Seeded ${CATEGORIES.length} grocery + ${ALCOHOL_CATEGORIES.length} alcohol categories (products come from scrapers).`);
   await prisma.$disconnect();
 }
 
