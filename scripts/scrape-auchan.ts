@@ -7,7 +7,7 @@
 
 import { prisma } from "../src/lib/db";
 import { parseSize } from "../src/lib/ingest-core";
-import { perUnitBaniOrNull } from "../src/lib/price/parsePrice";
+import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "../src/lib/price/parsePrice";
 import { slugify } from "../src/lib/scrape-util";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
@@ -106,8 +106,12 @@ async function main() {
           : await prisma.product.upsert({ where: { slug }, update: { image: image ?? undefined, ...(parsed ? { unit, unitSize } : {}) }, create: { slug, name, brand, unit, unitSize, image, categoryId } }).catch(() => null);
         if (!product) continue;
 
-        const ppu = unitSize > 0 ? price / unitSize : price;
-        const ppuBani = perUnitBaniOrNull(price, unitSize);
+        // Bani is the written value; the float is derived from it. Auchan already set both,
+        // but it derived bani FROM the float, which is the direction that lets them drift.
+        const priceBani = leiToBaniExact(price);
+        const priceLei = baniToLei(priceBani);
+        const ppu = unitSize > 0 ? priceLei / unitSize : priceLei;
+        const ppuBani = perUnitBaniOrNull(priceLei, unitSize);
         // Auchan is the CATALOG MASTER: the product is created from this very row, so the
         // product↔offer link is exact by construction rather than inferred. Recording that
         // as a real reason + score 1 (instead of the bare "scraper" with no score) is what
@@ -126,13 +130,13 @@ async function main() {
         };
         const offer = await prisma.offer.upsert({
           where: { productId_merchantId: { productId: product.id, merchantId: merchant.id } },
-          update: { price, priceBani: Math.round(price * 100), pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, lastSeen: new Date(), ...provenance },
-          create: { productId: product.id, merchantId: merchant.id, price, priceBani: Math.round(price * 100), pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, currency: "RON", ...provenance },
+          update: { price: priceLei, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, lastSeen: new Date(), ...provenance },
+          create: { productId: product.id, merchantId: merchant.id, price: priceLei, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, currency: "RON", ...provenance },
         });
         // Append a history point only when the price actually moved — writing one per run
         // per offer inflates the table ~20-50x for no information (see CLAUDE.md).
         if (!prev || Math.abs(prev.price - price) > 1e-9) {
-          await prisma.priceHistory.create({ data: { offerId: offer.id, price, priceBani: Math.round(price * 100) } });
+          await prisma.priceHistory.create({ data: { offerId: offer.id, price: priceLei, priceBani } });
         }
         seenProductIds.add(product.id);
         offers++;

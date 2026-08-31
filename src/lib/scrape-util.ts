@@ -15,7 +15,7 @@ import { prisma } from "./db";
 import { parseSize } from "./ingest-core";
 import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
-import { perUnitBaniOrNull } from "./price/parsePrice";
+import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "./price/parsePrice";
 import { tally as tallyCensus } from "./offer-census";
 import { recordScraperRun } from "./scraper-run";
 
@@ -665,20 +665,31 @@ export async function matchPoolToCatalog(
       isStale: false,
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
     };
-    const ppu = o.unitSize > 0 ? writePrice / o.unitSize : writePrice;
+    // BANI IS THE VALUE WE WRITE; the float is derived from it, never the reverse.
+    //
+    // This write path serves 11 of the 12 merchants and, until now, did not set priceBani AT
+    // ALL. Only scrape-auchan did — which is exactly why Auchan was the one merchant with zero
+    // nulls and zero disagreements while everything else drifted. New offers got a null
+    // priceBani (553 of them); updated offers kept whatever the migration had written while
+    // their float moved on (614 rows holding a COMPLETELY different value, not a rounding
+    // difference). Nothing caught it because every user-facing read still used the float, so
+    // the integer column was validated by nothing at all.
+    const priceBani = leiToBaniExact(writePrice);
+    const writeFloat = baniToLei(priceBani);
+    const ppu = o.unitSize > 0 ? writeFloat / o.unitSize : writeFloat;
     // Null rather than a crash or a lie: a mis-parsed pack size ("3 mg/ml" read as the pack)
     // can push this past what an INT column holds, and the column is nullable for exactly
     // that reason. See perUnitBaniOrNull.
-    const ppuBani = perUnitBaniOrNull(writePrice, o.unitSize);
+    const ppuBani = perUnitBaniOrNull(writeFloat, o.unitSize);
     const avail = o.available ? "in stock" : "out of stock";
     const offer = await prisma.offer.upsert({
       where: { productId_merchantId: { productId, merchantId } },
-      update: { price: writePrice, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, lastSeen: new Date(), ...provenance },
-      create: { productId, merchantId, price: writePrice, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
+      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, lastSeen: new Date(), ...provenance },
+      create: { productId, merchantId, price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
     });
     // append a history point only when the price actually changed (20–50× fewer rows)
     if (prev === undefined || Math.abs(prev - writePrice) > 1e-9) {
-      await prisma.priceHistory.create({ data: { offerId: offer.id, price: writePrice, referencePriceBani: o.sp.referencePriceBani ?? null } });
+      await prisma.priceHistory.create({ data: { offerId: offer.id, price: writeFloat, priceBani, referencePriceBani: o.sp.referencePriceBani ?? null } });
     }
   }
 

@@ -27,6 +27,7 @@ export const abs = (path: string): string => `${siteUrl()}${path.startsWith("/")
 
 type OfferLike = {
   price: number;
+  priceBani?: number | null;
   availability: string | null;
   url: string | null;
   merchant: { name: string };
@@ -52,9 +53,13 @@ export function productJsonLd(product: ProductLike, offers: OfferLike[]): Record
   const usable = offers.filter((o) => o.price > 0);
   if (usable.length === 0) return null; // a product with no price makes no honest Offer
 
-  const prices = usable.map((o) => o.price);
-  const low = Math.min(...prices);
-  const high = Math.max(...prices);
+  // Compared in bani so the range Google renders cannot disagree with the page by a rounding
+  // step, and so this path exercises the integer column like every other comparison.
+  const baniOf = (o: OfferLike): number => o.priceBani ?? Math.round(o.price * 100);
+  const lowBani = Math.min(...usable.map(baniOf));
+  const highBani = Math.max(...usable.map(baniOf));
+  const low = lowBani / 100;
+  const high = highBani / 100;
   const anyInStock = usable.some((o) => o.availability === "in stock");
 
   const node: Record<string, unknown> = {

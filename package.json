@@ -65,7 +65,8 @@
     "audit:images": "tsx scripts/audit-images.ts",
     "audit:ean": "tsx scripts/audit-ean.ts",
     "audit:bands": "tsx scripts/audit-bands.ts",
-    "census": "tsx scripts/offer-census.ts"
+    "census": "tsx scripts/offer-census.ts",
+    "backfill:pricebani": "tsx scripts/backfill-pricebani.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
 import { normalizeText } from "@/lib/matching";
+
+/** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
+const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
 import { rankSearch } from "@/lib/search/rank";
 import { buildDailyLowSeries, dropPercent, summarize } from "@/lib/pricing";
 
@@ -31,7 +34,8 @@ export async function getDeals(limit = 60) {
       const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
       const drop = dropPercent(buildDailyLowSeries(p.offers));
       const savingsPct = summary.highest > 0 ? (summary.savings / summary.highest) * 100 : 0;
-      const cheapest = [...pool].sort((a, b) => a.price - b.price)[0];
+      // Integer comparison: exact, and it exercises the column the migration added.
+      const cheapest = [...pool].sort((a, b) => baniOf(a) - baniOf(b))[0];
       return { ...p, summary, unitLowest, drop, savingsPct, cheapestStore: cheapest?.merchant.name ?? null, score: Math.max(savingsPct, drop) };
     })
     .filter((p) => p.summary.offerCount >= 2 && p.score >= 8)
@@ -72,7 +76,7 @@ export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") 
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
   decorated.sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name, "ro");
-    if (sort === "price-asc") return a.summary.lowest - b.summary.lowest;
+    if (sort === "price-asc") return a.summary.lowestBani - b.summary.lowestBani;
     return a.unitLowest - b.unitLowest;
   });
   return { category, products: decorated };
@@ -87,7 +91,7 @@ export async function getItemPage(slug: string) {
     },
   });
   if (!product) return null;
-  const offers = [...product.offers].sort((a, b) => a.price - b.price);
+  const offers = [...product.offers].sort((a, b) => baniOf(a) - baniOf(b));
   const summary = summarize(offers);
   const series = buildDailyLowSeries(offers);
   const inStock = offers.filter((o) => o.availability === "in stock");

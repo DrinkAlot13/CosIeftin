@@ -5,6 +5,7 @@
 // Contract under test: returns INTEGER BANI or null. Never 0.
 import { describe, it, expect } from "./run";
 import { parsePrice, parseDecimal, formatBani, baniToLei, leiToBaniExact } from "../src/lib/price/parsePrice";
+import { summarize } from "../src/lib/pricing";
 
 describe("parsePrice — THE regression: FineStore data-price", () => {
   // FineStore served data-price="2,033.39" and the old code read it as 2 lei instead of
@@ -114,4 +115,60 @@ describe("money helpers — integer math only", () => {
   it("groups millions", () => expect(formatBani(123456700)).toBe("1.234.567,00 lei"));
   it("round-trips lei → bani → lei", () => expect(baniToLei(leiToBaniExact(12.99))).toBeCloseTo(12.99));
   it("leiToBaniExact avoids float drift", () => expect(leiToBaniExact(0.29 * 3)).toBe(87));
+});
+
+// The bani migration drifted for weeks because nothing a shopper touched ever read the integer
+// column. These lock the direction: bani is written, the float is derived, and comparison
+// happens in integers.
+describe("money — bani is authoritative, the float is derived", () => {
+  it("summarize compares in bani and exposes lei derived from it", () => {
+    const s = summarize([
+      { price: 6.5, priceBani: 650, availability: "in stock" },
+      { price: 5.49, priceBani: 549, availability: "in stock" },
+      { price: 7.99, priceBani: 799, availability: "in stock" },
+    ]);
+    expect(s.lowestBani).toBe(549);
+    expect(s.highestBani).toBe(799);
+    expect(s.savingsBani).toBe(250);
+    expect(s.lowest).toBeCloseTo(5.49, 4);
+    expect(s.savings).toBeCloseTo(2.5, 4);
+  });
+
+  it("a float that disagrees with bani does NOT win — bani does", () => {
+    // The exact drift shape found in production: rawPriceText and the float said 152.42,
+    // priceBani said 449.97. Whichever is stale, comparison must use one column, not both.
+    const s = summarize([
+      { price: 999.99, priceBani: 650, availability: "in stock" },
+      { price: 1.0, priceBani: 799, availability: "in stock" },
+    ]);
+    expect(s.lowestBani).toBe(650);
+    expect(s.highestBani).toBe(799);
+  });
+
+  it("out-of-stock offers do not set the floor but still set the ceiling", () => {
+    const s = summarize([
+      { price: 1.0, priceBani: 100, availability: "out of stock" },
+      { price: 5.0, priceBani: 500, availability: "in stock" },
+    ]);
+    expect(s.lowestBani).toBe(500);
+    expect(s.inStockCount).toBe(1);
+  });
+
+  it("no offers is zero, not NaN", () => {
+    const s = summarize([]);
+    expect(s.lowestBani).toBe(0);
+    expect(s.lowest).toBe(0);
+  });
+
+  it("integer money never produces a fractional ban", () => {
+    const s = summarize([{ price: 0.1, priceBani: 10, availability: "in stock" }, { price: 0.2, priceBani: 20, availability: "in stock" }]);
+    expect(Number.isInteger(s.savingsBani)).toBeTruthy();
+    expect(s.savingsBani).toBe(10); // 0.2 - 0.1 in floats is 0.1000000000000000055
+  });
+
+  it("leiToBaniExact round-trips through baniToLei", () => {
+    for (const lei of [0.01, 1.99, 12.34, 152.42, 2033.39]) {
+      expect(baniToLei(leiToBaniExact(lei))).toBeCloseTo(lei, 6);
+    }
+  });
 });

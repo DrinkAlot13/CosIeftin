@@ -61,6 +61,20 @@ async function auditPrices() {
     offers.filter((o) => (o.priceBani ?? Math.round(o.price * 100)) <= 0)
       .map((o) => `offer ${o.id} [${o.merchant.name}] ${o.price} — ${o.product.name.slice(0, 40)}`));
 
+  // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
+  //    added, and its absence is why they drifted for weeks in total silence: every
+  //    user-facing read still used the float, so nothing the shopper touched ever exercised
+  //    the integer column. By the time anyone looked, 553 live offers had a NULL priceBani and
+  //    614 held a completely different value from their float — not a rounding difference.
+  //    While both columns exist, they must agree, exactly.
+  record("Prices", "no live offer has a null priceBani",
+    offers.filter((o) => !o.isStale && o.priceBani == null)
+      .map((o) => `offer ${o.id} [${o.merchant.name}] price=${o.price} priceBani=null — ${o.product.name.slice(0, 40)}`));
+
+  record("Prices", "priceBani equals round(price * 100) for every row",
+    offers.filter((o) => o.priceBani != null && Math.abs(o.priceBani - Math.round(o.price * 100)) > 1)
+      .map((o) => `offer ${o.id} [${o.merchant.name}] float=${o.price.toFixed(2)} bani=${o.priceBani} (=${((o.priceBani ?? 0) / 100).toFixed(2)})`));
+
   record("Prices", `no price outside ${MIN_BANI} ban .. ${MAX_BANI / 100} lei`,
     offers.filter((o) => { const b = o.priceBani ?? Math.round(o.price * 100); return b < MIN_BANI || b > MAX_BANI; })
       .map((o) => `offer ${o.id} [${o.merchant.name}] ${lei(o.priceBani ?? Math.round(o.price * 100))} lei`));
