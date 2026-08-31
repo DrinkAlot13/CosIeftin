@@ -8,8 +8,11 @@
 
 import { prisma } from "../src/lib/db";
 import { sendTelegram, telegramConfigured, priceDropMessage } from "../src/lib/telegram";
+import { siteUrl } from "../src/lib/config/siteUrl";
 
-const SITE = process.env.SITE_URL ?? "https://cosmic.ro";
+// One accessor, shared with the web app. This file used to default to
+// "https://cosmic.ro" while seo.ts defaulted to localhost.
+const SITE = siteUrl();
 // don't re-notify the same watch more often than this
 const COOLDOWN_H = 20;
 

@@ -13,17 +13,14 @@
 
 import { parseEan } from "./product/ean";
 
-/**
- * The canonical origin. Absolute URLs are required in JSON-LD and sitemaps, and a wrong one
- * points Google at a domain we do not own — so this is read from the environment and falls
- * back to localhost, which is obviously wrong in production rather than quietly wrong.
- */
-export function siteUrl(): string {
-  const raw = process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  return raw.replace(/\/+$/, "");
-}
+// The origin lives in lib/config/siteUrl.ts. It used to be resolved here AND in
+// notify-alerts.ts, with different fallbacks — localhost in one, https://cosmic.ro in the
+// other. Two answers for one question means one of them is wrong.
+import { siteUrl, absoluteUrl } from "./config/siteUrl";
 
-export const abs = (path: string): string => `${siteUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+export { siteUrl };
+/** Absolute URL for a path on this site. Kept as `abs` because callers already use that name. */
+export const abs = absoluteUrl;
 
 type OfferLike = {
   price: number;

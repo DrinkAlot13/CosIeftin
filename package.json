@@ -66,7 +66,8 @@
     "audit:ean": "tsx scripts/audit-ean.ts",
     "audit:bands": "tsx scripts/audit-bands.ts",
     "census": "tsx scripts/offer-census.ts",
-    "backfill:pricebani": "tsx scripts/backfill-pricebani.ts"
+    "backfill:pricebani": "tsx scripts/backfill-pricebani.ts",
+    "rotate:admin": "tsx scripts/rotate-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

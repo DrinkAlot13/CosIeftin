@@ -16,6 +16,7 @@
 //      npm run audit:db -- --run <scraperRunId>   (record the result against a run)
 
 import { PrismaClient } from "@prisma/client";
+import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
 
 const prisma = new PrismaClient();
 
@@ -60,6 +61,23 @@ async function auditPrices() {
   record("Prices", "no offer price at or below zero",
     offers.filter((o) => (o.priceBani ?? Math.round(o.price * 100)) <= 0)
       .map((o) => `offer ${o.id} [${o.merchant.name}] ${o.price} — ${o.product.name.slice(0, 40)}`));
+
+  // ── PUBLISHED ORIGIN. Canonical tags, sitemap entries and alert emails all carry an
+  //    absolute URL built from SITE_URL. If that resolves to localhost in production, the
+  //    links point at the READER's own machine — and Google is slow to forgive a canonical
+  //    it has already indexed. This is cheap to check and expensive to discover late.
+  {
+    const problems: string[] = [];
+    try {
+      const origin = resolveSiteUrl(process.env);
+      if (process.env.NODE_ENV === "production" && isLocalOrigin(origin)) {
+        problems.push(`SITE_URL resolves to ${origin} while NODE_ENV=production`);
+      }
+    } catch (e) {
+      problems.push((e as Error).message);
+    }
+    record("Prices", "the published origin is not localhost in production", problems);
+  }
 
   // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
   //    added, and its absence is why they drifted for weeks in total silence: every
