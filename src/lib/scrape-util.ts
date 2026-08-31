@@ -15,6 +15,7 @@ import { prisma } from "./db";
 import { parseSize } from "./ingest-core";
 import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
+import { perUnitBaniOrNull } from "./price/parsePrice";
 import { recordScraperRun } from "./scraper-run";
 
 /**
@@ -611,11 +612,15 @@ export async function matchPoolToCatalog(
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
     };
     const ppu = o.unitSize > 0 ? writePrice / o.unitSize : writePrice;
+    // Null rather than a crash or a lie: a mis-parsed pack size ("3 mg/ml" read as the pack)
+    // can push this past what an INT column holds, and the column is nullable for exactly
+    // that reason. See perUnitBaniOrNull.
+    const ppuBani = perUnitBaniOrNull(writePrice, o.unitSize);
     const avail = o.available ? "in stock" : "out of stock";
     const offer = await prisma.offer.upsert({
       where: { productId_merchantId: { productId, merchantId } },
-      update: { price: writePrice, pricePerUnit: ppu, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, lastSeen: new Date(), ...provenance },
-      create: { productId, merchantId, price: writePrice, pricePerUnit: ppu, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
+      update: { price: writePrice, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, lastSeen: new Date(), ...provenance },
+      create: { productId, merchantId, price: writePrice, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
     });
     // append a history point only when the price actually changed (20–50× fewer rows)
     if (prev === undefined || Math.abs(prev - writePrice) > 1e-9) {

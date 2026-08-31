@@ -247,6 +247,28 @@ export function parsePriceLei(raw: string | null | undefined, opts: ParseOptions
 }
 
 /** Lei → bani, for reading legacy float columns into integer math. */
+/**
+ * The largest value a 32-bit INT column holds. `Offer.pricePerUnitBani` is one of those, and
+ * it is a DERIVED figure — price divided by a pack size — so a mis-parsed size can send it far
+ * past this. A nicotine spray whose name states "1 mg" and nothing else divides an 86 lei price
+ * by a millionth of a kilogram and asks the database to store 8,650,000,000. Prisma throws, and
+ * a scraper mid-run dies on one bad product name.
+ */
+export const MAX_INT32 = 2147483647;
+
+/**
+ * Price per canonical unit, in bani — or null when it cannot honestly be stored.
+ *
+ * Null means "we could not compute this", which is true and harmless: the column is nullable
+ * and the UI already handles a missing per-unit price. Clamping to MAX_INT32 instead would
+ * store a number that is not the price, and every chart and sort would believe it.
+ */
+export function perUnitBaniOrNull(price: number, divisor: number): number | null {
+  if (!(divisor > 0) || !Number.isFinite(price)) return null;
+  const bani = Math.round((price / divisor) * 100);
+  return Number.isFinite(bani) && bani >= 0 && bani <= MAX_INT32 ? bani : null;
+}
+
 export function leiToBaniExact(lei: number): Bani {
   return Math.round(lei * 100);
 }

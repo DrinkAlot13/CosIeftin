@@ -8,5 +8,15 @@
     "products": 34263,
     "integrityOk": true,
     "gzipped": true
+  },
+  {
+    "file": "2026-08-31T03-58-56-012Z.db.gz",
+    "takenAt": "2026-08-31T03:58:56.945Z",
+    "bytes": 8082679,
+    "offers": 43108,
+    "priceHistory": 78258,
+    "products": 34263,
+    "integrityOk": true,
+    "gzipped": true
   }
 ]

@@ -7,6 +7,7 @@
 
 import { prisma } from "../src/lib/db";
 import { parseSize } from "../src/lib/ingest-core";
+import { perUnitBaniOrNull } from "../src/lib/price/parsePrice";
 import { slugify } from "../src/lib/scrape-util";
 
 const BASE = "https://www.auchan.ro";
@@ -84,11 +85,12 @@ async function main() {
         const baseSlug = slugify(name) || "produs";
         const slug = ean ? `${baseSlug}-${ean}` : `${baseSlug}-${Math.round(unitSize * 1000)}${unit}`;
         const product = ean
-          ? await prisma.product.upsert({ where: { ean }, update: { image: image ?? undefined }, create: { slug, name, brand, ean, unit, unitSize, image, categoryId } }).catch(() => null)
-          : await prisma.product.upsert({ where: { slug }, update: { image: image ?? undefined }, create: { slug, name, brand, unit, unitSize, image, categoryId } }).catch(() => null);
+          ? await prisma.product.upsert({ where: { ean }, update: { image: image ?? undefined, ...(parsed ? { unit, unitSize } : {}) }, create: { slug, name, brand, ean, unit, unitSize, image, categoryId } }).catch(() => null)
+          : await prisma.product.upsert({ where: { slug }, update: { image: image ?? undefined, ...(parsed ? { unit, unitSize } : {}) }, create: { slug, name, brand, unit, unitSize, image, categoryId } }).catch(() => null);
         if (!product) continue;
 
         const ppu = unitSize > 0 ? price / unitSize : price;
+        const ppuBani = perUnitBaniOrNull(price, unitSize);
         // Auchan is the CATALOG MASTER: the product is created from this very row, so the
         // product↔offer link is exact by construction rather than inferred. Recording that
         // as a real reason + score 1 (instead of the bare "scraper" with no score) is what
@@ -107,8 +109,8 @@ async function main() {
         };
         const offer = await prisma.offer.upsert({
           where: { productId_merchantId: { productId: product.id, merchantId: merchant.id } },
-          update: { price, priceBani: Math.round(price * 100), pricePerUnit: ppu, pricePerUnitBani: Math.round(ppu * 100), availability: available ? "in stock" : "out of stock", url, lastSeen: new Date(), ...provenance },
-          create: { productId: product.id, merchantId: merchant.id, price, priceBani: Math.round(price * 100), pricePerUnit: ppu, pricePerUnitBani: Math.round(ppu * 100), availability: available ? "in stock" : "out of stock", url, currency: "RON", ...provenance },
+          update: { price, priceBani: Math.round(price * 100), pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, lastSeen: new Date(), ...provenance },
+          create: { productId: product.id, merchantId: merchant.id, price, priceBani: Math.round(price * 100), pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, currency: "RON", ...provenance },
         });
         // Append a history point only when the price actually moved — writing one per run
         // per offer inflates the table ~20-50x for no information (see CLAUDE.md).

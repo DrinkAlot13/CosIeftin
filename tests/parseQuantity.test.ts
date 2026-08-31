@@ -269,3 +269,43 @@ describe("parseQuantity — a bare plus sign is not a promotion", () => {
     expect(q.paidCount).toBe(1); expect(q.freeCount).toBe(0); expect(q.isPromoPack).toBeFalsy();
   });
 });
+
+// Found by dry-running the unitSize backfill over the live catalog: 37 farmacie products were
+// stored as their DOSE because the dose form was not a counting noun, and DCNeu bundle packs
+// were stored as one half of the bundle.
+describe("parseQuantity — pharmacy dose forms are counting nouns", () => {
+  it("24 drajeuri beats the 400 mg dose", () => {
+    const q = parseQuantity("Nurofen Immedia Ultra, 400 mg, 24 drajeuri, Reckitt")!;
+    expect(q.value).toBe(24); expect(q.unit).toBe("BUC");
+  });
+  it("pastile", () => expect(parseQuantity("Strepsils Intensiv, 8,75 mg, 24 pastile")!.value).toBe(24));
+  it("supozitoare", () => expect(parseQuantity("Glicerina 12 supozitoare")!.value).toBe(12));
+  it("fiole", () => expect(parseQuantity("Magneziu 10 fiole")!.value).toBe(10));
+  it("ovule", () => expect(parseQuantity("Canesten 6 ovule")!.value).toBe(6));
+  it("perle", () => expect(parseQuantity("Ulei de peste 60 perle")!.value).toBe(60));
+  it("comprimate still wins over a dose", () => {
+    expect(parseQuantity("Magnerot, 500 mg, 100 comprimate")!.value).toBe(100);
+  });
+  it("a genuine milligram size is still read when nothing counts it", () => {
+    expect(parseQuantity("Vitamina C pulbere 500 mg")!.unit).toBe("G");
+  });
+});
+
+describe("parseQuantity — bundled COUNTS add up; bundled masses do not", () => {
+  it("32BUC+20BUC is 52 pads", () => {
+    const q = parseQuantity("LIBRESSE ABSORBANTE ZILNICE 32BUC+20BUC REGULAR DAILY FRESH")!;
+    expect(q.value).toBe(52); expect(q.unit).toBe("BUC");
+  });
+  it("a single count with a trailing word is unaffected", () => {
+    expect(parseQuantity("ALWAYS ABSORBANTE 12BUC PLATINUM SUPER EXTRA+DISCREET")!.value).toBe(12);
+  });
+  it("REFUSES to sum a dosage pair — that is a concentration, and the pack is stated after", () => {
+    const q = parseQuantity("Crema rectala Procto-Glyvenol, 50 mg + 20 mg/g, 30 g")!;
+    expect(q.value).toBe(30); expect(q.unit).toBe("G");
+  });
+  it("REFUSES to sum a mixed-unit gift set", () => {
+    // No single size exists here. Whatever it returns, it must not be 250+90.
+    const q = parseQuantity("DOVE CASETA CADOU (SG250ML+SP90G+BURETE) GENTLE PAMPER")!;
+    expect(q.value === 340).toBeFalsy();
+  });
+});

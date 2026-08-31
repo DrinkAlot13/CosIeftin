@@ -50,13 +50,16 @@ const UNIT_MAP: { re: RegExp; unit: CanonicalUnit; factor: number }[] = [
   { re: /^(?:cl|centilitri?)$/i, unit: "ML", factor: 10 },
   { re: /^(?:ml|mililitri?)$/i, unit: "ML", factor: 1 },
   {
-    re: /^(?:buc|bucata|bucati|bucăți|bucăţi|bucată|role|rola|plicuri|plic|capsule|caps|comprimate|compr|tablete|doze|felii|oua|ouă)$/i,
+    // Pharmacy dose forms are counting nouns too. Without them, "Nurofen 400 mg, 24 drajeuri"
+    // falls back to the 400 mg DOSE as if it were the pack, and a box of 24 is recorded as
+    // 0.0004 kg of product. 37 farmacie products were stored that way.
+    re: /^(?:buc|bucata|bucati|bucăți|bucăţi|bucată|role|rola|plicuri|pliculete|pliculețe|pliculeţe|plic|capsule|capsula|capsulă|caps|comprimate|comprimat|compr|tablete|tableta|tabletă|doze|doza|doză|felii|felie|oua|ouă|drajeuri|drajeu|draje|pastile|pastila|pastilă|supozitoare|supozitor|ovule|ovul|fiole|fiola|fiolă|perle)$/i,
     unit: "BUC",
     factor: 1,
   },
 ];
 
-const UNIT_WORDS = "kg|kilograme|kilogram|kilo|gr|grame|gram|mg|miligrame|ml|mililitri|cl|centilitri|litri|litru|g|l|buc|bucata|bucati|bucăți|bucăţi|bucată|role|rola|plicuri|plic|capsule|caps|comprimate|compr|tablete|doze|felii|ouă|oua";
+const UNIT_WORDS = "kg|kilograme|kilogram|kilo|gr|grame|gram|mg|miligrame|ml|mililitri|cl|centilitri|litri|litru|g|l|buc|bucata|bucati|bucăți|bucăţi|bucată|role|rola|plicuri|pliculete|pliculețe|pliculeţe|plic|capsule|capsula|capsulă|caps|comprimate|comprimat|compr|tablete|tableta|tabletă|doze|doza|doză|felii|felie|ouă|oua|drajeuri|drajeu|draje|pastile|pastila|pastilă|supozitoare|supozitor|ovule|ovul|fiole|fiola|fiolă|perle";
 
 /** Counting nouns that may sit between a number and the × in "3 buc x 100g". */
 const BUC_WORDS = "buc|bucata|bucati|bucăți|bucăţi|bucată";
@@ -240,6 +243,24 @@ function parseBase(s: string): Quantity | null {
     if (one && count > 0) return plain(one.value * count, one.unit, count, one.value);
   }
 
+  // Bundled counts: "LIBRESSE ABSORBANTE ZILNICE 32BUC+20BUC" is 52 pads, not 32 and not 20.
+  //
+  // Restricted to COUNTS on purpose. Summing masses would wreck two other things: a dosage
+  // pair ("Procto-Glyvenol, 50 mg + 20 mg/g, 30 g" is a concentration, and the pack is the
+  // 30 g at the end) and a cosmetics gift set ("SG250ML+SP90G+BURETE" has no single size at
+  // all). Pieces of the same thing add up; grams of different things do not.
+  const sumCounts = s.match(
+    new RegExp(String.raw`${NUM}\s*(${COUNT_NOUNS})\s*\+\s*${NUM}\s*(${COUNT_NOUNS})\b`, "i"),
+  );
+  if (sumCounts) {
+    const a = toCanonical(num(sumCounts[1]), sumCounts[2]);
+    const b = toCanonical(num(sumCounts[3]), sumCounts[4]);
+    if (a && b && a.unit === "BUC" && b.unit === "BUC") {
+      const total = a.value + b.value;
+      return plain(total, "BUC", 1, total);
+    }
+  }
+
   // pack word + an explicit count of PIECES: "pachet 2 buc", "set 3 buc", "bax 24 buc".
   // The counting noun is required (except after "bax", which means a case of pieces on its
   // own) so that "Set 2 pahare 250 ml" is still read as 250 ml and not as a two-pack — the
@@ -262,9 +283,13 @@ function parseBase(s: string): Quantity | null {
   let best: { value: number; unit: CanonicalUnit } | null = null;
   let m: RegExpExecArray | null;
   while ((m = singleRe.exec(s))) {
-    // "1,5%" is fat content, not a size — skip anything immediately followed by %
     const after = s.slice(m.index + m[0].length).trimStart();
+    // "1,5%" is fat content, not a size.
     if (after.startsWith("%")) continue;
+    // "3 mg/ml", "45,5 mg/ml", "50 mg/g" are CONCENTRATIONS, not pack sizes. Reading one as
+    // the pack divides the price by a millionth of a kilogram: an 86 lei nicotine spray came
+    // out at 86,500,000 lei/kg and overflowed the INT column it was being written to.
+    if (/^\/\s*[a-zăâîșşțţ]/i.test(after)) continue;
     const q = toCanonical(num(m[1]), m[2]);
     if (q) best = q;
   }
