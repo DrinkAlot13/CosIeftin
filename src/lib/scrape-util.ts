@@ -16,6 +16,7 @@ import { parseSize } from "./ingest-core";
 import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
 import { perUnitBaniOrNull } from "./price/parsePrice";
+import { tally as tallyCensus } from "./offer-census";
 import { recordScraperRun } from "./scraper-run";
 
 /**
@@ -111,6 +112,45 @@ export function assertPoolContract(pool: StoreProduct[], label: string): PoolCom
     );
   }
   return c;
+}
+
+/**
+ * This merchant's offers, bucketed, as JSON — recorded against the run that produced them.
+ *
+ * Uses the same classifier as `npm run census`, so a per-run number and the whole-database
+ * number can never tell different stories.
+ */
+async function censusForMerchant(merchantId: number): Promise<string> {
+  const now = new Date();
+  const rows = await prisma.offer.findMany({
+    where: { merchantId },
+    select: {
+      isStale: true, isExpired: true, availability: true, stockStatus: true, flagged: true,
+      vatBasis: true, promoValidTo: true, lastSeenAt: true, lastSeen: true,
+      merchant: { select: { active: true } },
+      anomalies: { where: { resolved: false }, select: { id: true } },
+    },
+  });
+  const { totals, total, closes } = tallyCensus(
+    rows.map((o) => ({
+      merchantActive: o.merchant.active,
+      // This run just wrote, by definition.
+      merchantScrapedRecently: true,
+      anomalies: o.anomalies.length,
+      flagged: o.flagged,
+      isExpired: o.isExpired,
+      promoValidTo: o.promoValidTo,
+      isStale: o.isStale,
+      lastSeenAt: o.lastSeenAt,
+      lastSeen: o.lastSeen,
+      availability: o.availability,
+      stockStatus: o.stockStatus,
+      vatBasis: o.vatBasis,
+    })),
+    now,
+  );
+  const nonZero = Object.fromEntries(Object.entries(totals).filter(([, n]) => n > 0));
+  return JSON.stringify({ total, closes, ...nonZero });
 }
 
 export function slugify(s: string): string {
@@ -645,11 +685,16 @@ export async function matchPoolToCatalog(
   await prisma.merchant.update({ where: { id: merchantId }, data: { lastOfferCount: chosen.size, lastScrapeAt: new Date() } }).catch(() => {});
   // Persist the run so /admin/health can distinguish "found fewer products" from
   // "could not READ the products" the next morning.
+  // Where THIS merchant's offers ended up, recorded with the run. Reconstructing that from a
+  // backup weeks later is what a 32k-to-24k scare cost a whole night to answer once; recorded
+  // per run, the same question is a lookup.
+  const censusJson = await censusForMerchant(merchantId).catch(() => null);
   await recordScraperRun({
     merchantId, startedAt,
     tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false },
     offersRejected: flaggedCount,
     previousRunCount: merchant?.lastOfferCount ?? 0,
+    censusJson,
   });
   return { offers: chosen.size, created: createdIds.size, flagged: flaggedCount };
 }

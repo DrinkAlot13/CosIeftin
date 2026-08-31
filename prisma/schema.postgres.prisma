@@ -302,6 +302,11 @@ model ScraperRun {
   abortReason       String?
   /// JSON array of up to 20 raw strings that failed to parse
   nullSamples       String?
+  /// JSON census of THIS merchant's offers immediately after the run: how many ended up
+  /// live, and how many landed in each non-live bucket. Recorded per run so a future drop
+  /// can be attributed on the spot instead of reconstructed from a backup weeks later —
+  /// which is exactly what a 32k-to-24k scare cost to answer once.
+  censusJson        String?
 
   @@index([merchantId, startedAt])
 }

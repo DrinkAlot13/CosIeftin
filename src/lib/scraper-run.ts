@@ -5,6 +5,8 @@ import { prisma } from "./db";
 import type { TallySummary } from "./price/parseTally";
 
 export type RunOutcome = {
+  /** JSON bucket census for this merchant, written by matchPoolToCatalog */
+  censusJson?: string | null;
   merchantId: number;
   startedAt: Date;
   tally?: TallySummary;
@@ -30,6 +32,7 @@ export async function recordScraperRun(o: RunOutcome): Promise<void> {
         aborted: o.aborted ?? false,
         abortReason: o.abortReason ?? null,
         nullSamples: o.tally?.samples?.length ? JSON.stringify(o.tally.samples) : null,
+        censusJson: o.censusJson ?? null,
       },
     });
   } catch (e) {
