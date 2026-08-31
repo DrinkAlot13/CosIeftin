@@ -61,7 +61,8 @@
     "backfill:unitsize": "tsx scripts/backfill-unitsize.ts",
     "gen:postgres": "tsx scripts/gen-postgres-schema.ts",
     "audit:search": "tsx scripts/audit-search.ts",
-    "audit:search-curve": "tsx scripts/audit-search-curve.ts"
+    "audit:search-curve": "tsx scripts/audit-search-curve.ts",
+    "audit:images": "tsx scripts/audit-images.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

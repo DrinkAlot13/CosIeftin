@@ -17,6 +17,13 @@
   --shadow: 0 1px 2px rgba(16, 32, 44, 0.06), 0 4px 16px rgba(16, 32, 44, 0.05);
   --shadow-lg: 0 8px 30px rgba(16, 32, 44, 0.12);
   --maxw: 1200px;
+  /* Offline / draft notices. The COMPLETE light palette lives on bare :root, because a
+     visitor who never picked a theme is styled from here — a token defined only inside a
+     [data-theme] block is simply undefined for them, and `background: var(--undefined)`
+     renders transparent rather than failing loudly. */
+  --stale-bg: #fff7ed;
+  --stale-fg: #9a3412;
+  --stale-border: #fed7aa;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -60,11 +67,11 @@
   --primary-050: #e9f1ff; --accent: #16a34a; --accent-050: #e7f7ee; --danger: #dc2626; --warn: #b45309;
   --shadow: 0 1px 2px rgba(16,32,44,.06), 0 4px 16px rgba(16,32,44,.05);
   --shadow-lg: 0 8px 30px rgba(16,32,44,.12);
+  --stale-bg: #fff7ed; --stale-fg: #9a3412; --stale-border: #fed7aa;
 }
 :root[data-theme="dark"] .viz {
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --s5: #d55181; --s6: #2fae2f; --s7: #9085e9; --s8: #e66767;
-  --stale-bg: #fff7ed; --stale-fg: #9a3412; --stale-border: #fed7aa;
 }
 
 * { box-sizing: border-box; }
@@ -453,3 +460,28 @@ img { max-width: 100%; }
   line-height: 1.45;
   margin-bottom: 14px;
 }
+
+/* ---------- Legal / methodology pages ---------- */
+.legal { max-width: 760px; padding-top: 28px; padding-bottom: 56px; }
+.legal h1 { font-size: 30px; letter-spacing: -0.01em; }
+.legal h2 { font-size: 19px; margin-top: 34px; }
+.legal p, .legal li { color: var(--text); line-height: 1.65; }
+.legal .lead { color: var(--muted); font-size: 15.5px; }
+.legal-list { padding-left: 20px; }
+.legal-list li { margin: 6px 0; }
+.legal code { background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+.legal-foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); }
+/* A draft says so where the reader is, not only in a code comment. */
+.legal-draft {
+  background: var(--stale-bg); color: var(--stale-fg); border: 1px solid var(--stale-border);
+  border-radius: 10px; padding: 12px 15px; font-size: 13.5px; line-height: 1.5; margin-bottom: 26px;
+}
+.legal-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;
+  margin: 24px 0 8px;
+}
+.legal-stats > div {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+}
+.legal-stats b { display: block; font-size: 20px; letter-spacing: -0.02em; }
+.legal-stats span { color: var(--muted); font-size: 12.5px; }

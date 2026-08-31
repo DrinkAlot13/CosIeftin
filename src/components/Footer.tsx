@@ -25,6 +25,12 @@ export function Footer({ categories }: { categories: MenuCategory[] }) {
           <Link href="/lista">Lista mea</Link>
           <Link href="/cont">Contul meu</Link>
         </div>
+        <div>
+          <h4>Despre</h4>
+          <Link href="/despre">Cum funcționează</Link>
+          <Link href="/termeni">Termeni de utilizare</Link>
+          <Link href="/confidentialitate">Confidențialitate</Link>
+        </div>
       </div>
       <div className="container footer-note">
         <strong>Prețuri colectate automat.</strong> Prețurile sunt preluate din sursele publice ale magazinelor
