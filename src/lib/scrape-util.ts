@@ -559,10 +559,24 @@ export async function matchPoolToCatalog(
 
   // DROP-GUARD — refuse a run that collapsed (site redesign / anti-bot block) rather than
   // marking everything out-of-stock and wiping good data.
-  if ((merchant?.lastOfferCount ?? 0) > 0 && chosen.size < merchant!.lastOfferCount * 0.6) {
-    const reason = `run refused: ${chosen.size} offers < 60% of last ${merchant!.lastOfferCount}`;
+  //
+  // The baseline is COUNTED from the offers this run is about to overwrite, not read from
+  // `Merchant.lastOfferCount`. That stored counter is per-merchant, and more than one scraper
+  // writes to the same merchant: `scrape-carrefour` (grocery) and `scrape-carrefour-alcohol`
+  // both target `carrefour`, and `scrape-farmaciatei` loops over several sections. Each run
+  // overwrote the counter with its own total, so by the next night the guard was comparing a
+  // grocery run against an alcohol run's count — nowhere near the right number, and in
+  // Carrefour's case low enough that the guard could not have fired at all.
+  //
+  // Counting the live offers for THIS merchant and THIS section cannot be clobbered by
+  // another scraper, and is the number the guard actually means.
+  const baseline = await prisma.offer.count({
+    where: { merchantId, product: { section }, isStale: false },
+  });
+  if (baseline > 0 && chosen.size < baseline * 0.6) {
+    const reason = `run refused: ${chosen.size} offers < 60% of last ${baseline} live in section "${section}"`;
     console.error(`[matchPool] ⚠ ${reason} — keeping previous data.`);
-    await recordScraperRun({ merchantId, startedAt, previousRunCount: merchant?.lastOfferCount ?? 0, aborted: true, abortReason: reason });
+    await recordScraperRun({ merchantId, startedAt, previousRunCount: baseline, aborted: true, abortReason: reason });
       return { offers: 0, created: 0, flagged: 0, aborted: true, reason };
   }
 

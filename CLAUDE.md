@@ -117,8 +117,34 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 
 ## Workflow
 - Small commits. Run `npm run test` before finishing any task.
+- `npm run verify:code` = typecheck + tests, and is what the pre-commit hook runs.
+  `npm run verify` adds `audit:db`. They are separate on purpose: a commit changes CODE and
+  cannot change the state of the database, so gating a code commit on legacy rows makes the
+  hook impossible to satisfy. Data quality is gated by the nightly and by CI.
 - When you change the data model, write the Prisma migration AND a backfill
   script AND a verification script that compares row counts and checksums.
+- **`prisma/schema.postgres.prisma` is GENERATED.** Edit `schema.prisma`, then
+  `npm run gen:postgres`. Hand-maintaining it let it fall 11 models behind.
+
+## Measure the blast radius; do not assume it
+
+Every serious bug in this project was found by running the new code and the old code over the
+**whole catalog** and diffing them — never by a passing test. A test proves the case you thought
+of. A diff over 34,000 real names finds the ones you did not.
+
+So: before changing any parser or matcher, write the read-only audit that compares old and new
+across the live data, and report the result per merchant. `audit:promo`, `audit:ean`,
+`audit:bands`, `audit:search-curve` and `audit:images` all exist because of this rule.
+
+Corollary: **a scraper reporting "0 rejected" only means its own validator agreed with its own
+parser.** Verification has to come from code that does not share the assumption.
+
+## Rendering and caching
+- A page must not declare `revalidate` under an ancestor layout that declares
+  `dynamic = "force-dynamic"`: segment config inherits downward, so the page is never cached and
+  the declaration is a lie. Guarded by `tests/route-config.test.ts`.
+- A `force-dynamic` layout disables caching for **every** route beneath it. If you add one, say
+  why in a comment directly above it.
 
 ---
 
