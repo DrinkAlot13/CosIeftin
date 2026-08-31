@@ -9,6 +9,7 @@ import { ProductImage } from "@/components/ProductImage";
 import { TrackPrice } from "@/components/TrackPrice";
 import { formatPerUnit, formatRON } from "@/lib/format";
 import { getAlternatives, getItemPage } from "@/lib/queries";
+import { abs, breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
 
 // Prices refresh once a night, so serve these from cache and regenerate hourly —
 // nearly-free performance vs hitting the DB on every request.
@@ -17,9 +18,21 @@ export const revalidate = 3600;
 export async function generateMetadata({ params }: { params: { slug: string } }) {
   const data = await getItemPage(params.slug);
   if (!data) return { title: "Produs" };
+  const canonical = abs(`/p/${data.product.slug}`);
+  const description = `Compară prețurile pentru ${data.product.name} la ${data.offers.length} magazine. Cel mai mic preț: ${formatRON(data.summary.lowest)}.`;
   return {
     title: data.product.name,
-    description: `Compară prețurile pentru ${data.product.name}. Cel mai mic preț: ${formatRON(data.summary.lowest)}.`,
+    description,
+    // Without a canonical, every tracking parameter is a separate page competing with itself.
+    alternates: { canonical },
+    openGraph: {
+      title: data.product.name,
+      description,
+      url: canonical,
+      type: "website",
+      locale: "ro_RO",
+      images: data.product.image ? [data.product.image] : undefined,
+    },
   };
 }
 
@@ -37,8 +50,19 @@ export default async function ItemPage({ params }: { params: { slug: string } })
     return { name: o.merchant.name, colorIndex: ((o.merchant.id - 1) % 8) + 1, prices: chartDates.map((d) => byDate.get(d) ?? null) };
   });
 
+  // Structured data. Built from the SAME offers rendered below, so the price Google shows and
+  // the price on the page cannot disagree.
+  const ld = productJsonLd(product, offers);
+  const crumbs = breadcrumbJsonLd([
+    { name: "Acasă", path: "/" },
+    ...(product.category ? [{ name: product.category.name, path: `/c/${product.category.slug}` }] : []),
+    { name: product.name, path: `/p/${product.slug}` },
+  ]);
+
   return (
     <div className="container">
+      {ld && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }} />}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(crumbs) }} />
       <nav className="breadcrumb" aria-label="breadcrumb">
         <Link href="/">Acasă</Link>
         {product.category && (
