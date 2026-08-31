@@ -62,7 +62,9 @@
     "gen:postgres": "tsx scripts/gen-postgres-schema.ts",
     "audit:search": "tsx scripts/audit-search.ts",
     "audit:search-curve": "tsx scripts/audit-search-curve.ts",
-    "audit:images": "tsx scripts/audit-images.ts"
+    "audit:images": "tsx scripts/audit-images.ts",
+    "audit:ean": "tsx scripts/audit-ean.ts",
+    "audit:bands": "tsx scripts/audit-bands.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
