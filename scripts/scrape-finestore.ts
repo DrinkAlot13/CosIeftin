@@ -129,7 +129,7 @@ async function main() {
     update: { active: true, name: "FineStore", websiteUrl: BASE, color: "#111111" },
     create: { slug: "finestore", name: "FineStore", websiteUrl: BASE, color: "#111111" },
   });
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: "alcohol", addNew: true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: "alcohol", addNew: true, label: "finestore" });
   console.log(`\nFineStore: ${r.offers} offers (${r.created} new alcohol products) from pool ${pool.length}.`);
   await prisma.$disconnect();
 }

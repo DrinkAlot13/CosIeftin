@@ -86,7 +86,7 @@ async function main() {
   }
   console.log(`Pooled ${pool.length} Le Manoir products.`);
 
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: "alcohol", addNew: true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: "alcohol", addNew: true, label: "lemanoir" });
   console.log(`\nLe Manoir: ${r.offers} offers (${r.created} new alcohol products) from pool ${pool.length}.`);
   await prisma.$disconnect();
 }

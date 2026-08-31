@@ -9,7 +9,7 @@
 
 import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
-import { matchPoolToCatalog } from "../src/lib/scrape-util";
+import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 const BASE = "https://www.mega-image.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -32,7 +32,8 @@ const CATS = [
   { code: "013", path: "Curatenie-si-nealimentare" },
 ];
 
-type Cand = { name: string; brand: string; code: string; price: number; available: boolean; url: string; image: string | null ; productUrl?: string | null; rawPriceText?: string | null };
+// The pool IS the contract — no local shape, so no re-map at the matcher call.
+type Cand = StoreProduct;
 
 function firstImage(images: unknown): string | null {
   if (!Array.isArray(images)) return null;
@@ -74,7 +75,7 @@ function extract(json: any, pool: Cand[], seen: Set<string>): { added: number; t
       if (!seen.has(code)) {
         seen.add(code);
         const abs = o.url ? (String(o.url).startsWith("http") ? o.url : BASE + o.url) : BASE;
-        pool.push({ name: o.name, brand: o.manufacturerName || "", code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), image: firstImage(o.images) });
+        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), image: firstImage(o.images) });
         added++;
       }
     }
@@ -120,13 +121,9 @@ async function main() {
     update: { active: true, name: "Mega Image", websiteUrl: BASE, color: "#e2001a" },
     create: { slug: "mega-image", name: "Mega Image", websiteUrl: BASE, color: "#e2001a" },
   });
-  const r = await matchPoolToCatalog(
-    merchant.id,
-    // Carry provenance explicitly. Re-mapping the pool into a narrower object here is
-    // how productUrl and rawPriceText were silently dropped: the fields were set on the
-    // pool, and this line quietly discarded them on the way to the matcher.
-    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, productUrl: c.productUrl ?? null, rawPriceText: c.rawPriceText ?? String(c.price), image: c.image })),
-  );
+  // Unmapped. The map that stood here listed the fields by hand, which is exactly how
+  // productUrl and rawPriceText went missing the first time — the pool had them.
+  const r = await matchPoolToCatalog(merchant.id, pool, { label: "mega-image" });
   console.log(`\nMega Image: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }

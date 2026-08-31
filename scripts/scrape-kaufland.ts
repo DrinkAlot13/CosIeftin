@@ -198,7 +198,7 @@ async function main() {
     create: { slug: "kaufland", name: "Kaufland", websiteUrl: BASE, color: "#e10915", storeType: "physical", priceSource: "shelf" },
   });
 
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: "grocery", addNew: true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: "grocery", addNew: true, label: "kaufland" });
   if (r.aborted) {
     console.error(`\nKaufland: ABORTED — ${r.reason}`);
     await prisma.$disconnect();

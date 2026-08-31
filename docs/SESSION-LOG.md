@@ -188,3 +188,69 @@ a measured expectation rather than a hope.
 **Tests** — 395 passed, 0 failed. Golden set unchanged at **97.3%, 2 false matches** (the
 CLAUDE.md invariant). Typecheck clean. Added `toEqual` to the test runner (structural equality;
 it had only `toBe`).
+
+---
+
+## Phase 1b — one StoreProduct contract, no inline remaps
+
+**Start** 05:12 · **End** 06:05
+
+Metro and Mega Image wrote thousands of offers with no `productUrl` and no `rawPriceText`.
+The scrapers set both fields correctly. One line at the matcher call destroyed them:
+
+```ts
+pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, image: c.image }))
+```
+
+TypeScript cannot object — a narrower object literal is a perfectly valid `StoreProduct`.
+Nothing failed and nothing warned. It was found only by querying the database for a field the
+writing code believed it was setting.
+
+### A third instance, previously unreported
+
+**Carrefour had the same line.** Its pool sets `rawPriceText`, `productUrl`,
+`referencePriceBani` and `referencePriceKind` — and the call site listed six fields, so
+**every Carrefour offer was written with no source string and no Omnibus reference price**.
+Metro and Mega Image had been fixed; Carrefour had not, and nobody had looked.
+
+### What changed
+
+| scraper | before | now |
+|---|---|---|
+| carrefour | `.map()` dropping 4 fields | pool passed unmapped |
+| freshful | local `Candidate` shape, provenance added at the call | `StoreProduct`, provenance set at the read |
+| sezamo | local `Cand` shape, provenance added at the call | `StoreProduct`, provenance set at the read |
+| mega-image | `.map()` re-listing every field by hand | pool passed unmapped |
+| metro | `.map()` re-listing every field by hand | pool passed unmapped |
+| monitorul | no `rawPriceText` at all | sets `rawPriceText` + `productUrl` |
+| kaufland, dcneu, finestore, lemanoir, farmaciatei, carrefour-alcohol, adapters/runner | already on the contract | labelled for error messages |
+
+`StoreProduct` gained `sourceId` — the merchant's own SKU, which four scrapers were already
+carrying as an off-contract `code` field purely for dedupe. It is carried but **not yet
+persisted**; that is Phase 2's `StoreProductIdentifier`.
+
+Zero `pool.map(` remain in `scripts/`.
+
+### Two defences, because the compiler cannot be one
+
+1. **`assertPoolContract`**, called inside `matchPoolToCatalog` *before any database work*, so
+   a mangled run writes nothing at all. Refuses a pool where under 95% carry `rawPriceText` —
+   the one field a scraper can always supply, since it is the very string it just parsed. Every
+   run now prints its own coverage: `pool contract: 2721 products · rawPriceText 100% · …`.
+   `productUrl` is reported but **not** enforced: flyer sources genuinely have no per-product
+   link, and a guard that has to be bypassed is not a guard.
+2. **A structural test** over every `scripts/scrape-*.ts`, because a runtime guard alone would
+   let the re-mapping pattern creep back everywhere it does not reach. It fails if any scraper
+   re-maps its pool at the matcher call, and if any scraper that matches a pool never sets
+   `rawPriceText`.
+
+### Logged, not decided
+
+- The 95% threshold is **provisional**. It is loose enough for a scraper with a few genuinely
+  price-less cards and tight enough to catch a systematic loss; it has not been tuned against a
+  tradeoff curve, and it should not be treated as final.
+
+**Dependencies added** — none.
+
+**Tests** — 406 passed, 0 failed. Golden set unchanged at **97.3%, 2 false matches**.
+Typecheck clean.

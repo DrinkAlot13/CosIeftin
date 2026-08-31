@@ -10,7 +10,7 @@
 // Run: npm run scrape:freshful   (after: npm run setup)
 
 import { prisma } from "../src/lib/db";
-import { matchPoolToCatalog } from "../src/lib/scrape-util";
+import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const BASE = "https://www.freshful.ro";
@@ -34,7 +34,8 @@ const DEPARTMENTS = [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Candidate = { code: string; name: string; brand: string; price: number; available: boolean; url: string; image: string | null };
+// The pool IS the contract — no local shape, so no re-map at the matcher call.
+type Candidate = StoreProduct;
 
 function firstUrl(o: unknown): string | null {
   if (typeof o === "string") return o.startsWith("http") ? o : null;
@@ -58,13 +59,18 @@ async function fetchPage(path: string): Promise<{ products: Candidate[]; leaves:
     if (!o || typeof o !== "object" || d > 20) return;
     if (Array.isArray(o)) { for (const x of o) walk(x, d + 1); return; }
     if (typeof o.name === "string" && typeof o.price === "number" && "isAvailable" in o) {
+      const url = o.slug ? `${BASE}/p/${o.slug}` : BASE;
       products.push({
-        code: String(o.code ?? o.sku ?? o.slug ?? o.name),
+        sourceId: String(o.code ?? o.sku ?? o.slug ?? o.name),
         name: o.name,
         brand: o.brand ?? "",
         price: o.price,
         available: !!o.isAvailable,
-        url: o.slug ? `${BASE}/p/${o.slug}` : BASE,
+        url,
+        // Provenance is set HERE, where the data is read — not at the matcher call, where a
+        // narrowing map can drop it without the compiler noticing.
+        productUrl: o.slug ? url : null,
+        rawPriceText: String(o.price),
         image: firstUrl(o.image),
       });
     }
@@ -88,7 +94,7 @@ async function main() {
   const byCode = new Set<string>();
   const addProducts = (cands: Candidate[]) => {
     let added = 0;
-    for (const c of cands) if (!byCode.has(c.code)) { byCode.add(c.code); pool.push(c); added++; }
+    for (const c of cands) { const k = c.sourceId ?? c.name; if (!byCode.has(k)) { byCode.add(k); pool.push(c); added++; } }
     return added;
   };
 
@@ -119,11 +125,7 @@ async function main() {
     await sleep(DELAY_MS);
   }
 
-  const r = await matchPoolToCatalog(
-    merchant.id,
-    // provenance travels with every offer: the deep link and the exact source string
-    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, productUrl: c.url === BASE ? null : c.url, rawPriceText: String(c.price), image: c.image })),
-  );
+  const r = await matchPoolToCatalog(merchant.id, pool, { label: "freshful" });
   console.log(`\nFreshful: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }

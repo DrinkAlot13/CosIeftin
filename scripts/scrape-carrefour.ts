@@ -110,10 +110,11 @@ async function main() {
     update: { active: true, name: "Carrefour", websiteUrl: BASE, color: "#0050aa" },
     create: { slug: "carrefour", name: "Carrefour", websiteUrl: BASE, color: "#0050aa" },
   });
-  const r = await matchPoolToCatalog(
-    merchant.id,
-    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, image: c.image })),
-  );
+  // Pass the pool UNMAPPED. The map that used to sit here listed six fields and so discarded
+  // rawPriceText, productUrl and both reference-price fields — all of which the push above
+  // sets correctly. Every Carrefour offer was written with no source string and no Omnibus
+  // figure because of that one line.
+  const r = await matchPoolToCatalog(merchant.id, pool, { label: "carrefour" });
   console.log(`\nCarrefour: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }

@@ -7,7 +7,7 @@
 // Run: npm run scrape:sezamo
 
 import { prisma } from "../src/lib/db";
-import { matchPoolToCatalog } from "../src/lib/scrape-util";
+import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 const BASE = "https://www.sezamo.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -30,7 +30,8 @@ const CATS = [
   { id: 2621, slug: "plant-based" },
 ];
 
-type Cand = { name: string; brand: string; code: string; price: number; available: boolean; url: string; image: string | null };
+// The pool IS the contract — no local shape, so no re-map at the matcher call.
+type Cand = StoreProduct;
 
 async function getJson(url: string): Promise<any> {
   const r = await fetch(url, { headers: H });
@@ -65,13 +66,17 @@ async function cards(ids: number[]): Promise<Cand[]> {
       const price = p?.prices?.salePrice ?? p?.prices?.originalPrice;
       if (typeof price !== "number" || price <= 0 || !p.name) continue;
       const size = p.textualAmount ? ` ${p.textualAmount}` : "";
+      const url = p.slug ? `${BASE}/${p.slug}` : BASE;
       out.push({
-        name: `${p.name}${size}`, // fold size into name so parseSize can read it
+        name: `${p.name}${size}`, // fold size into name so parseQuantity can read it
         brand: p.brand || "",
-        code: String(p.productId),
+        sourceId: String(p.productId),
         price,
         available: p?.stock?.availabilityStatus === "AVAILABLE",
-        url: p.slug ? `${BASE}/${p.slug}` : BASE,
+        url,
+        // Provenance set at the READ, not at the matcher call where a map can drop it.
+        productUrl: p.slug ? url : null,
+        rawPriceText: String(price),
         image: p?.image?.path || null,
       });
     }
@@ -94,7 +99,7 @@ async function main() {
     try {
       const ids = await listCategory(c.id);
       const cs = await cards(ids);
-      for (const p of cs) if (!seen.has(p.code)) { seen.add(p.code); pool.push(p); catAdded++; }
+      for (const p of cs) { const k = p.sourceId ?? p.name; if (!seen.has(k)) { seen.add(k); pool.push(p); catAdded++; } }
       console.log(`  ${c.slug.padEnd(24)} ids ${ids.length} -> +${catAdded} (pool ${pool.length})`);
     } catch (e) {
       console.log(`  ${c.slug.padEnd(24)} eroare: ${(e as Error).message}`);
@@ -103,12 +108,7 @@ async function main() {
   }
   console.log(`Pooled ${pool.length} Sezamo products.`);
 
-  const r = await matchPoolToCatalog(
-    merchant.id,
-    // provenance travels with every offer: the deep link and the exact source string
-    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, productUrl: c.url === BASE ? null : c.url, rawPriceText: String(c.price), image: c.image })),
-    { addNew: true },
-  );
+  const r = await matchPoolToCatalog(merchant.id, pool, { addNew: true, label: "sezamo" });
   console.log(`\nSezamo: ${r.offers} offers (${r.created} new products) from pool ${pool.length}.`);
   await prisma.$disconnect();
 }

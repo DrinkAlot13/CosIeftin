@@ -90,7 +90,7 @@ async function main() {
     update: { active: true, name: "Carrefour", websiteUrl: BASE, color: "#0050aa" },
     create: { slug: "carrefour", name: "Carrefour", websiteUrl: BASE, color: "#0050aa" },
   });
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: "alcohol", addNew: true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: "alcohol", addNew: true, label: "carrefour-alcohol" });
   console.log(`\nCarrefour alcohol: ${r.offers} offers (${r.created} new) from pool ${pool.length}.`);
   await prisma.$disconnect();
 }

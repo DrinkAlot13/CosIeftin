@@ -109,7 +109,7 @@ async function main() {
   let totalOffers = 0;
   let totalNew = 0;
   for (const [section, pool] of sectionPool) {
-    const r = await matchPoolToCatalog(merchant.id, pool, { section, addNew: true });
+    const r = await matchPoolToCatalog(merchant.id, pool, { section, addNew: true, label: "farmaciatei/" + section });
     console.log(`  -> ${section}: ${r.offers} offers (${r.created} products) from pool ${pool.length}`);
     totalOffers += r.offers;
     totalNew += r.created;

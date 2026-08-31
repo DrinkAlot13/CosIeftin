@@ -299,7 +299,7 @@ async function main() {
     update: { active: true, name: "DCNeu", websiteUrl: BASE, color: "#e30613" },
     create: { slug: "dcneu", name: "DCNeu", websiteUrl: BASE, color: "#e30613" },
   });
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: "dcneu", addNew: true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: "dcneu", addNew: true, label: "dcneu" });
   if (r.aborted) { console.error(`\nDCNeu: ABORTED — ${r.reason}`); await prisma.$disconnect(); return; }
 
   // ── persist the extra fields + validated tiers ──────────────────────────────────

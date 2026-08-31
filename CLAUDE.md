@@ -33,7 +33,12 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 ### Scraping
 - **Persist `rawPriceText` on every write.** Without the exact source string, no parser
   change can be verified against history — that is why a strikethrough diff was once
-  impossible to run.
+  impossible to run. `matchPoolToCatalog` refuses a pool where under 95% carry it.
+- **`StoreProduct` is THE contract. Build it at the read site and pass the pool UNMAPPED.**
+  Never `pool.map((c) => ({ …fields… }))` at the matcher call. A narrower object literal is a
+  valid `StoreProduct`, so the compiler cannot object — and that one line is how Metro and
+  Mega Image lost `productUrl` and `rawPriceText`, and Carrefour lost its reference prices,
+  on every offer they wrote. Guarded by `tests/pool-contract.test.ts`.
 - **Each product's price comes from ITS OWN element.** Never scan a fixed-size window of
   raw HTML: DCNeu did that and shipped 5,969 fabricated prices (73 products at one price),
   including systematically reading the "Fără TVA" figure instead of the real one.

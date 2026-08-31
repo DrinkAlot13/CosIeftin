@@ -88,14 +88,19 @@ function toStoreProduct(rec: Record<string, unknown>): StoreProduct | null {
   };
   const name = pick("denumire", "nume", "name", "productName", "denumireProdus");
   if (!name) return null;
-  const price = parsePriceLei(pick("pret", "price", "pretVanzare", "pretFinal"));
+  const priceText = pick("pret", "price", "pretVanzare", "pretFinal");
+  const price = parsePriceLei(priceText);
   if (price == null) return null;
+  const url = pick("url", "link");
   return {
     name,
     brand: pick("brand", "marca", "producator"),
     price,
     available: true,
-    url: pick("url", "link") || HOSTS[0],
+    url: url || HOSTS[0],
+    productUrl: url || null,
+    // The exact source string, so a future parser change can be checked against history.
+    rawPriceText: priceText,
     image: null,
     ean: parseEan(pick("ean", "cod", "codBare", "gtin")) || null,
     // Monitorul reports what the shelf actually charges — the cleanest price source we have
@@ -155,7 +160,7 @@ async function main() {
     update: { active: true, name: "Monitorul Prețurilor", websiteUrl: HOSTS[0], storeType: "physical", priceSource: "shelf" },
     create: { slug: "monitorul", name: "Monitorul Prețurilor", websiteUrl: HOSTS[0], storeType: "physical", priceSource: "shelf" },
   });
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: "grocery", addNew: true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: "grocery", addNew: true, label: "monitorul" });
   console.log(r.aborted ? `ABORTED — ${r.reason}` : `\nMonitorul: ${r.offers} offers (${r.created} new, ${r.flagged} flagged).`);
   await prisma.$disconnect();
 }

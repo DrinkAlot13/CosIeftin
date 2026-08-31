@@ -12,7 +12,7 @@
 
 import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
-import { matchPoolToCatalog } from "../src/lib/scrape-util";
+import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 const BASE = "https://produse.metro.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -25,7 +25,8 @@ const BATCH = 20; // betty-variants ids per request
 // incl. fresh; plus household + cosmetics for menaj matching.
 const CATS = ["alimentare", "nealimentare/produse-pentru-curatenie", "nealimentare/cosmetice"];
 
-type Cand = { name: string; brand: string; code: string; price: number; available: boolean; url: string; image: string | null ; productUrl?: string | null; rawPriceText?: string | null };
+// The pool IS the contract — no local shape, so no re-map at the matcher call.
+type Cand = StoreProduct;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -124,7 +125,7 @@ async function main() {
           const pr = priced.get(id)!;
           if (!meta || seen.has(id)) continue;
           seen.add(id);
-          pool.push({ name: meta.name, brand: meta.brand, code: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), image: meta.image });
+          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), image: meta.image });
           catAdded++;
         }
       }
@@ -140,14 +141,9 @@ async function main() {
     update: { active: true, name: "Metro", websiteUrl: BASE, color: "#003d7d" },
     create: { slug: "metro", name: "Metro", websiteUrl: BASE, color: "#003d7d" },
   });
-  const r = await matchPoolToCatalog(
-    merchant.id,
-    // Carry provenance explicitly. Re-mapping the pool into a narrower object here is
-    // how productUrl and rawPriceText were silently dropped: the fields were set on the
-    // pool, and this line quietly discarded them on the way to the matcher.
-    pool.map((c) => ({ name: c.name, brand: c.brand, price: c.price, available: c.available, url: c.url, productUrl: c.productUrl ?? c.url, rawPriceText: c.rawPriceText ?? String(c.price), image: c.image })),
-    { addNew: true },
-  );
+  // Unmapped. The map that stood here listed the fields by hand, which is exactly how
+  // productUrl and rawPriceText went missing the first time — the pool had them.
+  const r = await matchPoolToCatalog(merchant.id, pool, { addNew: true, label: "metro" });
   console.log(`\nMetro: ${r.offers} offers (${r.created} new products) from pool ${pool.length}.`);
   await prisma.$disconnect();
 }

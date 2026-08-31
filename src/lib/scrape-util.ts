@@ -17,6 +17,17 @@ import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
 import { recordScraperRun } from "./scraper-run";
 
+/**
+ * THE contract between a scraper and the matcher. Every scraper builds `StoreProduct[]`
+ * directly and passes it through unchanged.
+ *
+ * Do NOT re-map the pool into a narrower object at the call site. That is not a style
+ * preference — it is how `productUrl` and `rawPriceText` were silently dropped at Metro and
+ * Mega Image, and how Carrefour lost its reference prices too: the scraper set the fields
+ * correctly, then `pool.map((c) => ({ name, brand, price, available, url, image }))` at the
+ * matcher call threw them away. TypeScript cannot object, because a narrower object is a
+ * perfectly valid StoreProduct. Passing `pool` unmapped is what makes the compiler an ally.
+ */
 export type StoreProduct = {
   name: string;
   brand: string;
@@ -24,6 +35,10 @@ export type StoreProduct = {
   available: boolean;
   url: string;
   image: string | null;
+  /// the merchant's own id for this product (SKU / product code), where it publishes one.
+  /// Used for dedupe within a run, and is the closest thing to a stable key most RO
+  /// merchants offer given that none of them publish a GTIN.
+  sourceId?: string | null;
   /// optional category slug used only when creating NEW catalog products
   category?: string;
   /// optional EAN/GTIN (from JSON-LD / product JSON) — turns matching into a join
@@ -43,6 +58,59 @@ export type StoreProduct = {
   promoValidFrom?: Date | null;
   promoValidTo?: Date | null;
 };
+
+/** What a pool carries, as a fraction of its rows. Reported per run and gated on. */
+export type PoolCompleteness = {
+  total: number;
+  withRawPriceText: number;
+  withProductUrl: number;
+  withEan: number;
+  withImage: number;
+  rawPriceTextPct: number;
+  productUrlPct: number;
+};
+
+/** How much of a pool must carry rawPriceText before the run is allowed to write. */
+export const MIN_RAW_PRICE_TEXT_PCT = 95;
+
+export function poolCompleteness(pool: StoreProduct[]): PoolCompleteness {
+  const total = pool.length;
+  const nonEmpty = (v: unknown): boolean => typeof v === "string" && v.trim().length > 0;
+  const withRawPriceText = pool.filter((p) => nonEmpty(p.rawPriceText)).length;
+  const withProductUrl = pool.filter((p) => nonEmpty(p.productUrl)).length;
+  const withEan = pool.filter((p) => nonEmpty(p.ean)).length;
+  const withImage = pool.filter((p) => nonEmpty(p.image)).length;
+  const pct = (n: number): number => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
+  return {
+    total, withRawPriceText, withProductUrl, withEan, withImage,
+    rawPriceTextPct: pct(withRawPriceText), productUrlPct: pct(withProductUrl),
+  };
+}
+
+/**
+ * Refuse a pool that has lost its provenance.
+ *
+ * `rawPriceText` is the exact source string a price was parsed from. Without it no parser
+ * change can ever be verified against history — which is precisely why a strikethrough diff
+ * was once impossible to run here. It is also the one field a scraper can always supply, since
+ * it is the very string it just parsed. So a pool arriving without it has been mangled between
+ * the scraper and this function, and writing it would quietly destroy the audit trail.
+ *
+ * `productUrl` is reported, not enforced: flyer sources genuinely have no per-product link.
+ */
+export function assertPoolContract(pool: StoreProduct[], label: string): PoolCompleteness {
+  const c = poolCompleteness(pool);
+  if (c.total > 0 && c.rawPriceTextPct < MIN_RAW_PRICE_TEXT_PCT) {
+    throw new Error(
+      `[${label}] pool contract violated: only ${c.withRawPriceText}/${c.total} products ` +
+      `(${c.rawPriceTextPct}%) carry rawPriceText, minimum is ${MIN_RAW_PRICE_TEXT_PCT}%. ` +
+      `Without the exact source string no parser change can be verified against history. ` +
+      `The usual cause is a pool.map() at the matchPoolToCatalog call site dropping fields ` +
+      `the scraper set correctly — pass the pool unmapped.`,
+    );
+  }
+  return c;
+}
 
 export function slugify(s: string): string {
   return s
@@ -342,11 +410,20 @@ export type IngestResult = { offers: number; created: number; flagged: number; a
 export async function matchPoolToCatalog(
   merchantId: number,
   pool: StoreProduct[],
-  opts: { section?: string; addNew?: boolean } = {},
+  opts: { section?: string; addNew?: boolean; label?: string } = {},
 ): Promise<IngestResult> {
   const section = opts.section ?? "grocery";
   const addNew = opts.addNew ?? false;
   const startedAt = new Date();
+
+  // Check provenance BEFORE any database work: a mangled pool must not write at all.
+  const completeness = assertPoolContract(pool, opts.label ?? `merchant ${merchantId}`);
+  console.log(
+    `  pool contract: ${completeness.total} products · rawPriceText ${completeness.rawPriceTextPct}%` +
+    ` · productUrl ${completeness.productUrlPct}%` +
+    ` · ean ${completeness.withEan}` +
+    ` · image ${completeness.withImage}`,
+  );
 
   const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceSource: true } });
   const rows = await prisma.product.findMany({ where: { section }, select: { id: true, name: true, brand: true, ean: true, unit: true, unitSize: true, image: true } });

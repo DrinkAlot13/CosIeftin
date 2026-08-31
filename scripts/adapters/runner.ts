@@ -217,7 +217,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
     update: { active: true, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceSource: ad.priceSource ?? "shelf" },
     create: { slug: ad.slug, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceSource: ad.priceSource ?? "shelf" },
   });
-  const r = await matchPoolToCatalog(merchant.id, pool, { section: ad.section, addNew: ad.addNew ?? true });
+  const r = await matchPoolToCatalog(merchant.id, pool, { section: ad.section, addNew: ad.addNew ?? true, label: ad.slug ?? ad.section });
   if (r.aborted) console.error(`\n${ad.name}: ABORTED — ${r.reason}`);
   else console.log(`\n${ad.name}: ${r.offers} offers (${r.created} new, ${r.flagged} flagged) from pool ${pool.length}.`);
   await prisma.$disconnect();
