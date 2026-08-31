@@ -3,9 +3,39 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 
 // Minimal MVP auth: scrypt password hashing + a stateless HMAC-signed session
-// cookie. Good enough for a prototype; for production set AUTH_SECRET and consider
-// a session store / a battle-tested library (Auth.js, Lucia).
-const SECRET = process.env.AUTH_SECRET ?? "dev-insecure-secret-change-me";
+// cookie. Good enough for a prototype; for production consider a session store or a
+// battle-tested library (Auth.js, Lucia).
+
+/**
+ * The session-signing key. In production it MUST come from the environment.
+ *
+ * This used to be `process.env.AUTH_SECRET ?? "dev-insecure-secret-change-me"`, which meant a
+ * deployment that forgot to set AUTH_SECRET signed real session cookies with a constant that
+ * has been readable in this repository since the initial commit. Anyone with the source could
+ * mint a cookie for any user, and nothing anywhere would have said a word — the app would have
+ * looked completely healthy.
+ *
+ * A missing secret is now a startup failure in production rather than a silent downgrade. The
+ * development fallback stays, because forcing a secret on `npm run dev` buys nothing, but it is
+ * derived per-process so it cannot accidentally become a shared known value either.
+ */
+function sessionSecret(): string {
+  const fromEnv = process.env.AUTH_SECRET?.trim();
+  if (fromEnv && fromEnv !== "change-me" && fromEnv.length >= 16) return fromEnv;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET is not set (or is too short / still the placeholder). Refusing to sign " +
+      "session cookies with a known constant in production. Generate one with:\n" +
+      "  node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
+    );
+  }
+  // Dev only: random per process. Restarting dev logs you out, which is the correct trade
+  // against every developer machine sharing one publicly-known signing key.
+  return crypto.randomBytes(32).toString("hex");
+}
+
+const SECRET = sessionSecret();
 const COOKIE = "pm_session";
 
 export function hashPassword(pw: string): string {
