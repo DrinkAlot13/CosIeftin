@@ -35,7 +35,19 @@ function sessionSecret(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-const SECRET = sessionSecret();
+/**
+ * Resolved on FIRST USE, not at import.
+ *
+ * Evaluating it at module scope threw during `next build`: Next collects page data with
+ * NODE_ENV=production, so importing anything that touches auth demanded a production secret on
+ * a machine that has no business holding one. A build server should not need the key that signs
+ * sessions — the failure belongs at the moment a session is actually signed or verified.
+ */
+let cachedSecret: string | null = null;
+function SECRET_(): string {
+  if (cachedSecret === null) cachedSecret = sessionSecret();
+  return cachedSecret;
+}
 const COOKIE = "pm_session";
 
 export function hashPassword(pw: string): string {
@@ -54,14 +66,14 @@ export function verifyPassword(pw: string, stored: string): boolean {
 }
 
 function sign(userId: number): string {
-  const mac = crypto.createHmac("sha256", SECRET).update(String(userId)).digest("hex");
+  const mac = crypto.createHmac("sha256", SECRET_()).update(String(userId)).digest("hex");
   return `${userId}.${mac}`;
 }
 
 function verify(token: string): number | null {
   const [id, mac] = token.split(".");
   if (!id || !mac) return null;
-  const expected = crypto.createHmac("sha256", SECRET).update(id).digest("hex");
+  const expected = crypto.createHmac("sha256", SECRET_()).update(id).digest("hex");
   const a = Buffer.from(mac);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;

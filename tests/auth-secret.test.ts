@@ -61,3 +61,35 @@ describe("auth — no hard-coded signing key", () => {
     expect(suspicious.length).toBe(0);
   });
 });
+
+// The guard must not fire at BUILD time.
+//
+// The first version computed the secret at module scope, so `next build` — which collects page
+// data with NODE_ENV=production — demanded a production signing key on a machine that has no
+// business holding one, and the build failed. A build server does not sign sessions. The
+// failure belongs at the moment one is actually signed or verified.
+describe("auth — the secret is resolved lazily, not at import", () => {
+  it("no top-level const evaluates the secret", () => {
+    const topLevelCall = /^const\s+SECRET\s*=\s*sessionSecret\(\)/m.test(CODE);
+    if (topLevelCall) {
+      throw new Error(
+        "auth.ts resolves the signing secret at module scope. `next build` imports this while " +
+        "collecting page data with NODE_ENV=production and will fail on a machine without the key.",
+      );
+    }
+    expect(topLevelCall).toBeFalsy();
+  });
+
+  it("resolves on first use and caches", () => {
+    expect(/cachedSecret/.test(CODE)).toBeTruthy();
+    expect(/SECRET_\(\)/.test(CODE)).toBeTruthy();
+  });
+
+  it("every HMAC still goes through the guarded accessor", () => {
+    const hmacs = [...CODE.matchAll(/createHmac\(\s*"sha256"\s*,\s*([A-Za-z_]+(?:\(\))?)/g)].map((m) => m[1]);
+    expect(hmacs.length >= 2).toBeTruthy();
+    const unguarded = hmacs.filter((h) => h !== "SECRET_()");
+    if (unguarded.length) throw new Error(`HMAC using an unguarded key: ${unguarded.join(", ")}`);
+    expect(unguarded.length).toBe(0);
+  });
+});
