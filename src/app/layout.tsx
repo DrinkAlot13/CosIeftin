@@ -31,7 +31,17 @@ export const metadata: Metadata = {
 
 const THEME_SCRIPT = `try{var t=localStorage.getItem('pm_theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}`;
 
-export const dynamic = "force-dynamic";
+// The root layout reads the category menu, which changes about never. It used to declare
+// `dynamic = "force-dynamic"`, and route-segment config inherits DOWNWARD — so that one line
+// silently overrode the `revalidate = 3600` on the homepage and on every product page. `npm run
+// build` printed every route as ƒ (Dynamic), including the two that asked to be cached, while a
+// comment on the product page described caching that had never once happened.
+//
+// It is safe to remove because every route that genuinely needs per-request rendering — /admin,
+// /cont, /login, /alerte, /carduri, /lista, /oferte, /retete, /c/[slug] — declares force-dynamic
+// on ITSELF. Nothing depended on inheriting it. tests/route-config.test.ts fails if a page ever
+// again claims a revalidate window an ancestor has already disabled.
+export const revalidate = 3600;
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const categories = await getMenuCategories();
