@@ -129,3 +129,51 @@ describe("pool contract — no scraper re-maps its pool at the matcher call", ()
     expect(missing.length).toBe(0);
   });
 });
+
+// THE DROP-GUARD BASELINE.
+//
+// Carrefour's alcohol range collapsed from 1,196 live offers to 550 and the guard let it
+// through BY NINE OFFERS, because its baseline was Merchant.lastOfferCount = 902 — left there
+// by the Carrefour GROCERY run minutes earlier. One counter, two scrapers, same merchant.
+//
+// Two scrapers still share that shape: carrefour (scrape-carrefour + scrape-carrefour-alcohol)
+// and farmaciatei (one script looping farmacie and cosmetice). Both are safe only while the
+// baseline is counted per merchant AND section, which is what this asserts.
+describe("drop-guard — the baseline cannot be clobbered by another scraper", () => {
+  const src = readFileSync(join(process.cwd(), "src", "lib", "scrape-util.ts"), "utf8");
+  const guard = src.slice(src.indexOf("// DROP-GUARD"), src.indexOf("// Mark this merchant/section"));
+
+  it("finds the guard", () => expect(guard.length > 200).toBeTruthy());
+
+  it("counts live offers rather than reading the stored per-merchant counter", () => {
+    expect(/prisma\.offer\.count\(/.test(guard)).toBeTruthy();
+    // The bug: comparing `chosen.size` against merchant.lastOfferCount.
+    const usesStoredCounter = /chosen\.size\s*<\s*[^;]*lastOfferCount/.test(guard);
+    if (usesStoredCounter) {
+      throw new Error(
+        "the drop-guard is comparing against Merchant.lastOfferCount again. That counter is " +
+        "per-merchant, and carrefour + carrefour-alcohol (and farmaciatei's two sections) " +
+        "overwrite each other's — which let a 54% collapse through by nine offers.",
+      );
+    }
+    expect(usesStoredCounter).toBeFalsy();
+  });
+
+  it("scopes the baseline to THIS section, not the whole merchant", () => {
+    expect(/product:\s*\{\s*section\s*\}/.test(guard)).toBeTruthy();
+    expect(/isStale:\s*false/.test(guard)).toBeTruthy();
+  });
+
+  it("still refuses below 60%", () => {
+    expect(/\*\s*0\.6/.test(guard)).toBeTruthy();
+  });
+
+  it("the arithmetic that missed Carrefour now catches it", () => {
+    // Real numbers from the incident.
+    const written = 550;
+    const clobberedBaseline = 902;   // left by the grocery run
+    const correctBaseline = 1196;    // live alcohol offers at the time
+    expect(written >= clobberedBaseline * 0.6).toBeTruthy();  // old guard: passed
+    expect(written < correctBaseline * 0.6).toBeTruthy();     // new guard: refused
+  });
+});
