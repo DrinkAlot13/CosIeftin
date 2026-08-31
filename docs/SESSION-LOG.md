@@ -337,3 +337,249 @@ found.
 **Dependencies added** — none.
 
 **Tests** — 486 passed, 0 failed. Golden set unchanged at 97.3%.
+
+---
+
+## Phase 1c (part 1) — the backfill a re-scrape could not do
+
+**Start** 06:10 · **End** 07:00
+
+A re-scrape does not fix existing sizes. The catalog master upserts existing products with
+`update: { image }` only, so a product created a month ago keeps whatever size the parser of
+the day gave it, forever. Every Phase 1a correction would have applied to newly-created
+products and to nothing else, leaving two readings side by side in one table with nothing to
+say which was which.
+
+`npm run backfill:unitsize` recomputes `unit`/`unitSize` from each product's own name — the
+same input the stored value came from — and recomputes every `pricePerUnit` derived from them.
+A name the parser cannot read is **left alone**: an unreadable name is not evidence the old
+size was wrong. Dry run by default; verifies by re-reading every row it wrote.
+
+**643 products corrected, 1,411 offers repriced, 0 verification mismatches.**
+`scrape-auchan` now also updates `unit`/`unitSize` on re-scrape when the name parses, so the
+catalog master can correct a size rather than only ever set one.
+
+### Three more bugs, found by dry-running the backfill against live data
+
+1. **37 farmacie products were stored as their DOSE.** Romanian pharmacy dose forms were not
+   counting nouns, so `Nurofen 400 mg, 24 drajeuri` fell back to the 400 mg and recorded a box
+   of 24 as **0.0004 kg** of product. Added `drajeuri`, `pastile`, `supozitoare`, `ovule`,
+   `fiole`, `perle` — and the singular forms (`comprimat`, `capsula`, `tableta`, `doza`) that
+   were missing beside their plurals.
+2. **`LIBRESSE ABSORBANTE 32BUC+20BUC` is 52 pads**, stored as one half. Bundled COUNTS now add
+   up. Bundled masses deliberately do not: `50 mg + 20 mg/g, 30 g` is a concentration whose
+   pack is the 30 g at the end, and a cosmetics gift set has no single size at all.
+3. **`3 mg/ml` was read as a pack size.** An 86 lei nicotine spray divided by a millionth of a
+   kilogram asked SQLite to store **8,650,000,000** in a 32-bit INT column. Prisma threw and
+   took the backfill down mid-write.
+
+That third one was a live crash risk in the scrapers too, not just in this script. Every
+per-unit write now goes through `perUnitBaniOrNull`, which returns **null** out of range — the
+column is nullable for exactly this reason, and clamping would store a number that is not the
+price while every chart and sort believed it.
+
+---
+
+## Phase 1d — the site was telling visitors its real prices were fake
+
+**Start** 07:00 · **End** 07:05
+
+Every page carried *"Prototip cu date demonstrative — prețurile afișate sunt fictive"*, and the
+footer repeated it. That stopped being true long ago. A visitor who believed the banner would
+dismiss a real price; a merchant reading it was being told we publish invented figures about
+them.
+
+Removing it creates the opposite obligation, so the footer now says what IS true: prices are
+collected automatically, can differ from the till, and should be checked on the merchant's site.
+`tests/no-demo-claims.test.ts` fails if the fictional-prices copy returns **and** if the footer
+ever loses that warning.
+
+The homepage counters were loose in a way a visitor cannot check, which is exactly why they had
+to be right: "N magazine" counted any merchant with any grocery offer, so a merchant we had
+switched off still counted as a store you could shop, and a price last seen months ago still
+counted as a price. All three now count live offers from active merchants only.
+
+`catalog.ts` loses `basePrice` — 49 invented RON-per-pack figures sitting next to real names.
+
+---
+
+## Phase 2 — EAN and the three bands, audited rather than assumed
+
+**Start** 08:20 · **End** 09:10
+
+### The headline metric the brief asked for first
+
+| | |
+|---|---|
+| products with a live offer | **30,735** |
+| **comparable (2+ merchants)** | **2,418 — 7.9%** |
+| mean merchants per product | 1.10 |
+
+92.1% of the catalog is backed by exactly one merchant. By section: grocery **11.3%**;
+`dcneu`, `farmacie`, `cosmetice`, `alcohol` all **0.0%**, each having exactly one merchant, so
+nothing in them can ever be compared. **Catalog size is not the constraint — overlap is.**
+
+### The EAN lever is not available, and that is now verified
+
+Auchan's VTEX API *does* publish EANs — 9,031 checksum-valid, 99.1% of its offers. That
+corrects an earlier session's claim that no Romanian grocer publishes a GTIN.
+
+But Auchan is the catalog master, so those EANs sit on products Auchan created, and an EAN only
+becomes a **join** when a second merchant supplies the same one. I probed the two likeliest:
+
+- **Sezamo** `/api/v1/products/card` returns `productId, image, name, slug, brand, unit,
+  textualAmount, prices, stock, ratings` — no identifier field of any kind.
+- **Freshful** `__NEXT_DATA__` product node carries 40+ fields including `code`, `variantCode`,
+  `sku`, `brandCode` — and no EAN, GTIN or barcode.
+
+So the 1,968 "EANs backed by 2+ merchants" were never joined on the EAN. They were joined on
+the name, and the EAN came along for the ride. **Name-and-size matching is the only lever**,
+which is worth knowing before building `StoreProductIdentifier` plumbing for a key nobody
+supplies.
+
+### The thresholds are nearly vestigial
+
+`npm run audit:bands`, on the 223-pair golden set:
+
+| AUTO threshold | published | false MATCH | false miss | to review |
+|---|---|---|---|---|
+| 0.50 – 0.70 | 44 | 2 | 4 | 0 |
+| 0.74 | 42 | 2 | 6 | 2 |
+| 0.78 | 38 | 1 | 9 | 6 |
+
+Flat from 0.50 to 0.70 — the shipped 0.62 could move ±0.08 with **no effect whatsoever**. It
+only bites at 0.74, where it costs misses without removing the false matches; at 0.78 it trades
+one false match for five more misses, which is backwards, since a false match publishes one
+product's price on another while a false miss only costs a comparison.
+
+The REVIEW sweep is flat across its **entire** range, because the review band holds zero pairs
+at the shipped setting. **A three-band system whose middle band never fires is a two-band
+system with extra code.**
+
+Both are flat because the structural guards — size, head noun, brand, mutual distinction — do
+all the rejecting, and whatever survives them scores far above any threshold in range.
+**0.62 / 0.42 stay exactly as they are**, now with evidence instead of nothing, still labelled
+provisional.
+
+---
+
+## Phase 3 — the prepared Postgres migration had drifted 11 models behind
+
+**Start** 06:35 · **End** 07:05
+
+`prisma/schema.postgres.prisma` was written as a migration prepared in advance, and the SQLite
+schema then grew past it. It was missing **11 models** — BulkTier, ScraperRun, PriceAnomaly,
+ProductPackChange, FeedSource, FeedRun, ProductSpec, EquivalenceClass, ProductAttribute,
+UserFavorite, UserBlocklist — and **45 fields**, including `Offer.priceBani`, the column all the
+integer-money work depends on.
+
+Nothing complained, because nothing runs against it. It would have been discovered on cutover
+night. A prepared migration nobody executes is not preparation; it is a liability that looks
+like preparation.
+
+Hand-maintaining a parallel schema does not work, so it is no longer hand-maintained:
+`npm run gen:postgres` generates it, applying the three deliberate differences (postgresql
+provider, `@db.Text` on long free-text columns, indexes on the hot query columns).
+`tests/schema-parity.test.ts` checks model-by-model, field-by-field, **and** byte-for-byte
+against a fresh generation. **No cutover, per the brief.**
+
+---
+
+## Phase 5 — structured data, sitemap, robots
+
+**Start** 08:20 · **End** 08:50
+
+A comparator lives on organic search and had no sitemap, no robots.txt and no structured data.
+
+The rule applied throughout: **structured data must be true.** A comparator's rich result IS its
+search listing — Google renders the price range straight out of the JSON-LD, to more people than
+see the page. So `lowPrice`/`highPrice`/`offerCount` come from the *same offers rendered on the
+page*; a product with no usable price emits no JSON-LD at all; `availability` has exactly two
+honest values; `gtin13` appears only for a checksum-valid EAN; brand and image are omitted when
+absent rather than filled with a placeholder.
+
+Product names are scraped from merchant pages — untrusted input — so the serialiser escapes `<`,
+and a test feeds it a name containing a script-closing tag and an onerror payload.
+
+The sitemap lists only products with a live offer (a stale product is a soft 404 that costs
+crawl budget), and `lastModified` is the offer's real `lastSeen`, not `new Date()`. robots
+disallows `/search`: every query string is a distinct URL over the same catalog — the classic
+faceted-search crawl trap.
+
+---
+
+## Phase 6 — the list now works in the aisle, not just loads there
+
+**Start** 08:50 · **End** 09:20
+
+The service worker made the PAGE load offline and did nothing for the only thing on it anyone
+needs. In a shop with no signal, `/api/basket` failed, `setResult` never ran, and the shopper
+stood in front of the shelf looking at an empty panel.
+
+The old justification — *"a stale basket total would be worse than an error"* — is right about
+stale money and wrong about the shopper. Twenty minutes old and labelled as such beats nothing;
+three weeks old does not, however labelled, so it is not served at all.
+
+`lib/offline-cache.ts` caches under two rules: **never another list's totals** (keyed by the
+exact item/quantity signature) and **never without its age** (freshness comes back *with* the
+result, so the UI cannot forget to say so). Anything past 7 days is refused, as is a timestamp
+from the future. `localStorage` is wrapped because private mode and blocked site-data both
+**throw** rather than return null — tested with a storage that throws on every call, corrupt
+JSON, a payload missing its timestamp, and no `window` at all.
+
+---
+
+## Phase 7 — trust features behind a flag, plus a tracked .env
+
+**Start** 09:20 · **End** 09:40
+
+The shrinkflation page was publicly reachable. It states that a **named manufacturer** shrank a
+pack while raising its price per kilo — defensible with good evidence, indefensible without, and
+the difference is not visible from inside the code that produces the detections. It is now gated
+on `FEATURE_TRUST` and **404s when off** rather than rendering an empty page, because an empty
+page invites the reader to conclude we looked and found nothing.
+
+The default is not "off until we trust the code". It is "off until a person decided to publish".
+
+`flagEnabled` accepts only an explicit affirmative. Everything else is off — including the
+values that actually occur in a deployment: the literal string `"undefined"`, an unrendered
+template placeholder, an empty value, and the one a bare `!!process.env.X` gets wrong: `"false"`.
+
+**Separately: `.env` was tracked in git**, since the initial commit. Nothing sensitive had been
+written into it yet, which is exactly why it was easy to miss — the first person to set a real
+`AUTH_SECRET` or production `DATABASE_URL` would have committed it, and a secret in git history
+outlives the commit that removes it. Now gitignored, with `.env.example` as the template.
+
+---
+
+## Phase 8 — legal/trust drafts, and the image audit behind them
+
+**Start** 09:40 · **End** 10:20
+
+`npm run audit:images`: **33,868 of 34,430 product images are hotlinked from 13 retailer CDNs.**
+Only 561 are self-hosted. Three problems in one coat — the merchant can break every image at
+will, it is their bandwidth serving our page, and **every visitor's browser connects to all 13**,
+handing each an IP address, a User-Agent and a Referer naming the exact page being read.
+
+The audit also answers a question nobody had asked: `download-images` converts 600 per nightly
+run, so 33,868 remaining is **57 nights if the catalog stopped growing** — and it does not, so
+the batch must exceed the growth rate or this never converges. One `IMG_LIMIT=all` run clears
+the backlog (~1.3 GB). It also found **721 orphaned image files** on disk that no product
+points at.
+
+Three pages, linked from the footer, all marked **DRAFT on the page itself**:
+
+- **`/despre`** — the methodology page, which for a comparator *is* the trust page. States that
+  prices can be 24 hours old, that the final price is the one at the till, that no Romanian
+  grocer publishes an EAN so matching is by name/brand/size, and plainly that wrong matches
+  exist. Its numbers are read from the database, so it cannot drift.
+- **`/confidentialitate`** — lists the third-party hosts the browser contacts, **generated from
+  the catalog** rather than typed, because a hand-written list is true only on the day it is
+  written. This disclosure was previously absent while the site already showed a cookie banner.
+- **`/termeni`** — accurate about what the service is and is not.
+
+They are accurate about the software. They have **not** been reviewed by a lawyer.
+
+Also fixed a CSS bug introduced in Phase 6: the offline-banner tokens were defined in the dark
+blocks and in a `.viz` selector but **not on bare `:root`**, so a light-mode visitor with no
+explicit theme got `background: var(--undefined)` — transparent, failing silently.
