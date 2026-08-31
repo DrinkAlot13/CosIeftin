@@ -13,6 +13,12 @@ import { ParseTally } from "../../src/lib/price/parseTally";
 import { parseEan } from "../../src/lib/product/ean";
 import type { Adapter, DomMap, JsonMap, Route } from "./types";
 
+// No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
+// such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
+// products with the process using zero CPU — and because scrape-all runs stores in sequence,
+// the three stores queued behind it never ran at all. Nothing crashed, so nothing reported it.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const FIXTURE_DIR = join(process.cwd(), "tests", "fixtures");
@@ -170,7 +176,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
         if (ad.mode === "json") {
           const init: RequestInit = { headers: { "User-Agent": UA, Accept: "application/json", ...(ad.headers ?? {}) } };
           if (ad.body) { init.method = "POST"; init.body = ad.body.replace(/\{page\}/g, String(pg)); (init.headers as Record<string, string>)["Content-Type"] = "application/json"; }
-          const res = await fetch(url, init);
+          const res = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
           if (!res.ok) { if (pg === 1) console.log(`  ${url.slice(0, 60)} → HTTP ${res.status}`); break; }
           const raw = await res.text();
           saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, raw);

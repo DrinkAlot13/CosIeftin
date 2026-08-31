@@ -11,6 +11,12 @@ import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
+// No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
+// such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
+// products with the process using zero CPU — and because scrape-all runs stores in sequence,
+// the three stores queued behind it never ran at all. Nothing crashed, so nothing reported it.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 const BASE = "https://www.mega-image.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 // Persisted-query hash for GetCategoryProductSearch (captured from the live site).
@@ -54,7 +60,7 @@ async function fetchPage(page: Page, category: string, pageNumber: number): Prom
   const url = apiUrl(category, pageNumber);
   return page.evaluate(async (u) => {
     try {
-      const r = await fetch(u, { headers: { "apollographql-client-name": "ro-mi-web-stores", "x-apollo-operation-name": "GetCategoryProductSearch" } });
+      const r = await fetch(u, { headers: { "apollographql-client-name": "ro-mi-web-stores", "x-apollo-operation-name": "GetCategoryProductSearch" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       return r.ok ? await r.json() : { __err: r.status };
     } catch (e) {
       return { __err: String(e) };

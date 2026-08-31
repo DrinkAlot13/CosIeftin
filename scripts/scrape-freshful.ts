@@ -12,6 +12,12 @@
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
+// No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
+// such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
+// products with the process using zero CPU — and because scrape-all runs stores in sequence,
+// the three stores queued behind it never ran at all. Nothing crashed, so nothing reported it.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const BASE = "https://www.freshful.ro";
 const DELAY_MS = 700;
@@ -47,7 +53,7 @@ const LEAF_RE = /^\/c\/\d[\w-]*(?:\/\d[\w-]*){1,2}$/i; // /c/{dept}/{subcat}[/{s
 
 // Fetch one /c/... page: return its products + any leaf subcategory paths it links to.
 async function fetchPage(path: string): Promise<{ products: Candidate[]; leaves: string[] }> {
-  const res = await fetch(`${BASE}${path}`, { headers: { "user-agent": UA, "accept-language": "ro-RO" } });
+  const res = await fetch(`${BASE}${path}`, { headers: { "user-agent": UA, "accept-language": "ro-RO" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`status ${res.status}`);
   const html = await res.text();
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);

@@ -46,9 +46,26 @@ export type DcneuProduct = StoreProduct & {
   tiers?: RawTier[];
 };
 
+/** No request may hang forever. See the comment on REQUEST_TIMEOUT_MS. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * Fetch a page, or give up.
+ *
+ * The timeout is the whole point. Without it this function had no upper bound: `fetch` waits on
+ * a stalled connection indefinitely, and the detail pass stopped dead at 5,500 of 6,034 products
+ * with the process consuming zero CPU. Because `scrape-all` runs stores in sequence, that one
+ * stalled socket also meant farmaciatei, kaufland and penny never ran at all — a single hung
+ * request silently costs the whole night, and nothing reports it, because nothing crashed.
+ *
+ * A timed-out page returns null, which this scraper already treats as "skip this product".
+ */
 async function getHtml(url: string): Promise<string | null> {
   try {
-    const r = await fetch(url, { headers: { "user-agent": UA, "accept-language": "ro-RO" } });
+    const r = await fetch(url, {
+      headers: { "user-agent": UA, "accept-language": "ro-RO" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     return r.ok ? await r.text() : null;
   } catch {
     return null;

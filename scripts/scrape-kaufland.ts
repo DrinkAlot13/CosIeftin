@@ -15,6 +15,12 @@ import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 import { parsePriceLei, leiToBaniExact } from "../src/lib/price/parsePrice";
 import { ParseTally } from "../src/lib/price/parseTally";
 
+// No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
+// such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
+// products with the process using zero CPU — and because scrape-all runs stores in sequence,
+// the three stores queued behind it never ran at all. Nothing crashed, so nothing reported it.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 const BASE = "https://www.kaufland.ro";
 const PAGES = [
   "/oferte/oferte-saptamanale/saptamana-curenta.html",
@@ -159,7 +165,7 @@ async function main() {
   const seen = new Set<string>();
   for (const p of PAGES) {
     try {
-      const res = await fetch(BASE + p, { headers: { "User-Agent": UA, "Accept-Language": "ro-RO,ro;q=0.9" } });
+      const res = await fetch(BASE + p, { headers: { "User-Agent": UA, "Accept-Language": "ro-RO,ro;q=0.9" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       if (!res.ok) { console.log(`  ${p} → HTTP ${res.status}`); continue; }
       const html = await res.text();
       const offers = extractOffers(html);

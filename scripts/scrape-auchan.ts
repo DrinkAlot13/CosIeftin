@@ -10,6 +10,12 @@ import { parseSize } from "../src/lib/ingest-core";
 import { perUnitBaniOrNull } from "../src/lib/price/parsePrice";
 import { slugify } from "../src/lib/scrape-util";
 
+// No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
+// such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
+// products with the process using zero CPU — and because scrape-all runs stores in sequence,
+// the three stores queued behind it never ran at all. Nothing crashed, so nothing reported it.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 const BASE = "https://www.auchan.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const MAX_PAGES = 8; // 50 products/page (breaks early when a page comes back empty)
@@ -36,7 +42,7 @@ const CATS: { id: number; slug: string }[] = [
 async function browse(catId: number, from: number, to: number) {
   const top = Math.floor(catId / 1_000_000) * 1_000_000;
   const url = `${BASE}/api/catalog_system/pub/products/search?fq=C:${top}/${catId}&_from=${from}&_to=${to}`;
-  const res = await fetch(url, { headers: { "user-agent": UA, accept: "application/json", "accept-language": "ro-RO" } });
+  const res = await fetch(url, { headers: { "user-agent": UA, accept: "application/json", "accept-language": "ro-RO" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!res.ok && res.status !== 206) throw new Error(`status ${res.status}`);
   const data = await res.json();
   return Array.isArray(data) ? (data as any[]) : [];
@@ -50,10 +56,21 @@ async function main() {
   });
   const catMap = new Map((await prisma.category.findMany({ select: { slug: true, id: true } })).map((c) => [c.slug, c.id]));
 
-  // Accumulate history: don't delete. Mark all Auchan offers stale; the ones re-scraped
-  // below are re-activated (upsert) and get a fresh price-history point.
-  await prisma.offer.updateMany({ where: { merchantId: merchant.id }, data: { availability: "out of stock" } });
+  // How many Auchan offers a shopper can act on RIGHT NOW. This is the drop-guard baseline,
+  // and it is read before anything is written.
+  const previousLive = await prisma.offer.count({
+    where: { merchantId: merchant.id, availability: "in stock" },
+  });
 
+  // NOTE: this used to mark every Auchan offer "out of stock" here, before the scrape had
+  // fetched a single page — and then had no drop guard at all. So an Auchan that was blocked
+  // or redesigned would take all 9,000+ of its offers out of stock and there was nothing to
+  // stop it. Auchan is the CATALOG MASTER and the largest merchant; that is the worst place in
+  // the system for an unguarded wipe. Mega Image was blocked tonight and its guard saved it.
+  //
+  // Now nothing is marked stale up front. Offers seen this run are upserted as they arrive,
+  // and only at the end — and only if the run looks complete — are the unseen ones retired.
+  const seenProductIds = new Set<number>();
   const seen = new Set<string>();
   let offers = 0;
   for (const cat of CATS) {
@@ -117,6 +134,7 @@ async function main() {
         if (!prev || Math.abs(prev.price - price) > 1e-9) {
           await prisma.priceHistory.create({ data: { offerId: offer.id, price, priceBani: Math.round(price * 100) } });
         }
+        seenProductIds.add(product.id);
         offers++;
         catCount++;
       }
@@ -125,8 +143,30 @@ async function main() {
     console.log(`  ${cat.slug.padEnd(14)} C:${cat.id}  +${catCount}  (offers ${offers})`);
   }
 
+  // DROP-GUARD. A collapsed run means the site changed or blocked us, not that Auchan stopped
+  // selling nine thousand products. Retiring the unseen offers is the destructive step, so it
+  // is the one thing withheld when the run does not look complete. The offers this run DID see
+  // were already written — they are real observations and there is no reason to discard them.
+  if (previousLive > 0 && offers < previousLive * 0.6) {
+    console.error(
+      `[auchan] run refused to retire stale offers: ${offers} scraped < 60% of ${previousLive} ` +
+      `previously in stock. The ${offers} offers seen this run were written; the rest keep ` +
+      `their existing state instead of being marked out of stock.`,
+    );
+    const n = await prisma.product.count();
+    console.log(`\nAuchan (catalog master): ${offers} offers, run INCOMPLETE. Catalog now ${n} products.`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+
+  // Retire only what this run did not see.
+  const retired = await prisma.offer.updateMany({
+    where: { merchantId: merchant.id, productId: { notIn: [...seenProductIds] } },
+    data: { availability: "out of stock" },
+  });
+
   const products = await prisma.product.count();
-  console.log(`\nAuchan (catalog master): ${offers} offers. Catalog now ${products} products.`);
+  console.log(`\nAuchan (catalog master): ${offers} offers, ${retired.count} retired. Catalog now ${products} products.`);
   await prisma.$disconnect();
 }
 

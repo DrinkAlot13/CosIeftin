@@ -9,6 +9,12 @@
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
+// No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
+// such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
+// products with the process using zero CPU — and because scrape-all runs stores in sequence,
+// the three stores queued behind it never ran at all. Nothing crashed, so nothing reported it.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 const BASE = "https://www.sezamo.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const SIZE = 100; // productIds per listing page
@@ -34,7 +40,7 @@ const CATS = [
 type Cand = StoreProduct;
 
 async function getJson(url: string): Promise<any> {
-  const r = await fetch(url, { headers: H });
+  const r = await fetch(url, { headers: H, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!r.ok) throw new Error(`status ${r.status}`);
   return r.json();
 }
