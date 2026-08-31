@@ -583,3 +583,97 @@ They are accurate about the software. They have **not** been reviewed by a lawye
 Also fixed a CSS bug introduced in Phase 6: the offline-banner tokens were defined in the dark
 blocks and in a `.viz` selector but **not on bare `:root`**, so a light-mode visitor with no
 explicit theme got `background: var(--undefined)` — transparent, failing silently.
+
+---
+
+## Phase 1c — the re-scrape, and the audit that did NOT reach 15/15
+
+The brief asked for 15/15. It is **10/15**, and pretending otherwise would defeat the purpose of
+having an audit. Here is what moved, what did not, and which is a live bug.
+
+### What the re-scrape fixed
+
+| invariant | before | after |
+|---|---|---|
+| offers with **no deep link** (non-flyer) | **8,502** | **319** |
+| offers with **no `rawPriceText`** (seen in last 2 days) | **33,139** | **11,849** |
+
+Per merchant, deep links: Auchan 1,116 → **12**, Metro 5,260 → **48**, Sezamo 7,807 → **157**,
+Carrefour 938 → **52**, Freshful 346 → **15**. That is the Phase 1b contract working on live
+scrapes, and every merchant now reports `rawPriceText 100%` at the pool-contract check.
+
+The residue is almost entirely **DCNeu's 8,133 offers**, which never re-scraped — see below.
+
+### What did not move, and why
+
+**1. `no live offer written without a confidence score` — 100 violations. LEGACY.**
+All Auchan, all `matchedBy=scraper score=null`, all from before scored matching existed. Auchan
+now writes `matchedBy="catalog-master", score=1`. These are rows the re-scrape did not touch
+because their products were not re-seen. Not a live bug.
+
+**2. `no missing deep link` — 319 offers across 6 merchants. LEGACY.**
+Down 96%. The remainder are stale offers from products no longer listed, so no run re-writes
+them. Not a live bug.
+
+**3. `every recently-seen offer carries its raw source string` — 11,849. MOSTLY BLOCKED, NOT
+BROKEN.** 8,133 are DCNeu, which never completed. The rest are Mega Image (refused, correctly)
+and stale rows. Coverage went from 21% to **72.8%** in one night, and every scraper that ran
+reported 100%.
+
+**4. `no unflagged offer deviates >70% from its cross-store median` — 155. THE INVARIANT IS
+PARTLY WRONG.** Sampling them:
+
+```
+ 4.35 vs median 18.59  [auchan]   Bere blonda Timisoreana, 0.5 l
+16.99 vs median  9.99  [kaufland] Ketchup dulce Tomi, 500 g
+14.29 vs median  8.04  [sezamo]   Physalis caserola 100 g
+17.29 vs median  7.24  [sezamo]   Usturoi Solo 250 g
+```
+
+Ketchup at 16.99 against a 9.99 median is not corruption — it is two shops pricing ketchup
+differently. Fresh produce (physalis, garlic) legitimately varies by more than 70% between a
+discounter and a delivery platform. **A flat 70% band is too tight for fresh and promotional
+goods**, and it is currently reporting real price differences as data defects — which is the
+worst kind of false positive, because it trains you to ignore the check. It needs to be
+per-category, or to compare unit prices rather than pack prices. **I did not change it**:
+retuning a data-quality threshold on the strength of one night's sample is exactly the move the
+brief said not to make.
+
+**5. `fan-out within limits` — 1 violation, NEW: Carrefour max fan-out 9 > 8.** One catalog
+product is backed by nine Carrefour pool items. Worth a look, but it is one product out of
+34,688 and the unique `(productId, merchantId)` constraint means only one offer is actually
+published, so nothing wrong is on a page.
+
+### The night's real operational failure
+
+**DCNeu hung at 5,500 of 6,034 products and stalled the whole pipeline.** `fetch` has no default
+timeout, and `scrape-all` runs stores in sequence — so farmaciatei, kaufland and penny never
+ran. Nothing crashed and nothing was logged. I stopped it, added a 20-second bound to all 9
+unbounded scrapers, and ran the three stranded stores by hand (farmaciatei 2,026 offers,
+kaufland 314, penny 30).
+
+Finding that led to a worse one: **`scrape-auchan` marked all 9,112 of its offers "out of stock"
+before fetching a single page and had no drop guard at all** — on the catalog master and the
+largest merchant. Mega Image was blocked tonight and its guard saved it; Auchan had nothing.
+Now guarded.
+
+### Final state
+
+```
+Offer 43,591 · PriceHistory 79,268 · Product 34,688
+live (not stale)   33,476
+rawPriceText       31,730  (72.8%, was ~21%)
+productUrl         42,899  (98.4%)
+```
+
+Backed up: `2026-08-31T12-41-27-309Z.db.gz`, 33.1 MB → 8.0 MB, integrity-checked.
+
+### What it takes to reach 15/15
+
+1. A completed DCNeu run (now that it cannot hang) — clears most of #3.
+2. Unblocking Mega Image — it has been failing since ~04:00, cause unknown.
+3. A decision on the cross-store median band (#4). It is not a code fix; it is a question about
+   what counts as an implausible price for fresh produce.
+4. A pass to retire or re-match the legacy Auchan rows in #1 and #2.
+
+Items 1, 2 and 4 are mechanical. Item 3 is yours.
