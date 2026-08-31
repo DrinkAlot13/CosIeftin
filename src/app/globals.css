@@ -485,3 +485,12 @@ img { max-width: 100%; }
 }
 .legal-stats b { display: block; font-size: 20px; letter-spacing: -0.02em; }
 .legal-stats span { color: var(--muted); font-size: 12.5px; }
+
+/* ---------- A card that failed to render ---------- */
+/* Deliberately quiet: it is an absence, not an alarm. The rest of the list is fine. */
+.card-error {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px; border: 1px dashed var(--border); background: var(--surface-2);
+}
+.card-error-mark { font-size: 20px; line-height: 1; }
+.card-error p { margin: 4px 0 0; font-size: 12.5px; }

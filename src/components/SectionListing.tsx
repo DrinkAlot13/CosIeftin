@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CardBoundary } from "@/components/CardBoundary";
 import { ProductCard } from "@/components/ProductCard";
 import { getSectionCategories, getSectionProducts, type SortKey } from "@/lib/queries";
 
@@ -80,7 +81,12 @@ export async function SectionListing({
         <div className="empty">{emptyHint}</div>
       ) : (
         <div className="grid-products">
-          {products.map((p) => <ProductCard key={p.id} p={p} />)}
+          {/* One bad row costs one card, not the other 47 on the page. */}
+          {products.map((p) => (
+            <CardBoundary key={p.id} label={p.name}>
+              <ProductCard p={p} />
+            </CardBoundary>
+          ))}
         </div>
       )}
       <div style={{ height: 32 }} />

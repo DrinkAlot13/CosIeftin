@@ -27,7 +27,10 @@ export function CookieConsent() {
     <div className="cookie-banner" role="dialog" aria-label="Consimțământ cookie">
       <span>
         Folosim cookie-uri esențiale pentru funcționarea site-ului.{" "}
-        <Link href="/cookies" style={{ color: "var(--primary)" }}>Detalii</Link>.
+        {/* /cookies has never existed. Next prefetches every visible Link, so this banner —
+            which renders on every page — fired a 404 on every page load. The cookie section
+            lives in the privacy policy. */}
+        <Link href="/confidentialitate" style={{ color: "var(--primary)" }}>Detalii</Link>.
       </span>
       <button className="btn btn-primary" onClick={accept}>Accept</button>
     </div>
