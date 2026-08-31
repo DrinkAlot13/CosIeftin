@@ -58,7 +58,8 @@
     "export:history": "tsx scripts/export-history.ts",
     "verify:code": "npm run typecheck && npm run check:parsepricelei && npm test",
     "audit:promo": "tsx scripts/audit-promo-packs.ts",
-    "backfill:unitsize": "tsx scripts/backfill-unitsize.ts"
+    "backfill:unitsize": "tsx scripts/backfill-unitsize.ts",
+    "gen:postgres": "tsx scripts/gen-postgres-schema.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
