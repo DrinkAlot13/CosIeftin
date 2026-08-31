@@ -21,6 +21,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Most visitors never pick a theme, so they land here rather than on [data-theme].
+       A token defined ONLY in the manual-override block renders its light colour on this
+       dark ground — which is how an "unreadable in dark mode" bug is normally born. */
+    --stale-bg: #2a1c0c;
+    --stale-fg: #fbbf24;
+    --stale-border: #4a2f0e;
     --bg: #0e1116;
     --surface: #171b22;
     --surface-2: #1f242d;
@@ -41,6 +47,7 @@
 
 /* Manual theme override (wins over the OS media query above). */
 :root[data-theme="dark"] {
+  --stale-bg: #2a1c0c; --stale-fg: #fbbf24; --stale-border: #4a2f0e;
   --bg: #0e1116; --surface: #171b22; --surface-2: #1f242d; --border: #2a313c;
   --text: #e6eaf0; --muted: #97a3b4; --primary: #4c8dff; --primary-600: #3a7bf0;
   --primary-050: #16233c; --accent: #3ec06f; --accent-050: #12271b; --danger: #f87171; --warn: #fbbf24;
@@ -57,6 +64,7 @@
 :root[data-theme="dark"] .viz {
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --s5: #d55181; --s6: #2fae2f; --s7: #9085e9; --s8: #e66767;
+  --stale-bg: #fff7ed; --stale-fg: #9a3412; --stale-border: #fed7aa;
 }
 
 * { box-sizing: border-box; }
@@ -431,3 +439,17 @@ img { max-width: 100%; }
 
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
 .pill-note { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; font-size: 13.5px; color: var(--muted); }
+
+/* ---------- Offline: last-known-good prices ---------- */
+/* Deliberately loud. These are real prices that may have changed, and a shopper standing in
+   an aisle must not mistake them for live ones. */
+.stale-banner {
+  background: var(--stale-bg);
+  color: var(--stale-fg);
+  border: 1px solid var(--stale-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}

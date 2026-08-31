@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { loadBasket, saveBasket } from "@/lib/offline-cache";
 import {
   addItem,
   CART_EVENT,
@@ -51,6 +52,9 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
   const [carts, setCarts] = useState<Cart[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [result, setResult] = useState<Result | null>(null);
+  // When the network fails in a shop, the totals fall back to the last ones computed for THIS
+  // exact list — always carrying their age, so the banner cannot fail to say how old they are.
+  const [staleAge, setStaleAge] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
   const [sug, setSug] = useState<Suggestion[]>([]);
@@ -104,11 +108,22 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
       .then((d: Result) => {
         if (!cancelled) {
           setResult(d);
+          setStaleAge(null);
           setLoading(false);
           snapshotBasket(d.splitTotal);
+          saveBasket(itemsKey, d);
         }
       })
-      .catch(() => !cancelled && setLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+        // Offline, or the server is down. Show what we last computed for this same list.
+        const cached = loadBasket<Result>(itemsKey);
+        if (cached) {
+          setResult(cached.result);
+          setStaleAge(cached.freshness.label);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -297,6 +312,12 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
         <div className="lista-results">
           {items.length === 0 && <div className="pill-note">Adaugă produse ca să vezi unde e cel mai ieftin coșul tău.</div>}
           {loading && items.length > 0 && !result && <div className="pill-note">Se calculează…</div>}
+          {staleAge && (
+            <div className="stale-banner" role="status">
+              📴 <b>Ești offline.</b> Prețurile de mai jos au fost calculate {staleAge} și pot fi
+              diferite acum. Se actualizează singure când revine semnalul.
+            </div>
+          )}
           {result && items.length > 0 && (
             <>
               <div className="result-cards">
