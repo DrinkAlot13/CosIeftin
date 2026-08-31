@@ -1,7 +1,9 @@
 // Public shrinkflation page. Shows REVIEWED detections only — an unreviewed candidate is a
 // suspicion, not a finding, and this page makes a claim about a manufacturer's packaging.
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { trustFeaturesEnabled } from "@/lib/flags";
 import { formatRON } from "@/lib/format";
 
 export const revalidate = 3600;
@@ -20,6 +22,13 @@ const fmtSize = (v: number, unit: string) => {
 const perUnitLabel = (unit: string) => (unit === "BUC" ? "bucată" : unit === "G" ? "kg" : "litru");
 
 export default async function ShrinkflationPage() {
+  // This page states that a named manufacturer shrank a pack while raising its price per kilo.
+  // That is defensible with good evidence and indefensible without, and the difference is not
+  // visible from inside the code that produces the detections. So it does not exist publicly
+  // until somebody sets FEATURE_TRUST — 404, not an empty page, because an empty page invites
+  // the assumption that we simply found nothing.
+  if (!trustFeaturesEnabled()) notFound();
+
   const changes = await prisma.productPackChange.findMany({
     where: { reviewed: true, dismissed: false },
     include: { product: { select: { name: true, slug: true, brand: true } } },
