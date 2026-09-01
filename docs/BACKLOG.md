@@ -46,3 +46,9 @@ Live counts from the first full run under the new matcher, for reference:
 variant-flavour=1515 · brand+size=975 · pack-shape=409 · low-overlap=274 ·
 variant-mismatch=237 · name+size=217 · variant-qualifier=194 · variant-format=19 ·
 dose-mismatch=15 · variant-fat=2`
+
+## Dead npm script: `backfill:pricechannel`
+
+`package.json` still lists `"backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts"`,
+but that script was deleted when its source column was dropped. Running it fails with a
+missing-file error. One-line removal; harmless but it is a lie in the manifest.
