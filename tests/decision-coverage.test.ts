@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "./run";
 import { DECISION_REASONS, DecisionCoverage, decide, prep } from "../src/lib/scrape-util";
+import { VARIANT_CLASSES } from "../src/lib/variant-classes";
 
 const SRC = readFileSync(join(process.cwd(), "src", "lib", "scrape-util.ts"), "utf8");
 
@@ -29,6 +30,12 @@ function reasonsInDecide(): string[] {
   const body = SRC.slice(start, after > 0 ? after : undefined);
   const out = new Set<string>();
   for (const m of body.matchAll(/reason:\s*"([a-z+-]+)"/g)) out.add(m[1]);
+  // The variant-class block builds its reason from the class name: `variant-${vc.klass}`.
+  // The source of truth for the expansion is VARIANT_CLASSES itself, so a new class shows up
+  // here automatically rather than the test hard-coding a list that can rot.
+  if (/reason:\s*`variant-\$\{vc\.klass\}`/.test(body)) {
+    for (const k of Object.keys(VARIANT_CLASSES)) out.add(`variant-${k}`);
+  }
   // the accept path is a ternary over two literals
   for (const m of body.matchAll(/reason:\s*branded\s*\?\s*"([a-z+-]+)"\s*:\s*"([a-z+-]+)"/g)) {
     out.add(m[1]);

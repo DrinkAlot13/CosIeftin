@@ -24,6 +24,8 @@ import { tally as tallyCensus } from "./offer-census";
 import { ensureBackup } from "./ensure-backup";
 import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
 import { toPriceSource } from "./price-source";
+import { variantConflict } from "./variant-classes";
+import { parseQuantity } from "./units/parseQuantity";
 import { exclusionReason } from "./excluded-categories";
 import { recordScraperRun } from "./scraper-run";
 
@@ -406,6 +408,8 @@ export const DECISION_REASONS = [
   "ean", "brand+size", "name+size",
   // reject / review
   "size-unit", "size", "head-noun", "brand",
+  // hard blocks: a disagreement inside a variant class, or a different pack shape
+  "variant-flavour", "variant-qualifier", "variant-fat", "variant-format", "pack-shape",
   "mutually-distinct", "variant-mismatch", "dose-mismatch", "low-overlap",
 ] as const;
 export type DecisionReason = (typeof DECISION_REASONS)[number];
@@ -463,6 +467,38 @@ export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number 
   // products at three merchants and Chio chips fanned out 15×: brand + head-noun + size
   // is not a product, it is a product FAMILY.
   const jac = fuzzyJaccard(cat.over, st.over);
+
+  // ── VARIANT CLASS CONFLICT — A HARD BLOCK, CHECKED BEFORE ANYTHING SCORED ─────────
+  //
+  // If the two names disagree about flavour, formulation, fat content or container, they are
+  // different products and no amount of name overlap changes that.
+  //
+  // This runs BEFORE mutual distinction on purpose. Mutual distinction fires on the Pepsi
+  // case but returns REVIEW rather than REJECT whenever the Jaccard score clears the review
+  // threshold — and "Bautura carbogazoasa … Pepsi …" against "Bautura carbogazoasa … Pepsi …"
+  // clears it comfortably. A REVIEW verdict still keeps the pair out of the catalog, but the
+  // score decided the outcome, and for a flavour difference the score should not get a vote.
+  //
+  // The size gate could not catch it either: 6 × 0.33 = 1.98 L against a 2 L bottle is a 1%
+  // difference and the tolerance is 6%. Two unrelated products agreed on volume by accident.
+  const vc = variantConflict(cat.raw, st.raw);
+  if (vc) {
+    return {
+      ok: false, band: "REJECT", score: jac,
+      reason: `variant-${vc.klass}`,
+    };
+  }
+
+  // ── PACK SHAPE — a 6-pack and a single bottle are different products ──────────────
+  //
+  // The totals can agree to within a percent while the products could not be less alike.
+  // Only blocks when both sides state a shape and at least one is a genuine multipack, so a
+  // plain "2 l" against a plain "2 l" (both packCount 1 by default) is untouched.
+  const catPack = parseQuantity(cat.raw)?.packCount ?? 1;
+  const stPack = parseQuantity(st.raw)?.packCount ?? 1;
+  if (catPack !== stPack && Math.max(catPack, stPack) > 1) {
+    return { ok: false, band: "REJECT", score: jac, reason: "pack-shape" };
+  }
 
   // ── MUTUAL DISTINCTION ────────────────────────────────────────────────────────────
   // The decisive rule, and it is structural rather than a vocabulary list — enumerating
