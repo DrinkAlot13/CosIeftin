@@ -4,9 +4,29 @@ import { normalizeText } from "@/lib/matching";
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
 import { rankSearch } from "@/lib/search/rank";
-import { buildDailyLowSeries, dropPercent, summarize } from "@/lib/pricing";
+import { buildDailyLowSeries, dropPercent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
 
 const activeInclude = { where: { merchant: { active: true } }, include: { merchant: true } } as const;
+
+/**
+ * What "a price we can stand behind" means, expressed as a Prisma filter.
+ *
+ * The SAME rule as `isCurrent` in lib/pricing, pushed down to the database so a page does not
+ * fetch a thousand month-old rows to discard them in JavaScript. Both must agree; the test
+ * `summarize — only a price we can stand behind` covers the predicate, and this is its query
+ * twin.
+ *
+ * `isStale` alone was not enough: it is set by the scrape and 3,468 Auchan offers were 26 days
+ * old with isStale=false, so the age is checked directly against the observation date.
+ */
+export function currentOfferWhere(now: Date = new Date()) {
+  return {
+    merchant: { active: true },
+    availability: "in stock",
+    isStale: false,
+    lastSeen: { gte: new Date(now.getTime() - MAX_DISPLAY_AGE_DAYS * 86_400_000) },
+  } as const;
+}
 
 /** Active grocery chains that actually have offers — for the "my stores" picker. */
 export async function getStoreList() {
@@ -195,7 +215,7 @@ export async function suggestProducts(query: string, limit = 6) {
  * for an answer that had not changed since the last scrape.
  */
 export async function getHomeSections() {
-  const live = { isStale: false, merchant: { active: true } } as const;
+  const live = currentOfferWhere();
   const shelf = {
     // No history: neither shelf renders a chart. That single omission is most of the win.
     offers: { where: { merchant: { active: true } }, include: { merchant: true } },
@@ -207,7 +227,9 @@ export async function getHomeSections() {
       where: { section: "grocery", offers: { some: live } },
       include: shelf,
       orderBy: { id: "asc" },
-      take: 8,
+      // Over-fetch: the offers included below are unfiltered (the card shows stale rows greyed),
+      // so a product can still fall out when summarize finds nothing current.
+      take: 40,
     }),
     prisma.product.findMany({
       where: { section: "grocery", dropPct: { gt: 2 }, offers: { some: live } },
@@ -228,7 +250,7 @@ export async function getHomeSections() {
     drop: p.dropPct ?? 0,
   });
 
-  const featured = featuredRows.map(decorate).filter((p) => p.summary.offerCount > 0);
+  const featured = featuredRows.map(decorate).filter((p) => p.summary.hasCurrentPrice).slice(0, 8);
   // A "drop" on a single-merchant product is one shop changing its own price, which is not the
   // comparison this shelf is for.
   const drops = dropRows.map(decorate).filter((p) => p.summary.offerCount >= 2).slice(0, 6);
@@ -255,8 +277,7 @@ export async function getBasketProducts(slugs: string[]) {
  * a price. Those are not lies a visitor can check, which is exactly why they have to be right.
  */
 const liveOffer = {
-  isStale: false,
-  merchant: { active: true },
+  ...currentOfferWhere(),
   product: { section: "grocery" },
 } as const;
 

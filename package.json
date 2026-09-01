@@ -70,7 +70,8 @@
     "rotate:admin": "tsx scripts/rotate-admin.ts",
     "audit:pending": "tsx scripts/audit-pending.ts",
     "compute:home": "tsx scripts/compute-home.ts",
-    "audit:unitprice": "tsx scripts/audit-unit-price.ts"
+    "audit:unitprice": "tsx scripts/audit-unit-price.ts",
+    "audit:staleness": "tsx scripts/audit-staleness.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -172,3 +172,69 @@ describe("money — bani is authoritative, the float is derived", () => {
     }
   });
 });
+
+// A month-old, out-of-stock price presented as "cel mai mic preț".
+//
+// Three offers last actually observed on 6 August were displayed as current 26 days later, one
+// of them badged as the cheapest: Carrefour at 10,49 against a real 10,75, Freshful at 17,99
+// against a real 24,99. Neither is a parse error. They were correct prices, a month ago, and
+// nothing in the read path stopped them being presented as today's.
+describe("summarize — only a price we can stand behind sets the headline", () => {
+  const now = new Date("2026-09-01T12:00:00Z");
+  const daysAgo = (n: number): Date => new Date(now.getTime() - n * 86_400_000);
+  const o = (price: number, over: Partial<{ availability: string; lastSeen: Date; isStale: boolean }> = {}) => ({
+    price, priceBani: Math.round(price * 100),
+    availability: "in stock", lastSeen: daysAgo(1), isStale: false, ...over,
+  });
+
+  it("an out-of-stock offer never sets the headline, however cheap", () => {
+    const s = summarize([o(5.0, { availability: "out of stock" }), o(9.0)], now);
+    expect(s.lowest).toBeCloseTo(9.0, 4);
+    expect(s.offerCount).toBe(1);
+    expect(s.staleCount).toBe(1);
+  });
+
+  it("an offer older than 14 days never sets the headline", () => {
+    const s = summarize([o(5.0, { lastSeen: daysAgo(26) }), o(9.0)], now);
+    expect(s.lowest).toBeCloseTo(9.0, 4);
+    expect(s.offerCount).toBe(1);
+  });
+
+  it("14 days is inside, 15 is outside", () => {
+    expect(summarize([o(5.0, { lastSeen: daysAgo(14) })], now).offerCount).toBe(1);
+    expect(summarize([o(5.0, { lastSeen: daysAgo(15) })], now).offerCount).toBe(0);
+  });
+
+  it("an isStale offer never sets the headline even when recently seen", () => {
+    const s = summarize([o(5.0, { isStale: true }), o(9.0)], now);
+    expect(s.lowest).toBeCloseTo(9.0, 4);
+  });
+
+  it("when NOTHING is current there is no headline price at all", () => {
+    // The old code fell back to the full set, which is how a month-old out-of-stock price won
+    // the badge on 8,633 pages. Reporting zero is the honest answer.
+    const s = summarize([o(5.0, { availability: "out of stock" }), o(9.0, { lastSeen: daysAgo(30) })], now);
+    expect(s.hasCurrentPrice).toBeFalsy();
+    expect(s.lowest).toBe(0);
+    expect(s.offerCount).toBe(0);
+    expect(s.staleCount).toBe(2);
+  });
+
+  it("the merchant count counts merchants you could buy from TODAY", () => {
+    const s = summarize([o(5.0), o(6.0), o(7.0, { lastSeen: daysAgo(40) }), o(8.0, { availability: "out of stock" })], now);
+    expect(s.offerCount).toBe(2);
+    expect(s.staleCount).toBe(2);
+  });
+
+  it("an offer with no recorded observation date is not punished", () => {
+    // Absence of a date is not evidence of age; flyer rows legitimately lack one.
+    const s = summarize([{ price: 5, priceBani: 500, availability: "in stock" }], now);
+    expect(s.offerCount).toBe(1);
+  });
+
+  it("the price range is computed over current offers only", () => {
+    const s = summarize([o(5.0), o(20.0, { lastSeen: daysAgo(40) })], now);
+    expect(s.highest).toBeCloseTo(5.0, 4);
+    expect(s.savings).toBe(0);
+  });
+});

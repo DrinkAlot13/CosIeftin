@@ -53,7 +53,7 @@ async function auditPrices() {
   const offers = await prisma.offer.findMany({
     select: {
       id: true, price: true, priceBani: true, vatBasis: true, vatRateBp: true,
-      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastSeenAt: true,
+      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastSeenAt: true, availability: true,
       productId: true, merchant: { select: { name: true, slug: true } }, product: { select: { name: true, section: true } },
     },
   });
@@ -77,6 +77,29 @@ async function auditPrices() {
       problems.push((e as Error).message);
     }
     record("Prices", "the published origin is not localhost in production", problems);
+  }
+
+  // ── STALENESS. A price we last observed a month ago is not a current price, and an
+  //    out-of-stock offer is not one either. Both were winning "cel mai mic preț" and counting
+  //    toward "N magazine" on thousands of pages, because the read path filtered on neither.
+  {
+    const bad: string[] = [];
+    const byProduct = new Map<number, typeof offers>();
+    for (const o of offers) { const a = byProduct.get(o.productId) ?? []; a.push(o); byProduct.set(o.productId, a); }
+    const nowMs = Date.now();
+    for (const [, list] of byProduct) {
+      const priced = list.filter((o) => (o.priceBani ?? Math.round(o.price * 100)) > 0);
+      if (priced.length === 0) continue;
+      const cheapest = priced.reduce((a, b) => ((b.priceBani ?? 0) < (a.priceBani ?? 0) ? b : a));
+      const ageDays = (nowMs - (cheapest.lastSeenAt ?? new Date(0)).getTime()) / 86400000;
+      const oos = cheapest.availability !== "in stock";
+      if (cheapest.lastSeenAt && ageDays > 14) {
+        bad.push(`offer ${cheapest.id} [${cheapest.merchant.name}] is the cheapest and is ${ageDays.toFixed(0)} days old`);
+      } else if (oos) {
+        bad.push(`offer ${cheapest.id} [${cheapest.merchant.name}] is the cheapest and is OUT OF STOCK`);
+      }
+    }
+    record("Freshness", "no stale or out-of-stock offer is a product's cheapest price", bad);
   }
 
   // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
