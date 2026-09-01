@@ -105,8 +105,8 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 - Human decisions in `MatchOverride` (CONFIRMED / REJECTED) always win and must
   survive a full catalog rebuild.
 - Any change to the matcher must pass `tests/golden/matching.test.ts` before merge, and
-  must not lower the pass rate recorded in `tests/golden/BASELINE.md` (currently **97.3%**,
-  2 false matches). A false MATCH publishes one product's price on another; a false miss
+  must not lower the pass rate recorded in `tests/golden/BASELINE.md` (currently **97.8%**,
+  1 false match). A false MATCH publishes one product's price on another; a false miss
   only costs a comparison. They are not equally bad.
 
 ## Units
@@ -160,6 +160,24 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
   the union type, the mapper, and a translation function at any boundary where a different
   vocabulary meets it. SQLite cannot express enums, so the type system and `audit-db` are the
   enforcement.
+
+## Writing code through a shell
+
+Do NOT write regex-bearing or escape-bearing code through a heredoc, `node -e` or `python -c`.
+One layer of backslashes is eaten on the way through, and the result is frequently VALID CODE
+THAT COMPILES AND IS WRONG. Use the Write/Edit tools for anything containing an escape.
+
+This rule was in this file for several sessions and was broken four times in one day, so it
+is now enforced by `npm run check:hygiene`, which is part of `verify:code` and therefore of
+the pre-commit hook. It fails on a literal backspace, vertical tab, form feed, NUL or ESC
+anywhere in source, and on a meaningless escape in a regex context.
+
+It found a live bug on its first run. `doseTokens()` in `scrape-util.ts` carries the regex
+that compares garment and egg sizes — the very thing this file demands be compared explicitly
+("mărimea L vs M"). Its whitespace class had become a literal letter and its word boundary an
+actual 0x08 backspace, making the pattern unsatisfiable. It had never matched anything, and
+the cost was sitting in the golden set the whole time as a false match on eggs. Repairing it
+took the golden set from 97.3% to 97.8% and false matches from 2 to 1.
 
 ## Workflow
 - Small commits. Run `npm run test` before finishing any task.

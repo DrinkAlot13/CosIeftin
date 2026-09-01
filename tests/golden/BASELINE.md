@@ -74,8 +74,8 @@ lies to shoppers. A **false miss** only costs a comparison.
 ## After Phase 3 — the grocery overlap fix (same day)
 
 ```
-PASS RATE: 97.3%  (217/223)     was 65.5%
-false MATCHES: 2                was 70
+PASS RATE: 97.8%  (218/223)     was 65.5%
+false MATCHES: 1                was 70
 false misses:  4                was 7
 ```
 
@@ -168,3 +168,29 @@ fragrance/fixative fan-out closed.
 | Carrefour | 11 | **4** |
 
 **grocery p95 = 2 (target ≤ 3) — met.**
+
+
+---
+
+## 2026-09-01 — 97.3% -> 97.8%, false matches 2 -> 1
+
+The eggs false match (`Oua de gaina marimea L, 10 bucati` against `...marimea M, 10 bucati`)
+is gone, and the fix was not to the matcher.
+
+`doseTokens()` carries a regex for garment/egg size codes, precisely so that `marimea L` and
+`marimea M` are compared explicitly rather than dropped as single-character unit noise. That
+regex had NEVER MATCHED ANYTHING. It was written through a shell heredoc that ate a layer of
+backslashes, so the whitespace class became a literal letter s, and the trailing word
+boundary became an actual BACKSPACE character, 0x08 — which no product name contains,
+making the whole pattern unsatisfiable. It compiled and ran and returned nothing for as
+long as it existed.
+
+(This paragraph first described those escapes literally, was itself written through a
+heredoc, and so `check:hygiene` failed on it too — the check catching its own
+documentation of the bug it was written to catch.)
+
+Found by `npm run check:hygiene`, added the same day to enforce a rule about shell escaping
+that CLAUDE.md had stated for several sessions and that kept being broken anyway. It found
+this on its first run, in a file nobody was looking at.
+
+The remaining false match is `ECO Avocado 1 buc` against `ECO Avocado  90 Gr+ 1 buc`.

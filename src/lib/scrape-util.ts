@@ -312,7 +312,16 @@ export function doseTokens(nname: string): string {
   }
   // Garment/egg size codes: "marimea L" vs "marimea M" is a different product, but the
   // letter is a single character that the overlap tokens drop as unit noise.
-  for (const m of nname.matchAll(/m[aă]rim[ea]*s*:?s*(xs|s|m|l|xl|xxl)/gi)) {
+  //
+  // THIS REGEX HAD NEVER MATCHED ANYTHING. It was written through a shell heredoc that ate a
+  // layer of backslashes, so `\s*` became `s*` (a literal letter s) and the trailing `\b`
+  // became an actual BACKSPACE character, 0x08 — which no product name contains, so the whole
+  // pattern was unsatisfiable. It compiled, it ran, it returned nothing, for as long as it has
+  // existed. Found by `npm run check:hygiene` on its first run.
+  //
+  // The cost was visible the whole time and attributed elsewhere: the golden set's standing
+  // false match is "Oua de gaina marimea L, 10 bucati" against "…marimea M, 10 bucati".
+  for (const m of nname.matchAll(/m[aă]rim[ea]*\s*:?\s*(xs|s|m|l|xl|xxl)(?![a-z])/gi)) {
     out.push(`size:${m[1].toLowerCase()}`);
   }
   // percentages: fat content, alcohol, concentration
