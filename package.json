@@ -82,6 +82,7 @@
     "audit:addnew-impact": "tsx scripts/audit-addnew-impact.ts",
     "audit:rejections": "tsx scripts/audit-rejections.ts",
     "audit:unit-oracle": "tsx scripts/audit-unit-oracle.ts",
+    "audit:comparability": "tsx scripts/audit-comparability.ts",
     "audit:liveness": "tsx scripts/audit-liveness.ts",
     "audit:cutover": "tsx scripts/audit-cutover.ts",
     "audit:staleness": "tsx scripts/audit-staleness.ts",
