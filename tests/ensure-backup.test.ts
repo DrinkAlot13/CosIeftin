@@ -7,7 +7,7 @@
 // made it a footnote instead of a disaster.
 import { describe, it, expect } from "./run";
 import { newestBackupAgeMs, backupIsRecent, BACKUP_MAX_AGE_MS } from "../src/lib/ensure-backup";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 describe("backup freshness — the short-circuit", () => {
@@ -46,8 +46,28 @@ describe("backup guard — every write path is covered", () => {
     expect(guard < firstWrite).toBeTruthy();
   });
 
-  it("scrape-auchan has its own guard — it bypasses the shared write path", () => {
-    expect(read("scripts/scrape-auchan.ts").includes("ensureBackup(")).toBeTruthy();
+  it("there is no second write path that needs its own copy of the guard", () => {
+    // This test used to assert the OPPOSITE: that `scripts/scrape-auchan.ts` carried its own
+    // ensureBackup() call, because it upserted Offer rows itself and never reached
+    // matchPoolToCatalog. Guarding the two paths separately was the divergence reproducing
+    // itself inside the fix for the divergence — every safeguard from then on would have
+    // needed adding twice, and the second copy is the one that drifts.
+    //
+    // Auchan is a declarative adapter now, so the guard has exactly one home. What this test
+    // protects is that property: no script may write offers without going through the shared
+    // path. A new bespoke scraper would fail here rather than quietly re-opening the hole.
+    const scripts = readdirSync(join(process.cwd(), "scripts")).filter((f) => f.endsWith(".ts"));
+    const offenders: string[] = [];
+    for (const f of scripts) {
+      const src = read(join("scripts", f));
+      if (!/prisma\.offer\.(upsert|create|createMany)\s*\(/.test(src)) continue;
+      // matchPoolToCatalog is the shared path; a script that calls it is compliant.
+      if (src.includes("matchPoolToCatalog")) continue;
+      // ...and a script that carries its own guard is at least honest about being separate.
+      if (src.includes("ensureBackup(")) continue;
+      offenders.push(f);
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("scrape-all guards the whole run", () => {

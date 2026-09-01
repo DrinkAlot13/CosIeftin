@@ -18,7 +18,13 @@ export type PriceChannel = "shelf" | "delivery" | "aggregator";
 
 /** One listing page to visit, and the catalog category its products belong to. */
 export type Route = {
-  /** URL, or a template containing {page} for pagination. */
+  /**
+   * URL, or a template with pagination tokens:
+   *   {page}         1, 2, 3 …            — page-number APIs
+   *   {from} / {to}  0-49, 50-99 …        — OFFSET APIs (VTEX and friends)
+   * Offset tokens need `pageSize` on the adapter. Mixing the two forms is allowed; each
+   * token is substituted independently.
+   */
   url: string;
   /** catalog category slug for products created from this route */
   cat?: string;
@@ -73,8 +79,10 @@ export type Adapter = {
   /** "json" is strongly preferred: 10–50× faster than rendering and far less brittle */
   mode: "json" | "dom";
   routes: Route[];
-  /** page numbers to walk for templates containing {page} */
+  /** page numbers to walk for templates containing {page} or {from}/{to} */
   maxPages?: number;
+  /** rows per request, for {from}/{to} offset pagination. Required if a route uses them. */
+  pageSize?: number;
   /** ms between requests — be a good citizen */
   delayMs?: number;
   json?: JsonMap;

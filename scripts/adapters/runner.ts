@@ -32,6 +32,26 @@ function saveFixture(slug: string, key: string, body: string) {
 }
 
 /** Read a dot path ("results.0.hits") out of an object. */
+/** Does this route template ask to be walked more than once? */
+const PAGED = /\{page\}|\{from\}|\{to\}/;
+
+/**
+ * Substitute the pagination tokens for the pg-th request (pg is 1-based).
+ *
+ * {page} is the page number. {from}/{to} are INCLUSIVE row offsets, which is what VTEX's
+ * catalog_system search takes — page 1 is _from=0&_to=49. Auchan is VTEX, and so are several
+ * other Romanian retailers, so this belongs in the runner rather than in one adapter.
+ */
+export function pageUrl(template: string, pg: number, pageSize?: number): string {
+  let u = template.replace(/\{page\}/g, String(pg));
+  if (/\{from\}|\{to\}/.test(template)) {
+    if (!pageSize || pageSize < 1) throw new Error("a route using {from}/{to} needs adapter.pageSize");
+    const from = (pg - 1) * pageSize;
+    u = u.replace(/\{from\}/g, String(from)).replace(/\{to\}/g, String(from + pageSize - 1));
+  }
+  return u;
+}
+
 export function dig(obj: unknown, path: string): unknown {
   if (!path) return obj;
   return path.split(".").reduce<unknown>((acc, k) => {
@@ -59,17 +79,33 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
   for (const it of arr) {
     const name = String(dig(it, map.name) ?? "").replace(/\s+/g, " ").trim();
     if (!name) continue;
-    // null = ambiguous → skip the item rather than publish a wrong price
-    const rawPrice = String(dig(it, map.price) ?? "");
-    const det = parsePriceDetailed(rawPrice);
-    const price = tally ? tally.record(rawPrice, det.priceBani) : det.priceBani;
-    if (price == null) continue;
+
+    // AVAILABILITY IS READ BEFORE THE PRICE, and the order is the point.
+    //
+    // VTEX writes Price: 0 for anything not currently sellable — 17.3% of Auchan's catalog,
+    // and across 304 sampled products Price===0 and IsAvailable===false agreed every single
+    // time, with no exceptions in either direction. Parsing first made every one of those a
+    // "null price" and tripped the 5% tripwire on a perfectly healthy run.
+    //
+    // An item its own store says is unavailable is a legitimate skip, so it is counted as
+    // one — but counted, and bounded by its own threshold, because "everything is
+    // unavailable" is what a broken availability read also looks like.
     let available = true;
     if (map.available) {
       const v = dig(it, map.available);
       const bad = map.unavailableWhen ?? [false, 0, "false", "out of stock", "OUT_OF_STOCK", "unavailable"];
       available = !bad.includes(v as string | number | boolean);
     }
+
+    // null = ambiguous → skip the item rather than publish a wrong price
+    const rawPrice = String(dig(it, map.price) ?? "");
+    const det = parsePriceDetailed(rawPrice);
+    if (det.priceBani == null && !available) {
+      tally?.recordUnavailable();
+      continue;
+    }
+    const price = tally ? tally.record(rawPrice, det.priceBani) : det.priceBani;
+    if (price == null) continue;
     const p: StoreProduct = {
       name,
       brand: map.brand ? String(dig(it, map.brand) ?? "") : "",
@@ -170,8 +206,8 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   for (const route of ad.routes) {
     let added = 0;
     for (let pg = 1; pg <= maxPages; pg++) {
-      const url = route.url.includes("{page}") ? route.url.replace("{page}", String(pg)) : route.url;
-      if (pg > 1 && !route.url.includes("{page}")) break;
+      const url = pageUrl(route.url, pg, ad.pageSize);
+      if (pg > 1 && !PAGED.test(route.url)) break;
       let items: StoreProduct[] = [];
       try {
         if (ad.mode === "json") {

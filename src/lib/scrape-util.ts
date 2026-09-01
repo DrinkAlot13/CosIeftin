@@ -683,10 +683,20 @@ export async function matchPoolToCatalog(
     // the flag, and a flagged offer is withheld from display rather than shown with a
     // believable-looking number.
     const ownSize = o.ownSize;
+    // `rows` is the catalog snapshot taken BEFORE this run created anything, so a product
+    // created during this run has no entry here and `catUnit` is undefined.
+    //
+    // SILENCE IS NOT DISAGREEMENT — the same rule the matcher already applies to dosage.
+    // `ownSize.unit !== undefined` is true for every unit there is, so comparing against a
+    // missing value flagged every newly-created product as a size conflict: 71 of the 74
+    // flags on Auchan's first gated run said "offer is 0.5 kg, catalog product is 0.5
+    // undefined" — the numbers agreeing and the unit simply absent. A gate that fires on
+    // missing data instead of on a contradiction teaches everyone to ignore it.
     const catUnit = catUnitById.get(productId);
+    const unitContradicts = catUnit != null && ownSize != null && ownSize.unit !== catUnit;
     const sizeDisagrees =
       ownSize != null && o.unitSize > 0 &&
-      (ownSize.unit !== catUnit ||
+      (unitContradicts ||
        Math.abs(ownSize.unitSize - o.unitSize) > o.unitSize * SIZE_TOLERANCE + 1e-9);
 
     let writePrice = o.price;
@@ -700,7 +710,7 @@ export async function matchPoolToCatalog(
       flagged = true;
       flagReason =
         `size disagreement: offer is ${ownSize.unitSize} ${ownSize.unit}, ` +
-        `catalog product is ${o.unitSize} ${catUnit} — the match is wrong`;
+        `catalog product is ${o.unitSize} ${catUnit ?? "(unit unknown)"} — the match is wrong`;
     } else if (lowConf) {
       flagged = true;
       flagReason = `low match confidence ${o.score.toFixed(2)} (${o.reason})`;
@@ -763,6 +773,22 @@ export async function matchPoolToCatalog(
     if (prev === undefined || Math.abs(prev - writePrice) > 1e-9) {
       await prisma.priceHistory.create({ data: { offerId: offer.id, price: writeFloat, priceBani, referencePriceBani: o.sp.referencePriceBani ?? null } });
     }
+    // THE REJECTED PRICE IS THE EVIDENCE, so it is recorded rather than discarded.
+    //
+    // CLAUDE.md has always said a price failing the sanity gate "is flagged into a
+    // PriceAnomaly table for review". Only `scrape-dcneu` ever wrote one, so the rule held
+    // for one merchant out of twelve; on this path the rejected number was replaced by the
+    // previous price in memory and then lost. That is what made the Auchan 28,14 -> 12,00
+    // question take a scrape to answer: nothing had kept what was refused, or why.
+    if (jump || outlier) {
+      await prisma.priceAnomaly.create({
+        data: {
+          offerId: offer.id,
+          rejectedPriceBani: leiToBaniExact(o.price),
+          reason: flagReason ?? (jump ? "price jump" : "outlier vs median"),
+        },
+      }).catch(() => {});
+    }
   }
 
   await prisma.merchant.update({ where: { id: merchantId }, data: { lastOfferCount: chosen.size, lastScrapeAt: new Date() } }).catch(() => {});
@@ -774,7 +800,7 @@ export async function matchPoolToCatalog(
   const censusJson = await censusForMerchant(merchantId).catch(() => null);
   await recordScraperRun({
     merchantId, startedAt,
-    tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false },
+    tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false, unavailable: 0, unavailableRate: 0, unavailableExceedsThreshold: false },
     offersRejected: flaggedCount,
     previousRunCount: merchant?.lastOfferCount ?? 0,
     censusJson,
