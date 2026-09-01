@@ -69,7 +69,9 @@ async function main(): Promise<void> {
 
   for (const m of merchants) {
     const offers = await prisma.offer.findMany({
-      where: { merchantId: m.id, rawSourceBlob: { not: null } },
+      // Stale offers are withheld from display, so a stale row's unit price is not a defect
+      // anyone can see. Counting them double-reports every product whose size we just fixed.
+      where: { merchantId: m.id, rawSourceBlob: { not: null }, isStale: false },
       select: {
         pricePerUnit: true, price: true, storeName: true, rawSourceBlob: true,
         ownUnit: true, ownUnitSize: true,

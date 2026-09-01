@@ -88,7 +88,7 @@ function extract(json: any, pool: Cand[], seen: Set<string>): { added: number; t
       if (!seen.has(code)) {
         seen.add(code);
         const abs = o.url ? (String(o.url).startsWith("http") ? o.url : BASE + o.url) : BASE;
-        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), image: firstImage(o.images) });
+        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), rawSourceBlob: JSON.stringify(o).slice(0, 4096), image: firstImage(o.images) });
         added++;
       }
     }

@@ -6,8 +6,10 @@
 //   • EAN is a JOIN, not a guess — an exact GTIN match always wins.
 //   • Human MatchOverride decisions survive a rebuild and beat the heuristic.
 //   • Every match carries a confidence score + reason; low ones are flagged for review.
-//   • Prices pass a sanity gate (vs the offer's own history + the cross-store median);
-//     an implausible value is flagged and the old price is kept rather than written.
+//   • Prices pass a sanity gate (vs the offer's own history + the cross-store median) —
+//     which FLAGS and records, and never substitutes the stored price for the fresh one.
+//     History-anchoring defends stale data against fresh data, and the four cases examined
+//     by hand all went the same way: the refused value was the correct one.
 //   • A run that collapses to <60% of the store's last offer count is REFUSED (site
 //     redesign / block) instead of wiping good data.
 //   • Price history is append-on-change only.
@@ -68,6 +70,9 @@ export type StoreProduct = {
 
 /** What a pool carries, as a fraction of its rows. Reported per run and gated on. */
 export type PoolCompleteness = {
+  /** items carrying the merchant's own payload — the only basis for an independent check */
+  withSourceBlob: number;
+  sourceBlobPct: number;
   total: number;
   withRawPriceText: number;
   withProductUrl: number;
@@ -87,10 +92,16 @@ export function poolCompleteness(pool: StoreProduct[]): PoolCompleteness {
   const withProductUrl = pool.filter((p) => nonEmpty(p.productUrl)).length;
   const withEan = pool.filter((p) => nonEmpty(p.ean)).length;
   const withImage = pool.filter((p) => nonEmpty(p.image)).length;
+  // The source payload is what makes an INDEPENDENT check possible. Kaufland's own
+  // per-unit price found 25 real size bugs; ten of twelve merchants could not be checked at
+  // all, because their payload was discarded here. Coverage is reported so that gap is
+  // visible per run rather than discovered a month later.
+  const withSourceBlob = pool.filter((p) => nonEmpty(p.rawSourceBlob)).length;
   const pct = (n: number): number => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
   return {
-    total, withRawPriceText, withProductUrl, withEan, withImage,
+    total, withRawPriceText, withProductUrl, withEan, withImage, withSourceBlob,
     rawPriceTextPct: pct(withRawPriceText), productUrlPct: pct(withProductUrl),
+    sourceBlobPct: pct(withSourceBlob),
   };
 }
 
@@ -486,7 +497,8 @@ export async function matchPoolToCatalog(
     `  pool contract: ${completeness.total} products · rawPriceText ${completeness.rawPriceTextPct}%` +
     ` · productUrl ${completeness.productUrlPct}%` +
     ` · ean ${completeness.withEan}` +
-    ` · image ${completeness.withImage}`,
+    ` · image ${completeness.withImage}` +
+    ` · sourceBlob ${completeness.sourceBlobPct}%${completeness.sourceBlobPct === 0 ? " ⚠ no independent check possible" : ""}`,
   );
 
   const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceChannel: true } });
@@ -786,13 +798,32 @@ export async function matchPoolToCatalog(
       (unitContradicts ||
        Math.abs(ownSize.unitSize - o.unitSize) > o.unitSize * SIZE_TOLERANCE + 1e-9);
 
-    let writePrice = o.price;
+    // ── THE HISTORY GATE FLAGS. IT DOES NOT SUBSTITUTE. ──────────────────────────────────
+    //
+    // `writePrice = prev` used to sit here: on a large move we kept the STORED price and
+    // discarded the fresh observation. That is backwards, and four cases examined by hand
+    // proved it — Auchan 12,00 (independently re-scraped at 11,69), Kaufland 6,89 (the
+    // merchant's own JSON says 6,89), a Mega Image 5+1 six-pack holding 5,29 against a real
+    // 23,95, and the whole 30 August correction wave.
+    //
+    // The reason generalizes. A gate anchored on stored history assumes history is more
+    // trustworthy than the new observation, and that assumption is exactly inverted while
+    // parsers are being corrected — which has been every day of this project. History
+    // anchoring defends stale data against fresh data. 135 stored prices in this catalog were
+    // kept over a refused one; 106 of them are DCNeu rows from the fabricated-price era
+    // holding values four to six times too low, defended against their own correction.
+    //
+    // It is not uniformly wrong — Glenfiddich 21 kept 899,99 over a mis-parsed 152,42, and
+    // there the gate was right. It simply cannot tell a correction from a parse error, so it
+    // must not be the thing that decides. It flags; a flagged offer is withheld from display
+    // and queued for review; and what decides is an oracle where one exists (a merchant's own
+    // published per-unit price) or unit-price plausibility where one does not.
+    const writePrice = o.price;
     let flagged = false;
     let flagReason: string | null = null;
     if (jump || outlier) {
       flagged = true;
-      flagReason = jump ? `price jump ${prev}→${o.price}` : `outlier vs median ${med.toFixed(2)}`;
-      if (prev && prev > 0) writePrice = prev; // keep the trusted price; don't write garbage
+      flagReason = jump ? `price moved ${prev}→${o.price}` : `outlier vs cross-store median ${med.toFixed(2)}`;
     } else if (sizeDisagrees && ownSize) {
       flagged = true;
       flagReason =
@@ -822,6 +853,8 @@ export async function matchPoolToCatalog(
     // value and the kept value all go to PriceAnomaly. The item-describing fields (name, own
     // size, deep link) and `lastObservedAt` still update — we DID see the product, we just
     // did not believe its price.
+    // Always false now that the gate never substitutes. Kept as an explicit guard so that
+    // if any future gate DOES substitute, it cannot silently corrupt provenance again.
     const priceWasRefused = Math.abs(writePrice - o.price) > 1e-9;
     const provenance = {
       // The offer's OWN identity, so the unit price can be re-derived and checked without a
@@ -890,14 +923,18 @@ export async function matchPoolToCatalog(
     // previous price in memory and then lost. That is what made the Auchan 28,14 -> 12,00
     // question take a scrape to answer: nothing had kept what was refused, or why.
     if (jump || outlier) {
+      // rejectedPriceBani is 0 because NOTHING WAS REFUSED any more — the fresh value is what
+      // we wrote. The record exists so a human can review a large move, and the previous
+      // value is carried in the reason. `audit:kept-over-refused` keys on a non-zero rejected
+      // value, so it correctly reports nothing new from here on.
       await recordRefusal({
         offerId: offer.id,
         merchantId,
         storeName: o.sp.name,
-        rejectedPriceBani: leiToBaniExact(o.price),
+        rejectedPriceBani: 0,
         acceptedPriceBani: priceBani,
         rawPriceText: o.sp.rawPriceText ?? null,
-        reason: flagReason ?? (jump ? "price jump" : "outlier vs median"),
+        reason: `${flagReason ?? "large move"} — written and flagged for review, not refused`,
       });
     }
   }

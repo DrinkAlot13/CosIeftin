@@ -53,7 +53,7 @@ function parseProducts(html: string): StoreProduct[] {
     const price = (priceM ? parsePriceLei(priceM[1]) : null) ?? 0;
     const img = (b.match(/srcset="(https:\/\/media\.farmaciatei\.ro\/[^" ]+)/i) || [])[1] || null;
     if (!url || !name || !(price > 0)) continue;
-    out.push({ name, brand: "", price, available: true, url, productUrl: url, rawPriceText: priceM ? priceM[1] : null, image: img });
+    out.push({ name, brand: "", price, available: true, url, productUrl: url, rawPriceText: priceM ? priceM[1] : null, rawSourceBlob: JSON.stringify({ name, price, url, raw: priceM ? priceM[0] : null }).slice(0, 4096), image: img });
   }
   return out;
 }

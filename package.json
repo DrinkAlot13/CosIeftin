@@ -75,6 +75,8 @@
     "audit:price-moves": "tsx scripts/audit-price-moves.ts",
     "audit:dropped": "tsx scripts/audit-dropped.ts",
     "repair:flagged-provenance": "tsx scripts/repair-flagged-provenance.ts",
+    "audit:kept-over-refused": "tsx scripts/audit-kept-over-refused.ts",
+    "audit:addnew-impact": "tsx scripts/audit-addnew-impact.ts",
     "audit:rejections": "tsx scripts/audit-rejections.ts",
     "audit:unit-oracle": "tsx scripts/audit-unit-oracle.ts",
     "audit:liveness": "tsx scripts/audit-liveness.ts",

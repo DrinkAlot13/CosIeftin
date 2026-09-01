@@ -87,7 +87,10 @@ async function cards(ids: number[]): Promise<Cand[]> {
         url,
         // Provenance set at the READ, not at the matcher call where a map can drop it.
         productUrl: p.slug ? url : null,
-        rawPriceText: String(price),
+        rawPriceText: String(priceNum),
+        // KEEP THE SOURCE PAYLOAD — see scrape-util. Without it, no independent check on
+        // our size handling is possible for this merchant.
+        rawSourceBlob: JSON.stringify(p).slice(0, 4096),
         image: p?.image?.path || null,
       });
     }

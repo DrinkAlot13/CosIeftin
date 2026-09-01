@@ -77,6 +77,7 @@ async function fetchPage(path: string): Promise<{ products: Candidate[]; leaves:
         // narrowing map can drop it without the compiler noticing.
         productUrl: o.slug ? url : null,
         rawPriceText: String(o.price),
+        rawSourceBlob: JSON.stringify(o).slice(0, 4096),
         image: firstUrl(o.image),
       });
     }

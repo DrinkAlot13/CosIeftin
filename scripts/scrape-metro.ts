@@ -145,7 +145,7 @@ async function main() {
           const pr = priced.get(id)!;
           if (!meta || seen.has(id)) continue;
           seen.add(id);
-          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), image: meta.image });
+          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), rawSourceBlob: JSON.stringify({ meta, pr }).slice(0, 4096), image: meta.image });
           catAdded++;
         }
       }
