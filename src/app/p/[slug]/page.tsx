@@ -19,7 +19,13 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const data = await getItemPage(params.slug);
   if (!data) return { title: "Produs" };
   const canonical = abs(`/p/${data.product.slug}`);
-  const description = `Compară prețurile pentru ${data.product.name} la ${data.offers.length} magazine. Cel mai mic preț: ${formatRON(data.summary.lowest)}.`;
+  // The description must not promise more than the page delivers: `offers.length` counts
+  // every row including out-of-stock ones, so a page showing one buyable price advertised
+  // four shops in search results.
+  const shops = data.summary.inStockCount;
+  const description = shops > 0
+    ? `Compară prețurile pentru ${data.product.name} la ${shops} ${shops === 1 ? "magazin" : "magazine"}. Cel mai mic preț: ${formatRON(data.summary.lowest)}.`
+    : `${data.product.name} — momentan fără preț disponibil în magazinele urmărite.`;
   return {
     title: data.product.name,
     description,
@@ -85,9 +91,20 @@ export default async function ItemPage({ params }: { params: { slug: string } })
             <span className="big">{formatRON(summary.lowest)}</span>
             {summary.savings > 0 && <span className="strike">{formatRON(summary.highest)}</span>}
           </div>
+          {/*
+            ONE COUNT, SAID THE SAME WAY EVERYWHERE ON THIS PAGE.
+            This line said "1 magazine" while the table below listed four rows, because it
+            reported offerCount (in stock) next to a table that renders every offer. Three
+            different counts existed on one page: this one, the section heading, and the meta
+            description, each with its own definition. A page that disagrees with itself is
+            worse than a page with a wrong number, because the reader cannot tell which half
+            to trust.
+          */}
           <div className="muted" style={{ marginBottom: 10 }}>
             {bestOffer && bestOffer.pricePerUnit > 0 ? `${formatPerUnit(bestOffer.pricePerUnit, product.unit)} · ` : ""}
-            {summary.offerCount} magazine
+            {summary.inStockCount === offers.length
+              ? `${offers.length} magazine`
+              : `${summary.inStockCount} din ${offers.length} magazine au stoc azi`}
           </div>
           {priceInsight.atLow ? (
             <div className="save-note" style={{ marginBottom: 14 }}>🔥 Moment bun de cumpărat — preț la minimul istoric{priceInsight.belowAvgPct > 3 ? ` (cu ${Math.round(priceInsight.belowAvgPct)}% sub media perioadei)` : ""}.</div>
@@ -119,9 +136,9 @@ export default async function ItemPage({ params }: { params: { slug: string } })
         */}
         <div className="section-head">
           <h2>
-            {summary.inStockCount === summary.offerCount
-              ? `Prețuri în ${summary.offerCount} magazine`
-              : `Disponibil azi în ${summary.inStockCount} din ${summary.offerCount} magazine`}
+            {summary.inStockCount === offers.length
+              ? `Prețuri în ${offers.length} magazine`
+              : `Disponibil azi în ${summary.inStockCount} din ${offers.length} magazine`}
           </h2>
         </div>
         <div className="card" style={{ padding: 4 }}><OfferTable offers={offers} unit={product.unit} /></div>
