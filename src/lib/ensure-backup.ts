@@ -24,14 +24,27 @@ const MANIFEST = join(process.cwd(), "backups", "manifest.json");
 /** A snapshot younger than this makes another one redundant. */
 export const BACKUP_MAX_AGE_MS = 60 * 60 * 1000;
 
-type ManifestEntry = { takenAt?: string };
+type ManifestEntry = { takenAt?: string; file?: string };
 
-/** How old is the newest recorded snapshot, in ms? Infinity when there is none. */
+/**
+ * How old is the newest snapshot THAT ACTUALLY EXISTS ON DISK, in ms? Infinity when none.
+ *
+ * THE FILE IS CHECKED, NOT JUST THE MANIFEST ENTRY. This function used to read only the
+ * manifest, which makes it a guard whose success condition is "a record says so" — the same
+ * shape as the drop guard reporting healthy while Metro was dead. A manifest entry written
+ * for a snapshot that failed to land would make `backupIsRecent()` return true forever, and
+ * every scrape would then short-circuit its backup and run unprotected while printing a
+ * reassuring "snapshot is N min old — skipping".
+ *
+ * Verified on the live manifest at the time of writing: 8 entries, 8 files, none missing.
+ * The point is that nothing had ever checked.
+ */
 export function newestBackupAgeMs(now = Date.now()): number {
   if (!existsSync(MANIFEST)) return Infinity;
   try {
     const entries = JSON.parse(readFileSync(MANIFEST, "utf8")) as ManifestEntry[];
     const times = entries
+      .filter((e) => !e.file || existsSync(join(process.cwd(), "backups", e.file)))
       .map((e) => (e.takenAt ? Date.parse(e.takenAt) : NaN))
       .filter((t) => Number.isFinite(t));
     if (times.length === 0) return Infinity;
@@ -39,6 +52,20 @@ export function newestBackupAgeMs(now = Date.now()): number {
   } catch {
     // An unreadable manifest is not evidence of a recent backup.
     return Infinity;
+  }
+}
+
+/** Manifest entries whose snapshot file is not on disk. Should always be empty. */
+export function missingBackupFiles(): string[] {
+  if (!existsSync(MANIFEST)) return [];
+  try {
+    const entries = JSON.parse(readFileSync(MANIFEST, "utf8")) as ManifestEntry[];
+    return entries
+      .map((e) => e.file)
+      .filter((f): f is string => typeof f === "string")
+      .filter((f) => !existsSync(join(process.cwd(), "backups", f)));
+  } catch {
+    return [];
   }
 }
 
