@@ -806,22 +806,44 @@ export async function matchPoolToCatalog(
 
     // Provenance travels with every write: the raw string that produced this price, the
     // deep link (null when the source has none), and any advertised reference price.
+    // PROVENANCE MUST DESCRIBE THE PRICE WE ACTUALLY WROTE.
+    //
+    // When a gate refuses a price we keep the previously trusted one — and this block used to
+    // overwrite `rawPriceText` with the REFUSED string anyway. The row then claimed a source
+    // it did not come from, and the one column that exists so a price can be checked against
+    // its source was corrupted for precisely the rows most in need of checking.
+    //
+    // Measured before the fix: 129 offers in the catalog did not reproduce from their own
+    // rawPriceText, and ALL 129 were flagged — 129 of the 130 flagged offers in the database.
+    // Not an edge case: a defect on the shared write path that hit every refusal.
+    //
+    // On a refusal the price-describing fields are simply omitted from the update, so Prisma
+    // leaves the previous values in place. Nothing is lost: the refused string, the refused
+    // value and the kept value all go to PriceAnomaly. The item-describing fields (name, own
+    // size, deep link) and `lastObservedAt` still update — we DID see the product, we just
+    // did not believe its price.
+    const priceWasRefused = Math.abs(writePrice - o.price) > 1e-9;
     const provenance = {
       // The offer's OWN identity, so the unit price can be re-derived and checked without a
       // re-scrape. Its absence is why the catalog-size bug was unverifiable from stored data.
       storeName: o.sp.name,
       ownUnit: ownSize?.unit ?? null,
       ownUnitSize: ownSize?.unitSize ?? null,
-      rawPriceText: o.sp.rawPriceText ?? null,
-      rawSourceBlob: o.sp.rawSourceBlob ? o.sp.rawSourceBlob.slice(0, 4096) : null,
       productUrl: o.sp.productUrl ?? null,
-      referencePriceBani: o.sp.referencePriceBani ?? null,
-      referencePriceKind: o.sp.referencePriceKind ?? null,
       promoValidFrom: o.sp.promoValidFrom ?? null,
       promoValidTo: o.sp.promoValidTo ?? null,
       lastObservedAt: new Date(),
       isStale: false,
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
+      // Only when the price we are writing is the price we just read.
+      ...(priceWasRefused
+        ? {}
+        : {
+            rawPriceText: o.sp.rawPriceText ?? null,
+            rawSourceBlob: o.sp.rawSourceBlob ? o.sp.rawSourceBlob.slice(0, 4096) : null,
+            referencePriceBani: o.sp.referencePriceBani ?? null,
+            referencePriceKind: o.sp.referencePriceKind ?? null,
+          }),
     };
     // BANI IS THE VALUE WE WRITE; the float is derived from it, never the reverse.
     //

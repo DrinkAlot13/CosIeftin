@@ -16,6 +16,7 @@
 //      npm run audit:db -- --run <scraperRunId>   (record the result against a run)
 
 import { PrismaClient } from "@prisma/client";
+import { parsePrice } from "../src/lib/price/parsePrice";
 import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
 
 const prisma = new PrismaClient();
@@ -154,6 +155,39 @@ async function auditPrices() {
     }
     record("Prices", "priceSource uses only the documented vocabulary",
       [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
+  }
+
+  // ── A PRICE MUST REPRODUCE FROM ITS OWN SOURCE STRING.
+  //
+  //    `rawPriceText` exists so a stored price can be checked against what the page said, and
+  //    so a parser change can be replayed against history. A row where the two disagree is a
+  //    row whose provenance is a lie.
+  //
+  //    Before this invariant existed, 129 rows disagreed — and ALL 129 were flagged offers,
+  //    129 of the 130 flagged rows in the database. The cause was on the shared write path:
+  //    when a gate refused a price we kept the previously trusted value and overwrote
+  //    rawPriceText with the REFUSED string anyway, corrupting the provenance of exactly the
+  //    rows most in need of checking. Found by chasing a single farmaciatei row that stored
+  //    31,00 against a source of "146,00".
+  {
+    const offers = await prisma.offer.findMany({
+      where: { rawPriceText: { not: null } },
+      select: { id: true, price: true, priceBani: true, rawPriceText: true, flagged: true,
+                merchant: { select: { slug: true } } },
+    });
+    const broken: string[] = [];
+    for (const o of offers) {
+      const want = o.priceBani ?? Math.round(o.price * 100);
+      const got = parsePrice(o.rawPriceText ?? "");
+      if (got == null) continue; // unparseable is a different invariant
+      if (Math.abs(got - want) <= 1) continue;
+      broken.push(
+        `offer ${o.id} [${o.merchant.slug}] stores ${(want / 100).toFixed(2)} but its own ` +
+        `rawPriceText ${JSON.stringify(o.rawPriceText)} reads ${(got / 100).toFixed(2)}` +
+        `${o.flagged ? " (flagged)" : ""}`,
+      );
+    }
+    record("Prices", "every stored price reproduces from its own rawPriceText", broken);
   }
 
   // ── A MERCHANT THAT PRODUCES NOTHING IS NOT A QUIET MERCHANT.
