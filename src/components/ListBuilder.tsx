@@ -1,5 +1,6 @@
 "use client";
 
+import { isShelfPrice, normalizePriceSource } from "@/lib/price-source";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadBasket, saveBasket } from "@/lib/offline-cache";
@@ -398,7 +399,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                                 sub comanda minimă ({formatRON(st.minOrder ?? 0)})
                               </div>
                             )}
-                            {st.priceSource !== "shelf" && (
+                            {st.priceSource && !isShelfPrice(normalizePriceSource(st.priceSource)) && (
                               <div className="muted" style={{ fontSize: 11.5 }}>preț livrare (poate include adaos)</div>
                             )}
                           </td>

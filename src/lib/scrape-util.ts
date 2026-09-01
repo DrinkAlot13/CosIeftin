@@ -17,6 +17,8 @@ import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
 import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "./price/parsePrice";
 import { tally as tallyCensus } from "./offer-census";
+import { ensureBackup } from "./ensure-backup";
+import { toPriceSource } from "./price-source";
 import { recordScraperRun } from "./scraper-run";
 
 /**
@@ -471,6 +473,10 @@ export async function matchPoolToCatalog(
   const addNew = opts.addNew ?? false;
   const startedAt = new Date();
 
+  // A snapshot before anything writes. Short-circuits if one is under an hour old, so twelve
+  // scrapers in one session produce one snapshot, not twelve.
+  ensureBackup(`${opts.label ?? "merchant " + merchantId} scrape`);
+
   // Check provenance BEFORE any database work: a mangled pool must not write at all.
   const completeness = assertPoolContract(pool, opts.label ?? `merchant ${merchantId}`);
   console.log(
@@ -548,7 +554,7 @@ export async function matchPoolToCatalog(
     const better = !prev || (c.sp.available && !prev.available) || (c.sp.available === prev.available && c.sp.price < prev.price);
     // ownSize is the size parsed from THIS offer's own name. It is what the unit price must be
     // computed from; the catalog product's size is a different product's size.
-    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: c.sp.priceSource ?? merchant?.priceSource ?? "SHELF", sp: c.sp });
+    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: toPriceSource(c.sp.priceSource ?? merchant?.priceSource), sp: c.sp });
   };
   // productId a store item is forbidden from (reject override), keyed by storeKey.
   const rejects = new Set<string>();

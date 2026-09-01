@@ -6,6 +6,7 @@
 // Run: npm run scrape:all   (or npm run refresh = setup + this)
 
 import { spawnSync } from "node:child_process";
+import { ensureBackup } from "../src/lib/ensure-backup";
 
 // order matters: auchan first (catalog master); then match-only, then addNew stores,
 // then the separate sections, then image self-hosting.
@@ -28,6 +29,9 @@ function runWithRetry(script: string, retries = 1): boolean {
 }
 
 function main() {
+  // Before the first scraper, not after. The per-scraper guards short-circuit on this one.
+  ensureBackup("the full scrape");
+
   if (!runWithRetry("scrape:auchan")) {
     console.error("\n[scrape-all] Auchan (catalog master) failed — aborting so stores don't match an empty catalog.");
     process.exit(1);

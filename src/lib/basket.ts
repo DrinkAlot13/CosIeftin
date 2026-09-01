@@ -1,3 +1,4 @@
+import { isShelfPrice, normalizePriceSource } from "./price-source";
 // Grocery-list optimizer: given items + every chain's offers, work out the two
 // answers users care about — cheapest SINGLE store (one trip) vs cheapest SPLIT
 // (buy each item wherever it's cheapest) — and the savings/convenience trade-off.
@@ -179,7 +180,9 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
         const e = effectivePrice(here, useLoyalty);
         subtotal += e.price * qty;
         if (e.loyalty) usesLoyalty = true;
-        if (here.priceSource && here.priceSource !== "shelf") source = here.priceSource;
+        // Compare against the canonical vocabulary, never a string literal: "shelf" matched
+        // only half the shelf offers, because the other half were spelled "SHELF".
+        if (here.priceSource && !isShelfPrice(normalizePriceSource(here.priceSource))) source = here.priceSource;
         found++;
       } else {
         missing++;

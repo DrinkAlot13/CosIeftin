@@ -9,7 +9,24 @@
 // stylesheet returns 200 with real content. It SKIPS rather than fails when no server is
 // running, so `npm test` stays usable offline; set SMOKE_REQUIRE=1 in CI to make a missing
 // server a failure.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "./run";
+
+/**
+ * Is this asset in the build on disk?
+ *
+ * A server started before the last `npm run build` serves HTML referencing chunk names that no
+ * longer exist. Nothing is wrong with the code, and failing a COMMIT on a developer's stale
+ * localhost process is wrong for the same reason the pre-commit hook runs verify:code and not
+ * verify. tests/smoke-page-integrity.test.ts already made this distinction; this file kept
+ * failing for want of it.
+ */
+function onDisk(assetUrl: string): boolean {
+  const m = assetUrl.match(/\/_next\/(.+?)(?:\?|$)/);
+  if (!m) return true;
+  return existsSync(join(process.cwd(), ".next", ...m[1].split("/")));
+}
 
 const BASE = process.env.SMOKE_URL ?? "http://localhost:3200";
 const REQUIRE_SERVER = process.env.SMOKE_REQUIRE === "1";
@@ -56,9 +73,19 @@ function probe(): Promise<Probe> {
 
 /** True when the assertion should run; prints a skip note otherwise. */
 function ready(p: Probe): boolean {
-  if (p.up) return true;
-  if (REQUIRE_SERVER) throw new Error(`no server at ${BASE} and SMOKE_REQUIRE=1`);
-  return false;
+  if (!p.up) {
+    if (REQUIRE_SERVER) throw new Error(`no server at ${BASE} and SMOKE_REQUIRE=1`);
+    return false;
+  }
+  // Stale server (assets missing from .next) is an environment condition, not a code defect.
+  const stale = p.hrefs.some((h) => h.startsWith("/_next/") && !onDisk(h));
+  if (stale) {
+    const msg = `the server at ${BASE} is running an older build — restart it (npx next start -p 3200)`;
+    if (REQUIRE_SERVER) throw new Error(msg);
+    console.log(`      (${msg})`);
+    return false;
+  }
+  return true;
 }
 
 describe("smoke — the page is actually styled", () => {

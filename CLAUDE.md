@@ -115,6 +115,34 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 - User-facing strings are Romanian. Code, comments and identifiers are English.
 - Do not add dependencies without asking.
 
+## Migrations and backfills
+
+- **A migration or backfill script may not verify its own work.** Verification lives in
+  `scripts/audit-db.ts`, which imports only `PrismaClient`, and any new backfill must ship with
+  an invariant there. A script that reports its own success is reporting that it agrees with
+  itself.
+
+  This has now happened four times. Most recently `backfill-phase1` counted only the uppercase
+  half of a two-vocabulary column, printed a green line, and under-reported by 19,000 offers.
+
+- **Add and backfill in one migration; drop in the next.** A rename is a destructive migration
+  wearing a harmless name. The sequence is add → backfill → verify → switch reads → drop, and
+  collapsing any two of those steps is how `lastObservedAt` lost 43,765 observation dates in a
+  single `db push`.
+
+- **Never write a parent's value onto its children.** `backfill-phase1` stamped
+  `merchant.lastScrapeAt` onto every offer of that merchant, turning "the run happened" into
+  "this row was observed" and corrupting 10,388 rows with a plausible value for weeks. If a
+  child's real value is unknown, leave it null: a null is a question, an invented value is an
+  answer nobody checked.
+
+- **One vocabulary per column, defined in TypeScript.** `Offer.priceSource` held five spellings
+  of a four-value field because two writers disagreed on case, and two live read sites compared
+  against a string literal. Give an enum-valued column a module (see `lib/price-source.ts`) with
+  the union type, the mapper, and a translation function at any boundary where a different
+  vocabulary meets it. SQLite cannot express enums, so the type system and `audit-db` are the
+  enforcement.
+
 ## Workflow
 - Small commits. Run `npm run test` before finishing any task.
 - `npm run verify:code` = typecheck + tests, and is what the pre-commit hook runs.

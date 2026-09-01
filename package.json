@@ -71,7 +71,8 @@
     "audit:pending": "tsx scripts/audit-pending.ts",
     "compute:home": "tsx scripts/compute-home.ts",
     "audit:unitprice": "tsx scripts/audit-unit-price.ts",
-    "audit:staleness": "tsx scripts/audit-staleness.ts"
+    "audit:staleness": "tsx scripts/audit-staleness.ts",
+    "backfill:pricesource": "tsx scripts/backfill-pricesource.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

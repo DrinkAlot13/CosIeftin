@@ -8,6 +8,7 @@
 import { prisma } from "../src/lib/db";
 import { parseSize } from "../src/lib/ingest-core";
 import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "../src/lib/price/parsePrice";
+import { ensureBackup } from "../src/lib/ensure-backup";
 import { slugify } from "../src/lib/scrape-util";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
@@ -49,6 +50,10 @@ async function browse(catId: number, from: number, to: number) {
 }
 
 async function main() {
+  // Auchan does not go through matchPoolToCatalog, so it needs its own guard — the same
+  // divergence that left it without a sanity gate and without confidence scores.
+  ensureBackup("auchan scrape");
+
   const merchant = await prisma.merchant.upsert({
     where: { slug: "auchan" },
     update: { active: true, name: "Auchan", websiteUrl: BASE, color: "#eda100" },
