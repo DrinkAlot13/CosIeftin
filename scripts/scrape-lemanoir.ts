@@ -50,7 +50,7 @@ function parseProducts(html: string, cat: string): StoreProduct[] {
     const imgM = b.match(/<img[^>]+(?:data-src|src)="([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i);
     if (!name || !(price > 0)) continue;
     const abs = url.startsWith("http") ? url : `${BASE}/${url.replace(/^\//, "")}`;
-    out.push({ name: normVol(name), brand: "", price, available: true, url: abs, productUrl: abs, rawPriceText: priceM ? priceM[1] : null, image: imgM ? imgM[1] : null, category: cat });
+    out.push({ name: normVol(name), brand: "", price, available: true, url: abs, productUrl: abs, rawPriceText: priceM ? priceM[1] : null, image: imgM ? imgM[1] : null, category: cat, rawSourceBlob: JSON.stringify({ name, price, url: abs, raw: priceM ? priceM[0] : null }).slice(0, 4096) });
   }
   return out;
 }

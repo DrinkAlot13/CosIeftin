@@ -24,6 +24,7 @@ import { tally as tallyCensus } from "./offer-census";
 import { ensureBackup } from "./ensure-backup";
 import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
 import { toPriceSource } from "./price-source";
+import { exclusionReason } from "./excluded-categories";
 import { recordScraperRun } from "./scraper-run";
 
 /**
@@ -509,6 +510,35 @@ export async function matchPoolToCatalog(
     ` · image ${completeness.withImage}` +
     ` · sourceBlob ${completeness.sourceBlobPct}%${completeness.sourceBlobPct === 0 ? " ⚠ no independent check possible" : ""}`,
   );
+
+  // ── EXCLUDED CATEGORIES, refused HERE so they can never enter the catalog.
+  //
+  // Tobacco and nicotine. Legea 349/2002 prohibits advertising and promotion of tobacco
+  // products and Legea 201/2016 extends the regime to electronic cigarettes and refills; a
+  // public price-comparison page is not an obvious fit for the narrow exceptions, and a
+  // grocery basket optimiser has no reason to carry it at all.
+  //
+  // The exclusion happens BEFORE matching, not at display time, because a row that exists in
+  // the database is a worse place to discover a legal question from than a row that was never
+  // written. It also puts it out of reach of `addNew`, which would otherwise CREATE the
+  // catalog entry — Mega Image's pool alone carries 126 tobacco head nouns.
+  const kept: StoreProduct[] = [];
+  const excludedByReason = new Map<string, number>();
+  const excludedSamples: string[] = [];
+  for (const sp of pool) {
+    const reason = exclusionReason(sp.name, sp.brand);
+    if (reason === null) { kept.push(sp); continue; }
+    excludedByReason.set(reason, (excludedByReason.get(reason) ?? 0) + 1);
+    if (excludedSamples.length < 8) excludedSamples.push(sp.name.slice(0, 60));
+  }
+  if (excludedByReason.size > 0) {
+    console.log(
+      `  excluded ${pool.length - kept.length} product(s) we do not carry: ` +
+      `${[...excludedByReason.entries()].map(([k, v]) => `${k}=${v}`).join("  ")}`,
+    );
+    for (const x of excludedSamples) console.log(`      ${x}`);
+  }
+  pool = kept;
 
   const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceChannel: true } });
   const rows = await prisma.product.findMany({ where: { section }, select: { id: true, name: true, brand: true, ean: true, unit: true, unitSize: true, image: true } });

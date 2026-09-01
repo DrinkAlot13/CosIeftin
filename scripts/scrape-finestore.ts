@@ -112,6 +112,11 @@ async function main() {
           url: r.href ? (r.href.startsWith("http") ? r.href : `${BASE}/${r.href.replace(/^\//, "")}`) : BASE,
           image: r.img ? (r.img.startsWith("http") ? r.img : `${BASE}/${r.img.replace(/^\//, "")}`) : null,
           category: c.cat,
+          // KEEP THE SOURCE PAYLOAD. This is a DOM source, so there is no JSON record — the
+          // extracted card fields are the closest honest equivalent, and something is better
+          // than the zero we had. Without it `audit:unit-oracle` cannot check this merchant
+          // at all, and ten of twelve were in that state.
+          rawSourceBlob: JSON.stringify(r).slice(0, 4096),
         });
         pageAdded++;
         catAdded++;

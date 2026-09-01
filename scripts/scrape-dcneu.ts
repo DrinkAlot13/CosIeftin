@@ -131,6 +131,16 @@ export function parseCard(card: string): { product: DcneuProduct | null; reason?
       url,
       productUrl: url,
       rawPriceText,
+      // KEEP THE SOURCE PAYLOAD. DCNeu is an HTML source, so there is no JSON record to
+      // store — the card's own HTML fragment is the honest equivalent, bounded so a 6,000
+      // product run does not carry megabytes of markup into the database.
+      //
+      // Ten of twelve merchants kept nothing here, which is why `audit:unit-oracle` — the
+      // only check in this project that does not share an assumption with the thing it
+      // checks — could be run against exactly one of them. DCNeu is also the merchant whose
+      // fabricated-price era produced the 106 rows still being unwound today; it is the last
+      // one that should be un-auditable.
+      rawSourceBlob: card.slice(0, 3000),
       referencePriceBani: oldLei != null && oldLei > withVatLei ? Math.round(oldLei * 100) : null,
       referencePriceKind: oldLei != null && oldLei > withVatLei ? "STRIKETHROUGH" : null,
       image: img,
