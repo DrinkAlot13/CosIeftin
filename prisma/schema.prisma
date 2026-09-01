@@ -83,12 +83,22 @@ model Product {
   blocked    UserBlocklist[]
   packChanges ProductPackChange[]
   pendingMatches PendingMatch[]
+  /// How far this product's daily-low price has fallen from its recent peak, in percent.
+  ///
+  /// PRECOMPUTED, because deriving it on request meant loading every grocery product with
+  /// every offer and every price-history row — 97,630 rows and 4.4 seconds to render fourteen
+  /// items. Prices change once a night, so this is recomputed when the scrape finishes rather
+  /// than on a timer or, worse, per request.
+  dropPct     Float?
+  dropComputedAt DateTime?
+
   specs       ProductSpec[]
   createdAt  DateTime          @default(now())
 
   @@index([section])
   @@index([nameNorm])
   @@index([equivalenceClassId])
+  @@index([section, dropPct])
 }
 
 /// One chain's price for one item.

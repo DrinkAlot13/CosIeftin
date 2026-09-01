@@ -38,7 +38,7 @@
     "scrape:all": "tsx scripts/scrape-all.ts",
     "setup": "prisma db push --force-reset --skip-generate && tsx scripts/seed-catalog.ts && tsx scripts/seed-admin.ts",
     "refresh": "npm run setup && npm run scrape:all",
-    "nightly": "npm run backup && npm run scrape:all && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run notify:alerts && npm run audit:db",
+    "nightly": "npm run backup && npm run scrape:all && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run compute:home && npm run notify:alerts && npm run audit:db",
     "backfill:namenorm": "tsx scripts/backfill-namenorm.ts",
     "index:compute": "tsx scripts/compute-index.ts",
     "fixture:save": "tsx scripts/save-fixture.ts",
@@ -68,7 +68,8 @@
     "census": "tsx scripts/offer-census.ts",
     "backfill:pricebani": "tsx scripts/backfill-pricebani.ts",
     "rotate:admin": "tsx scripts/rotate-admin.ts",
-    "audit:pending": "tsx scripts/audit-pending.ts"
+    "audit:pending": "tsx scripts/audit-pending.ts",
+    "compute:home": "tsx scripts/compute-home.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

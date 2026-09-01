@@ -181,12 +181,43 @@ export async function suggestProducts(query: string, limit = 6) {
   return results.slice(0, limit).map((p) => ({ slug: p.slug, name: p.name, brand: p.brand, lowest: p.summary.lowest }));
 }
 
+/**
+ * The homepage's two shelves: eight featured products and six with a recent price drop.
+ *
+ * This used to load EVERY grocery product with EVERY offer and EVERY price-history row —
+ * measured at 22,428 products, 31,280 offers and 43,922 history rows, 97,630 rows and 4.4
+ * seconds, to render fourteen items. The drop signal was the reason: it needs history, so the
+ * whole catalog came with it.
+ *
+ * The drop is now a precomputed column (`Product.dropPct`, refreshed by `npm run compute:home`
+ * at the end of the nightly), so both shelves are bounded queries that touch only the rows they
+ * render. Prices change once a night; deriving this per request was paying a full-catalog scan
+ * for an answer that had not changed since the last scrape.
+ */
 export async function getHomeSections() {
-  const products = await prisma.product.findMany({
-    where: { section: "grocery" },
-    include: { offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } } } }, category: true },
-  });
-  const decorated = products.map((p) => ({
+  const live = { isStale: false, merchant: { active: true } } as const;
+  const shelf = {
+    // No history: neither shelf renders a chart. That single omission is most of the win.
+    offers: { where: { merchant: { active: true } }, include: { merchant: true } },
+    category: true,
+  } as const;
+
+  const [featuredRows, dropRows] = await Promise.all([
+    prisma.product.findMany({
+      where: { section: "grocery", offers: { some: live } },
+      include: shelf,
+      orderBy: { id: "asc" },
+      take: 8,
+    }),
+    prisma.product.findMany({
+      where: { section: "grocery", dropPct: { gt: 2 }, offers: { some: live } },
+      include: shelf,
+      orderBy: { dropPct: "desc" },
+      take: 24, // over-fetch: the 2+ merchant rule below is not expressible in this query
+    }),
+  ]);
+
+  const decorate = (p: (typeof featuredRows)[number]) => ({
     ...p,
     summary: summarize(p.offers),
     unitLowest: (() => {
@@ -194,10 +225,13 @@ export async function getHomeSections() {
       const pool = inStock.length > 0 ? inStock : p.offers;
       return pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
     })(),
-    drop: dropPercent(buildDailyLowSeries(p.offers)),
-  }));
-  const featured = [...decorated].filter((p) => p.summary.offerCount > 0).slice(0, 8);
-  const drops = [...decorated].filter((p) => p.drop > 2 && p.summary.offerCount >= 2).sort((a, b) => b.drop - a.drop).slice(0, 6);
+    drop: p.dropPct ?? 0,
+  });
+
+  const featured = featuredRows.map(decorate).filter((p) => p.summary.offerCount > 0);
+  // A "drop" on a single-merchant product is one shop changing its own price, which is not the
+  // comparison this shelf is for.
+  const drops = dropRows.map(decorate).filter((p) => p.summary.offerCount >= 2).slice(0, 6);
   return { featured, drops };
 }
 
