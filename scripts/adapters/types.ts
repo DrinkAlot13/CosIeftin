@@ -4,7 +4,17 @@
 // place to fix a locale bug, one place to add retries, and offline fixture tests for all.
 import type { StoreProduct } from "../../src/lib/scrape-util";
 
-export type PriceSource = "shelf" | "delivery" | "aggregator";
+/**
+ * How this merchant's prices reach us. The MERCHANT vocabulary — deliberately NOT the same
+ * type as `Offer.priceSource` (SHELF | ONLINE | DELIVERY_PLATFORM | FLYER), which answers a
+ * different question: what kind of price it is.
+ *
+ * These two were both called `priceSource`, and the runner copied one straight into the other.
+ * That is how 10,731 offers ended up holding the lowercase merchant word `shelf` in a column
+ * whose live readers compared against `SHELF`. The name is now different so the copy cannot be
+ * made by accident; `toPriceSource()` is the only crossing.
+ */
+export type PriceChannel = "shelf" | "delivery" | "aggregator";
 
 /** One listing page to visit, and the catalog category its products belong to. */
 export type Route = {
@@ -56,7 +66,7 @@ export type Adapter = {
   /** "online" | "hybrid" | "physical" */
   storeType?: string;
   /** where prices come from — delivery apps mark up over shelf */
-  priceSource?: PriceSource;
+  priceChannel?: PriceChannel;
   section: string;
   /** create catalog products for pool items that match nothing */
   addNew?: boolean;

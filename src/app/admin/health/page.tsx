@@ -30,7 +30,7 @@ export default async function HealthPage() {
   const staleCutoff = new Date(Date.now() - STALE_AFTER_DAYS * 864e5);
   const merchants = await prisma.merchant.findMany({
     where: { active: true },
-    select: { id: true, name: true, slug: true, priceSource: true, lastScrapeAt: true, lastOfferCount: true },
+    select: { id: true, name: true, slug: true, priceChannel: true, lastScrapeAt: true, lastOfferCount: true },
     orderBy: { name: "asc" },
   });
 
@@ -94,7 +94,7 @@ export default async function HealthPage() {
                 <tr key={r.m.id}>
                   <td style={{ fontWeight: 600 }}>
                     {r.m.name}
-                    <div className="muted" style={{ fontSize: 11.5 }}>{r.m.priceSource}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>{r.m.priceChannel}</div>
                   </td>
                   <td className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
                     {r.last ? formatDate(r.last.startedAt) : r.m.lastScrapeAt ? formatDate(r.m.lastScrapeAt) : "—"}

@@ -157,8 +157,8 @@ async function main() {
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: "monitorul" },
-    update: { active: true, name: "Monitorul Prețurilor", websiteUrl: HOSTS[0], storeType: "physical", priceSource: "shelf" },
-    create: { slug: "monitorul", name: "Monitorul Prețurilor", websiteUrl: HOSTS[0], storeType: "physical", priceSource: "shelf" },
+    update: { active: true, name: "Monitorul Prețurilor", websiteUrl: HOSTS[0], storeType: "physical", priceChannel: "shelf" },
+    create: { slug: "monitorul", name: "Monitorul Prețurilor", websiteUrl: HOSTS[0], storeType: "physical", priceChannel: "shelf" },
   });
   const r = await matchPoolToCatalog(merchant.id, pool, { section: "grocery", addNew: true, label: "monitorul" });
   console.log(r.aborted ? `ABORTED — ${r.reason}` : `\nMonitorul: ${r.offers} offers (${r.created} new, ${r.flagged} flagged).`);

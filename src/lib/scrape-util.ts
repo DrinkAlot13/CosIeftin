@@ -486,7 +486,7 @@ export async function matchPoolToCatalog(
     ` · image ${completeness.withImage}`,
   );
 
-  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceSource: true } });
+  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceChannel: true } });
   const rows = await prisma.product.findMany({ where: { section }, select: { id: true, name: true, brand: true, ean: true, unit: true, unitSize: true, image: true } });
   const catMap = new Map((await prisma.category.findMany({ select: { slug: true, id: true } })).map((c) => [c.slug, c.id]));
   const overrides = new Map((await prisma.matchOverride.findMany({ where: { merchantId }, select: { storeKey: true, productId: true, decision: true } })).map((o) => [o.storeKey, o]));
@@ -554,7 +554,7 @@ export async function matchPoolToCatalog(
     const better = !prev || (c.sp.available && !prev.available) || (c.sp.available === prev.available && c.sp.price < prev.price);
     // ownSize is the size parsed from THIS offer's own name. It is what the unit price must be
     // computed from; the catalog product's size is a different product's size.
-    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: toPriceSource(c.sp.priceSource ?? merchant?.priceSource), sp: c.sp });
+    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: toPriceSource(c.sp.priceSource ?? merchant?.priceChannel), sp: c.sp });
   };
   // productId a store item is forbidden from (reject override), keyed by storeKey.
   const rejects = new Set<string>();

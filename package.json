@@ -72,7 +72,8 @@
     "compute:home": "tsx scripts/compute-home.ts",
     "audit:unitprice": "tsx scripts/audit-unit-price.ts",
     "audit:staleness": "tsx scripts/audit-staleness.ts",
-    "backfill:pricesource": "tsx scripts/backfill-pricesource.ts"
+    "backfill:pricesource": "tsx scripts/backfill-pricesource.ts",
+    "backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

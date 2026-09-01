@@ -33,8 +33,16 @@ model Merchant {
   color      String?
   /// "online" | "hybrid" | "physical" — how you can buy from this store
   storeType  String   @default("hybrid")
-  /// where this store's prices come from: "shelf" | "delivery" | "aggregator"
-  priceSource String  @default("shelf")
+  /// HOW this store's prices reach us: "shelf" | "delivery" | "aggregator".
+  ///
+  /// Renamed from `priceSource`, which is what `Offer.priceSource` is also called — and the
+  /// shared name is what made a real bug invisible. `matchPoolToCatalog` used this value as a
+  /// FALLBACK for the offer field, which looked like a default and was actually a translation
+  /// across two different vocabularies. Five spellings of a four-value field resulted.
+  ///
+  /// The two fields answer different questions. This one: how did the price get to us. The
+  /// offer one: what kind of price is it. They must not share a name again.
+  priceChannel String @default("shelf")
   active     Boolean  @default(true)
   /// delivery cost in lei (online/hybrid stores) — a "cheapest basket" that ignores a
   /// 20-lei delivery fee is simply wrong, so the optimizer must know it

@@ -156,6 +156,19 @@ async function auditPrices() {
       [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
   }
 
+  // ── MERCHANT-SIDE VOCABULARY. Merchant.priceChannel answers "how does this store's price
+  //    reach us"; Offer.priceSource answers "what kind of price is it". They used to share the
+  //    name priceSource, and that shared name turned a translation across two vocabularies into
+  //    something that looked like a harmless default. The deprecated column is now dropped;
+  //    what remains is keeping this one inside its own vocabulary.
+  {
+    const merchants = await prisma.merchant.findMany({ select: { slug: true, priceChannel: true } });
+    const CHANNELS = new Set(["shelf", "delivery", "aggregator"]);
+    record("Prices", "Merchant.priceChannel uses the merchant-side vocabulary",
+      merchants.filter((m) => !CHANNELS.has(m.priceChannel))
+        .map((m) => `${m.slug}: priceChannel=${JSON.stringify(m.priceChannel)} is not shelf|delivery|aggregator`));
+  }
+
   // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
   //    added, and its absence is why they drifted for weeks in total silence: every
   //    user-facing read still used the float, so nothing the shopper touched ever exercised

@@ -10,7 +10,7 @@ export const selgros: Adapter = {
   websiteUrl: BASE,
   color: "#e2001a",
   storeType: "hybrid",
-  priceSource: "shelf",
+  priceChannel: "shelf",
   section: "grocery",
   addNew: true,
   maxPages: 1,

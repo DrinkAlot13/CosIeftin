@@ -9,15 +9,21 @@
 // string literal `"shelf"`, so 13,412 uppercase SHELF offers took the wrong branch in the live
 // optimizer.
 //
-// THE ROOT CAUSE WAS NOT CASING. `Merchant.priceSource` and `Offer.priceSource` are two
-// DIFFERENT FIELDS WITH THE SAME NAME and different vocabularies:
+// THE ROOT CAUSE WAS NOT CASING. Two DIFFERENT FIELDS SHARED THE NAME `priceSource` while
+// holding different vocabularies:
 //
 //     Merchant.priceSource : "shelf" | "delivery" | "aggregator"   how prices reach us
 //     Offer.priceSource    : SHELF | ONLINE | DELIVERY_PLATFORM | FLYER   what kind of price
 //
 // and `matchPoolToCatalog` used the merchant's value as a FALLBACK for the offer's — copying a
 // value across a vocabulary boundary. A shared name made that look like a default rather than a
-// translation.
+// translation. The adapter layer did the same thing a second time, straight onto every
+// StoreProduct, which is where the 10,731 lowercase `shelf` offers came from.
+//
+// The merchant-side field is now `Merchant.priceChannel`, typed `PriceChannel` in
+// `scripts/adapters/types.ts`. The two names are different, the two types are different, and
+// `toPriceSource` below is the ONLY crossing between them. A copy can no longer be written by
+// accident, because it no longer compiles.
 //
 // SQLite CANNOT HELP HERE. Prisma refuses enums on SQLite ("the current connector does not
 // support enums"), so the column stays a String in the local database and the guarantees are:

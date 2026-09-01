@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../../src/lib/scrape-util";
+import { toPriceSource } from "../../src/lib/price-source";
 import { parsePriceLei, parsePriceDetailed, baniToLei } from "../../src/lib/price/parsePrice";
 import { ParseTally } from "../../src/lib/price/parseTally";
 import { parseEan } from "../../src/lib/product/ean";
@@ -83,7 +84,7 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
       image: map.image ? (String(dig(it, map.image) ?? "") || null) : null,
       category: route.cat,
       ean: map.ean ? parseEan(String(dig(it, map.ean) ?? "")) || null : null,
-      priceSource: ad.priceSource,
+      priceSource: toPriceSource(ad.priceChannel),
     };
     out.push(ad.refine ? ad.refine(p) : p);
   }
@@ -140,7 +141,7 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       image: r.img ? abs(ad.websiteUrl, r.img) : null,
       category: route.cat,
       ean: parseEan(r.ean) || null,
-      priceSource: ad.priceSource,
+      priceSource: toPriceSource(ad.priceChannel),
     };
     out.push(ad.refine ? ad.refine(p) : p);
   }
@@ -220,8 +221,8 @@ export async function runAdapter(ad: Adapter): Promise<void> {
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: ad.slug },
-    update: { active: true, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceSource: ad.priceSource ?? "shelf" },
-    create: { slug: ad.slug, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceSource: ad.priceSource ?? "shelf" },
+    update: { active: true, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceChannel: ad.priceChannel ?? "shelf" },
+    create: { slug: ad.slug, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceChannel: ad.priceChannel ?? "shelf" },
   });
   const r = await matchPoolToCatalog(merchant.id, pool, { section: ad.section, addNew: ad.addNew ?? true, label: ad.slug ?? ad.section });
   if (r.aborted) console.error(`\n${ad.name}: ABORTED — ${r.reason}`);
