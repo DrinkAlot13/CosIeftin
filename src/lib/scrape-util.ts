@@ -386,6 +386,65 @@ export function prep(name: string, brand: string | null | undefined, ean: string
  */
 export const SIZE_TOLERANCE = 0.06;
 
+/**
+ * EVERY verdict `decide()` can return. Enumerated so that coverage can be MEASURED.
+ *
+ * `doseTokens()` carried a regex that had never matched anything: present, referenced, and
+ * unsatisfiable because a shell had eaten a backslash. Nothing distinguished "this rule is
+ * wrong" from "this rule never runs", and the cost showed up in the golden set as a false
+ * match on eggs, attributed to matcher tuning for weeks.
+ *
+ * So every run counts how often each rule fired, and a rule at ZERO is reported. Zero is not
+ * proof of a bug — `ean` legitimately never fires on a merchant that publishes no GTIN — but
+ * it is the only signal that separates a dead rule from a quiet one, and it costs nothing.
+ *
+ * `tests/decision-coverage.test.ts` asserts this list still matches the literals in
+ * `decide()`, so a new rule cannot be added without appearing here.
+ */
+export const DECISION_REASONS = [
+  // accept
+  "ean", "brand+size", "name+size",
+  // reject / review
+  "size-unit", "size", "head-noun", "brand",
+  "mutually-distinct", "variant-mismatch", "dose-mismatch", "low-overlap",
+] as const;
+export type DecisionReason = (typeof DECISION_REASONS)[number];
+
+/** Counts how often each rule in `decide()` fired across one run. */
+export class DecisionCoverage {
+  private readonly counts = new Map<string, number>();
+  private readonly banded = new Map<string, number>();
+
+  record(d: Decision): void {
+    this.counts.set(d.reason, (this.counts.get(d.reason) ?? 0) + 1);
+    const k = `${d.reason}|${d.band}`;
+    this.banded.set(k, (this.banded.get(k) ?? 0) + 1);
+  }
+
+  /** Rules that never fired. A corrupted pattern lands here; so does a legitimately quiet one. */
+  get silent(): string[] {
+    return DECISION_REASONS.filter((r) => !this.counts.has(r));
+  }
+
+  report(label: string): void {
+    const total = [...this.counts.values()].reduce((a, b) => a + b, 0);
+    if (total === 0) return;
+    console.log(`  rule coverage (${label}): ${total} decisions`);
+    const rows = DECISION_REASONS.map((r) => ({ r, n: this.counts.get(r) ?? 0 }))
+      .sort((a, b) => b.n - a.n);
+    const line = rows
+      .map(({ r, n }) => `${r}=${n}${n === 0 ? " ⚠" : ""}`)
+      .join("  ");
+    console.log(`    ${line}`);
+    if (this.silent.length > 0) {
+      console.log(
+        `    ⚠ ${this.silent.length} rule(s) never fired: ${this.silent.join(", ")} — ` +
+        `either legitimately quiet, or a pattern that cannot match (see doseTokens).`,
+      );
+    }
+  }
+}
+
 export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: PrepItem, stSize: { unit: string; unitSize: number } | null, section: string): Decision {
   if (cat.ean && st.ean && cat.ean === st.ean) return { ok: true, band: "AUTO_MATCH", score: 1, reason: "ean" };
   if (!stSize || stSize.unit !== catSize.unit) return { ok: false, band: "REJECT", score: 0, reason: "size-unit" };
@@ -687,6 +746,7 @@ export async function matchPoolToCatalog(
   // matcher rejected them, the matcher was unsure and queued them, or the matcher never saw
   // them at all — and only the last is a pipeline bug. Guessing between those cost a session.
   const consideredPool = new Set<Prepared>();
+  const coverage = new DecisionCoverage();
   for (const cp of rows) {
     const cItem = prep(cp.name, cp.brand, cp.ean);
     const chead = headNoun(cItem.nname);
@@ -698,6 +758,7 @@ export async function matchPoolToCatalog(
       if (rejects.has(`${c.storeKey}:${cp.id}`)) continue;
       consideredPool.add(c);
       const d = decide(cItem, cSize, c.item, c.size, section);
+      coverage.record(d);
       if (!d.ok) { noteReview(cp.id, c, d); continue; }
       explained.add(c);
       consider(cp.id, cp.unitSize, cp.image, c, d.score, d.reason);
@@ -753,6 +814,7 @@ export async function matchPoolToCatalog(
     // POOL_DUMP=1 writes the pool with each item's outcome, so the REJECTED population can
     // be sampled offline. Rejections are not persisted anywhere — only the REVIEW band is —
     // so without this the largest bucket in the census is the one nobody can look at.
+    coverage.report(opts.label ?? section);
     if (process.env.POOL_DUMP) {
       const dir = join(process.cwd(), "tmp-pools");
       mkdirSync(dir, { recursive: true });
@@ -989,6 +1051,7 @@ export async function matchPoolToCatalog(
     merchantId, startedAt,
     tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false, unavailable: 0, unavailableRate: 0, unavailableExceedsThreshold: false },
     offersRejected: flaggedCount,
+    offersWritten: chosen.size,
     previousRunCount: merchant?.lastOfferCount ?? 0,
     censusJson,
   });

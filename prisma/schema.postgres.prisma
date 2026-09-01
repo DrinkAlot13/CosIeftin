@@ -353,6 +353,11 @@ model ScraperRun {
   offersNull        Int       @default(0)
   /// written offers rejected by a sanity gate
   offersRejected    Int       @default(0)
+  /// OFFER ROWS ACTUALLY WRITTEN by this run — counted at the write, not reported by the
+  /// scraper. `offersParsed` counts pool items that had a readable price, which is a
+  /// completely different thing: a DCNeu run recorded offersParsed=6044 and wrote nothing,
+  /// and every check that read offersParsed called it a success.
+  offersWritten     Int       @default(0)
   previousRunCount  Int       @default(0)
   aborted           Boolean   @default(false)
   abortReason       String?

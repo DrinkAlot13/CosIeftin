@@ -82,7 +82,50 @@ function words(name: string): string[] {
  * Returns the reason so a caller can count and report it, rather than a bare boolean that
  * makes an exclusion indistinguishable from a parse failure.
  */
+/**
+ * NICOTINE REPLACEMENT THERAPY IS NOT A TOBACCO PRODUCT.
+ *
+ * A nicotine patch, gum, lozenge or oral spray is a smoking-CESSATION medicine, regulated as
+ * a medicinal product and sold in pharmacies. Legea 349/2002 governs tobacco products; it is
+ * not the law that covers the thing people use to stop consuming them. Farmacia Tei stocking
+ * one is about the strongest evidence available that it is a medicine.
+ *
+ * Excluding these is not the conservative choice, it is simply wrong: a pharmacy section that
+ * hides smoking-cessation products is worse for the user than one that shows them.
+ *
+ * Matched on the MEDICINE CATEGORY rather than on any one product, so a new NRT format or a
+ * new brand is covered without another edit here. The forms are the dose vehicles the ANMDMR
+ * register actually lists, plus the two brands that dominate the Romanian shelf.
+ */
+const NRT_FORMS = [
+  ["spray", "oral"],
+  ["plasturi", "nicotina"],
+  ["plasture", "nicotina"],
+  ["guma", "nicotina"],
+  ["gume", "nicotina"],
+  ["comprimate", "nicotina"],
+  ["pastile", "nicotina"],
+  ["terapie", "substitutie"],
+  ["substitutie", "nicotinica"],
+  ["renuntarea", "fumat"],
+  ["renuntare", "fumat"],
+] as const;
+
+const NRT_BRANDS = ["nicorette", "niquitin", "nicotinell"];
+
+/** Is this a smoking-cessation medicine rather than a tobacco product? */
+export function isNicotineReplacement(name: string, brand?: string | null): boolean {
+  const set = new Set(words(`${name} ${brand ?? ""}`));
+  if (NRT_BRANDS.some((b) => set.has(b))) return true;
+  for (const [a, b] of NRT_FORMS) if (set.has(a) && set.has(b)) return true;
+  return false;
+}
+
 export function exclusionReason(name: string, brand?: string | null): ExclusionReason {
+  // Checked FIRST: a cessation medicine mentions nicotine by definition, so the tobacco
+  // rules below would otherwise eat every one of them.
+  if (isNicotineReplacement(name, brand)) return null;
+
   const w = words(`${name} ${brand ?? ""}`);
   const set = new Set(w);
 

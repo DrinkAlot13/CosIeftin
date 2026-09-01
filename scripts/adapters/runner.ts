@@ -69,8 +69,49 @@ function abs(base: string, u: string): string {
 
 // ─── pure parse stages (unit-testable against fixtures, no network) ────────────────
 
+/**
+ * How often each mapped FIELD actually yielded a value across a run.
+ *
+ * A selector or JSON path that matches nothing looks EXACTLY like a field the page does not
+ * have. That confusion is expensive: `doseTokens()` carried a regex that could never match,
+ * and the only reason anyone found it was a hygiene check looking for a stray control
+ * character. A field map deserves the same treatment — measure it, do not assume it.
+ *
+ * Zero is not automatically a bug (Kaufland genuinely publishes no EAN), but zero is the only
+ * state worth looking at, and nothing was reporting it.
+ */
+export class FieldCoverage {
+  private readonly hits = new Map<string, number>();
+  private items = 0;
+
+  note(field: string, got: boolean): void {
+    if (!this.hits.has(field)) this.hits.set(field, 0);
+    if (got) this.hits.set(field, (this.hits.get(field) ?? 0) + 1);
+  }
+
+  countItem(): void {
+    this.items++;
+  }
+
+  report(label: string): void {
+    if (this.items === 0) return;
+    const rows = [...this.hits.entries()].sort((a, b) => b[1] - a[1]);
+    const line = rows
+      .map(([f, n]) => `${f}=${((n / this.items) * 100).toFixed(0)}%${n === 0 ? " ⚠" : ""}`)
+      .join("  ");
+    console.log(`  field coverage (${label}, ${this.items} items): ${line}`);
+    const dead = rows.filter(([, n]) => n === 0).map(([f]) => f);
+    if (dead.length > 0) {
+      console.log(
+        `    ⚠ extracted NOTHING all run: ${dead.join(", ")} — a dead selector and an absent ` +
+        `field look identical, so check the map before assuming the page lacks it.`,
+      );
+    }
+  }
+}
+
 /** Turn a JSON payload into normalized store products. */
-export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Adapter, tally?: ParseTally): StoreProduct[] {
+export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): StoreProduct[] {
   let data: unknown;
   try { data = JSON.parse(raw); } catch { return []; }
   const arr = dig(data, map.items);
@@ -127,13 +168,25 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
       ean: map.ean ? parseEan(String(dig(it, map.ean) ?? "")) || null : null,
       priceSource: toPriceSource(ad.priceChannel),
     };
+    if (cov) {
+      cov.countItem();
+      cov.note("name", p.name.length > 0);
+      cov.note("price", p.price > 0);
+      cov.note("rawPriceText", (p.rawPriceText ?? "").length > 0);
+      cov.note("url", p.url.length > 0);
+      if (map.image) cov.note("image", (p.image ?? "").length > 0);
+      if (map.link) cov.note("productUrl", (p.productUrl ?? "").length > 0);
+      if (map.brand) cov.note("brand", p.brand.length > 0);
+      if (map.ean) cov.note("ean", (p.ean ?? "").length > 0);
+      if (map.available) cov.note("available-read", true);
+    }
     out.push(ad.refine ? ad.refine(p) : p);
   }
   return out;
 }
 
 /** Extract cards from a live page using a DOM map. Runs in the browser context. */
-async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally): Promise<StoreProduct[]> {
+async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): Promise<StoreProduct[]> {
   const rows = await page.$$eval(map.card, (els, m) => {
     const pick = (el: Element, sels: string[] | undefined): string => {
       if (!sels) return "";
@@ -184,6 +237,17 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       ean: parseEan(r.ean) || null,
       priceSource: toPriceSource(ad.priceChannel),
     };
+    if (cov) {
+      cov.countItem();
+      cov.note("name", p.name.length > 0);
+      cov.note("price", p.price > 0);
+      cov.note("rawPriceText", (p.rawPriceText ?? "").length > 0);
+      if (map.image) cov.note("image", (p.image ?? "").length > 0);
+      if (map.link) cov.note("productUrl", (p.productUrl ?? "").length > 0);
+      if (map.brand) cov.note("brand", p.brand.length > 0);
+      if (map.ean) cov.note("ean", (p.ean ?? "").length > 0);
+      if (map.unavailable) cov.note("unavailable-read", true);
+    }
     out.push(ad.refine ? ad.refine(p) : p);
   }
   return out;
@@ -197,6 +261,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   const pool: StoreProduct[] = [];
   const seen = new Set<string>();
   const tally = new ParseTally(ad.name);
+  const coverage = new FieldCoverage();
   let browser: Browser | null = null;
   let page: Page | null = null;
 
@@ -222,13 +287,13 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           if (!res.ok) { if (pg === 1) console.log(`  ${url.slice(0, 60)} → HTTP ${res.status}`); break; }
           const raw = await res.text();
           saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, raw);
-          items = parseJsonPayload(raw, ad.json!, route, ad, tally);
+          items = parseJsonPayload(raw, ad.json!, route, ad, tally, coverage);
         } else {
           await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
           await page!.waitForSelector(ad.dom!.card, { timeout: 15000 }).catch(() => {});
           await page!.waitForTimeout(pg === 1 ? 3500 : 2000);
           if (process.env.FIXTURE_SAVE) saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, await page!.content());
-          items = await parseDom(page!, ad.dom!, route, ad, tally);
+          items = await parseDom(page!, ad.dom!, route, ad, tally, coverage);
         }
       } catch (e) {
         console.log(`  ${url.slice(0, 55)} error: ${(e as Error).message.slice(0, 50)}`);
@@ -252,6 +317,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
 
   // A run that could not READ most of its prices is not a run with fewer products —
   // it is a broken selector. Raise rather than write thin data.
+  coverage.report(ad.slug);
   tally.reportAndRaise();
   console.log(`Pooled ${pool.length} ${ad.name} products.`);
   if (pool.length === 0) {

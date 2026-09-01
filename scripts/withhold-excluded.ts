@@ -61,10 +61,34 @@ async function main(): Promise<void> {
     if (hits.length > 60) console.log(`    … and ${hits.length - 60} more`);
   }
 
+  // ── RESTORE, and it is reported in a DRY RUN too.
+  //
+  // The classifier is a word list, and word lists get judgement calls wrong. Withholding is
+  // only defensible if it is reversible from the same script that applied it, so anything
+  // previously withheld under this reason that no longer matches is put back — which is how
+  // the Farmacia Tei nicotine-replacement spray returns.
+  //
+  // A restore that only ran under --apply would be invisible in the dry run, which is the
+  // one place a reviewer looks before deciding.
+  const previously = await prisma.offer.findMany({
+    where: { flagged: true, flagReason: { contains: "excluded category" } },
+    select: { id: true, product: { select: { id: true, name: true } } },
+  });
+  const stillExcluded = new Set(hits.map((h) => h.id));
+  const toRestore = previously.filter((o) => !stillExcluded.has(o.product.id));
+  if (toRestore.length > 0) {
+    console.log(`\n  RESTORING ${toRestore.length} offer(s) that no longer match an excluded category:`);
+    for (const o of toRestore.slice(0, 10)) console.log(`    ${o.product.name.slice(0, 70)}`);
+  }
+
   if (!APPLY) {
     console.log(`\n  DRY RUN — nothing written. Re-run with --apply.\n`);
     await prisma.$disconnect();
     return;
+  }
+
+  for (const o of toRestore) {
+    await prisma.offer.update({ where: { id: o.id }, data: { flagged: false, flagReason: null } });
   }
 
   let n = 0;

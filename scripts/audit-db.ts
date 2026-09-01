@@ -216,10 +216,10 @@ async function auditPrices() {
         where: { merchantId: m.id },
         orderBy: { startedAt: "desc" },
         take: ABORT_STREAK,
-        select: { aborted: true, offersParsed: true, startedAt: true, abortReason: true },
+        select: { aborted: true, offersWritten: true, startedAt: true, abortReason: true },
       });
       if (runs.length < ABORT_STREAK) continue;
-      const allBad = runs.every((r) => r.aborted || r.offersParsed === 0);
+      const allBad = runs.every((r) => r.aborted || r.offersWritten === 0);
       if (allBad) {
         dead.push(
           `${m.slug}: last ${ABORT_STREAK} runs produced nothing ` +
@@ -229,6 +229,28 @@ async function auditPrices() {
       }
     }
     record("Scraping", `no active merchant has ${ABORT_STREAK} consecutive runs that produced nothing`, dead);
+  }
+
+  // ── A RUN CANNOT REPORT SUCCESS WITHOUT HAVING WRITTEN ANYTHING.
+  //
+  //    `offersParsed` counts pool items that had a readable price. A DCNeu run recorded
+  //    offersParsed = 6,044, finished cleanly, marked itself not-aborted — and wrote ZERO
+  //    offer rows; the merchant's newest observation date stayed a day old. Every check that
+  //    read offersParsed called it a success, including the liveness check built that morning
+  //    to catch exactly this.
+  //
+  //    `offersWritten` is counted at the write site and `recordScraperRun` derives `aborted`
+  //    from it, so a scraper can no longer mark itself green while producing nothing. This
+  //    invariant is what proves that derivation is still in force.
+  {
+    const bad = await prisma.scraperRun.findMany({
+      where: { aborted: false, offersWritten: 0 },
+      select: { id: true, startedAt: true, offersParsed: true, merchant: { select: { slug: true } } },
+      take: 50,
+    });
+    record("Scraping", "no run is marked successful while having written zero offers",
+      bad.map((r) => `run ${r.id} [${r.merchant.slug}] ${r.startedAt.toISOString().slice(0, 16)}: ` +
+        `aborted=false but offersWritten=0 (offersParsed=${r.offersParsed})`));
   }
 
   // ── A DAY IS NOT A MARKET EVENT.

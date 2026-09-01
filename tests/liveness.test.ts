@@ -15,7 +15,7 @@ type Fixture = {
   lastScrapeAt: Date | null;
   newestObserved: Date | null;
   live: number;
-  runs: { aborted: boolean; offersParsed: number; abortReason: string | null }[];
+  runs: { aborted: boolean; offersWritten: number; abortReason: string | null }[];
 };
 
 function deps(rows: Fixture[]) {
@@ -31,7 +31,7 @@ function deps(rows: Fixture[]) {
 const HEALTHY: Fixture = {
   id: 1, slug: "carrefour", name: "Carrefour",
   lastScrapeAt: ago(6), newestObserved: ago(6), live: 2124,
-  runs: [{ aborted: false, offersParsed: 3961, abortReason: null }],
+  runs: [{ aborted: false, offersWritten: 3961, abortReason: null }],
 };
 
 // Metro as it actually stood on 3 September: correct data, live-looking offers, dead source.
@@ -39,10 +39,10 @@ const METRO_AS_IT_WAS: Fixture = {
   id: 2, slug: "metro", name: "Metro",
   lastScrapeAt: ago(72), newestObserved: ago(72), live: 5296,
   runs: [
-    { aborted: true, offersParsed: 0, abortReason: "run refused: 0 offers < 60% of last 5296" },
-    { aborted: true, offersParsed: 0, abortReason: "run refused: 0 offers < 60% of last 5296" },
-    { aborted: true, offersParsed: 0, abortReason: "run refused: 0 offers < 60% of last 5296" },
-    { aborted: false, offersParsed: 5245, abortReason: null },
+    { aborted: true, offersWritten: 0, abortReason: "run refused: 0 offers < 60% of last 5296" },
+    { aborted: true, offersWritten: 0, abortReason: "run refused: 0 offers < 60% of last 5296" },
+    { aborted: true, offersWritten: 0, abortReason: "run refused: 0 offers < 60% of last 5296" },
+    { aborted: false, offersWritten: 5245, abortReason: null },
   ],
 };
 
@@ -81,7 +81,7 @@ describe("liveness — correct data is not evidence of a live source", () => {
     const liar: Fixture = {
       id: 3, slug: "ghost", name: "Ghost",
       lastScrapeAt: ago(2), newestObserved: ago(96), live: 100,
-      runs: [{ aborted: false, offersParsed: 0, abortReason: null }],
+      runs: [{ aborted: false, offersWritten: 0, abortReason: null }],
     };
     const rows = await computeLiveness(deps([liar]), NOW);
     expect(rows[0].claimsWithoutWrites).toBe(true);

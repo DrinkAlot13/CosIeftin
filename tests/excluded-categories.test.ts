@@ -9,7 +9,7 @@
 // pan, one letter from `tigari`. `foi de dafin` is bay leaf. `rezerve odorizant` is an air
 // freshener refill and Mega Image sells far more of those than tobacco refills.
 import { describe, it, expect } from "./run";
-import { isExcluded, exclusionReason } from "../src/lib/excluded-categories";
+import { isExcluded, exclusionReason, isNicotineReplacement } from "../src/lib/excluded-categories";
 
 describe("excluded categories — tobacco is refused", () => {
   it("excludes the plain forms, with and without diacritics", () => {
@@ -68,5 +68,54 @@ describe("excluded categories — tobacco is refused", () => {
     // An exclusion must be distinguishable from a parse failure in the counts.
     expect(exclusionReason("Tigari Marlboro")).toBe("tobacco");
     expect(exclusionReason("Lapte Zuzu 1.5 l")).toBe(null);
+  });
+});
+
+// ── NICOTINE REPLACEMENT THERAPY IS NOT TOBACCO ────────────────────────────────────────
+//
+// A patch, gum, lozenge or oral spray is a smoking-CESSATION medicine, regulated as a
+// medicinal product and sold in pharmacies. Legea 349/2002 covers tobacco products; it is not
+// the law that covers the thing people use to stop consuming them.
+//
+// The first version of this module excluded a Farmacia Tei nicotine spray. That was not the
+// conservative choice, it was wrong in a small way: a pharmacy section that hides
+// smoking-cessation products is worse for the user than one that shows them.
+describe("excluded categories — cessation medicines are not tobacco", () => {
+  it("allows the product that exposed this: a pharmacy nicotine oral spray", () => {
+    expect(isExcluded("Spray oral cu nicotina si aroma de menta, 1 mg, 13.2 ml")).toBe(false);
+  });
+
+  it("allows every NRT dose form, by category rather than by product", () => {
+    for (const n of [
+      "Plasturi cu nicotina 21 mg, 7 bucati",
+      "Guma de mestecat cu nicotina 2 mg",
+      "Comprimate cu nicotina pentru supt 1.5 mg",
+      "Terapie de substitutie nicotinica, 14 mg",
+      "Tratament pentru renuntarea la fumat",
+    ]) {
+      expect(isExcluded(n)).toBe(false);
+    }
+  });
+
+  it("allows the brands that dominate the Romanian pharmacy shelf", () => {
+    expect(isExcluded("NICORETTE Spray 1 mg/doza")).toBe(false);
+    expect(isExcluded("NiQuitin Clear plasture 21 mg")).toBe(false);
+    expect(isExcluded("Nicotinell guma mentol 2 mg")).toBe(false);
+  });
+
+  it("still excludes an e-cigarette even when it says nicotine", () => {
+    // The carve-out is for cessation MEDICINES. A vape is not one, whichever aisle it is in.
+    expect(isExcluded("VOZOL CARTUS TIGARA ELECTRONICA SWITCH PRO APPLE PEACH")).toBe(true);
+    expect(isExcluded("Elf Bar 600 puff nicotina 2%")).toBe(true);
+    expect(isExcluded("Pliculete cu nicotina Tropical Mango, 8mg")).toBe(true);
+  });
+
+  it("still excludes actual tobacco sold in a pharmacy-like phrasing", () => {
+    expect(isExcluded("Tutun de rulat Golden Virginia 30g")).toBe(true);
+  });
+
+  it("names the carve-out, so a reviewer can see WHY something was let through", () => {
+    expect(isNicotineReplacement("Spray oral cu nicotina, 1 mg")).toBe(true);
+    expect(isNicotineReplacement("VOZOL TIGARA ELECTRONICA NEON 800")).toBe(false);
   });
 });

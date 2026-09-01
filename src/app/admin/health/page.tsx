@@ -74,7 +74,7 @@ export default async function HealthPage() {
     liveOfferCount: (merchantId) => prisma.offer.count({ where: { merchantId, isStale: false, availability: "in stock" } }),
     recentRuns: (merchantId, take) => prisma.scraperRun.findMany({
       where: { merchantId }, orderBy: { startedAt: "desc" }, take,
-      select: { aborted: true, offersParsed: true, abortReason: true },
+      select: { aborted: true, offersWritten: true, abortReason: true },
     }),
   });
   const deadMerchants = liveness.filter((l) => l.dead);

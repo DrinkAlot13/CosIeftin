@@ -53,7 +53,15 @@ type MerchantRow = {
   lastScrapeAt: Date | null;
 };
 
-type RunRow = { aborted: boolean; offersParsed: number; abortReason: string | null };
+/**
+ * `offersWritten`, not `offersParsed`.
+ *
+ * offersParsed counts pool items that had a readable price. A DCNeu run recorded 6,044 of
+ * those and wrote ZERO offer rows, and this check — reading offersParsed — called it a
+ * success. The number that means "this run produced something" is the one counted at the
+ * write site.
+ */
+type RunRow = { aborted: boolean; offersWritten: number; abortReason: string | null };
 
 /**
  * The minimal Prisma surface this needs, so the same function serves a page, a CLI audit and
@@ -81,7 +89,7 @@ export async function computeLiveness(deps: LivenessDeps, now: Date = new Date()
     let deadRunStreak = 0;
     let lastAbortReason: string | null = null;
     for (const r of runs) {
-      if (!r.aborted && r.offersParsed > 0) break;
+      if (!r.aborted && r.offersWritten > 0) break;
       deadRunStreak++;
       if (lastAbortReason === null) lastAbortReason = r.abortReason ?? "0 parsed";
     }
