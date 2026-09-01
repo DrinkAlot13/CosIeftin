@@ -120,6 +120,51 @@ async function main(): Promise<void> {
   console.log(`    stale:         ${lostFresh}`);
   console.log(`    flagged:       ${lostFlag}`);
 
+  // ── CARRIED BY vs PRICED TODAY.
+  //
+  //    Out-of-stock dominates the loss, and that is not a pipeline failure — it is a fact
+  //    about Romanian online grocery: Freshful and Sezamo run limited assortments, and the
+  //    big online catalogs go out of stock constantly. So the honest framing is two numbers,
+  //    not one. A product CARRIED by three shops and PRICED today at one is a useful page;
+  //    reporting only the second understates what the site knows, and reporting only the
+  //    first shows prices nobody can pay.
+  const carried = (o: Row): boolean => hasPrice(o) && fresh(o) && unflagged(o);
+  const carriedBy2 = products.filter((p) => merchants(p.offers as Row[], carried) >= 2).length;
+  console.log(`\n  CARRIED BY 2+ SHOPS (in the catalog, fresh, not withheld — stock aside):`);
+  console.log(`    ${carriedBy2}  (${pct(carriedBy2, products.length)})`);
+  console.log(`  PRICED TODAY AT 2+ SHOPS (the shopper-facing number):`);
+  const pricedToday = products.filter((p) => merchants(p.offers as Row[], all) >= 2).length;
+  console.log(`    ${pricedToday}  (${pct(pricedToday, products.length)})`);
+  console.log(`  The gap is products a shopper can still usefully compare, where at least one`);
+  console.log(`  shop is out of stock today: ${carriedBy2 - pricedToday}`);
+
+  // ── TOP CATEGORIES BY OUT-OF-STOCK SHARE. Where the loss actually lives.
+  const byCat = new Map<string, { offers: number; oos: number }>();
+  const cats = await prisma.product.findMany({
+    where: { offers: { some: { merchant: { active: true } } } },
+    select: { id: true, category: { select: { slug: true } } },
+  });
+  const catOf = new Map(cats.map((c) => [c.id, c.category?.slug ?? "(fara categorie)"]));
+  for (const p of products) {
+    const k = catOf.get(p.id) ?? "(fara categorie)";
+    const e = byCat.get(k) ?? { offers: 0, oos: 0 };
+    for (const o of p.offers as Row[]) {
+      if (!hasPrice(o)) continue;
+      e.offers++;
+      if (!inStock(o)) e.oos++;
+    }
+    byCat.set(k, e);
+  }
+  console.log(`\n  TOP 20 CATEGORIES BY OUT-OF-STOCK SHARE (min 50 offers):`);
+  console.log(`  ${pad("category", 26)}${lp("offers", 9)}${lp("out of stock", 14)}${lp("share", 9)}`);
+  const ranked = [...byCat.entries()]
+    .filter(([, e]) => e.offers >= 50)
+    .sort((a, b) => b[1].oos / b[1].offers - a[1].oos / a[1].offers)
+    .slice(0, 20);
+  for (const [k, e] of ranked) {
+    console.log(`  ${pad(k, 26)}${lp(e.offers, 9)}${lp(e.oos, 14)}${lp(pct(e.oos, e.offers), 9)}`);
+  }
+
   // ── The headline a shopper sees on a single-merchant product is still a price we publish.
   const withAny = products.filter((p) => merchants(p.offers as Row[], all) >= 1).length;
   console.log(`\n  products with at least ONE showable price: ${withAny} (${pct(withAny, products.length)})`);

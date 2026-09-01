@@ -111,7 +111,19 @@ export default async function ItemPage({ params }: { params: { slug: string } })
       </div>
 
       <section className="section">
-        <div className="section-head"><h2>Prețuri în {summary.offerCount} magazine</h2></div>
+        {/*
+          CARRIED BY vs PRICED TODAY. These are different facts and conflating them is what
+          makes an out-of-stock row look like a price you can pay. `offerCount` is how many
+          shops carry the product; `inStockCount` is how many have a price you can act on
+          right now.
+        */}
+        <div className="section-head">
+          <h2>
+            {summary.inStockCount === summary.offerCount
+              ? `Prețuri în ${summary.offerCount} magazine`
+              : `Disponibil azi în ${summary.inStockCount} din ${summary.offerCount} magazine`}
+          </h2>
+        </div>
         <div className="card" style={{ padding: 4 }}><OfferTable offers={offers} unit={product.unit} /></div>
       </section>
 
