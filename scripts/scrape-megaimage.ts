@@ -55,17 +55,24 @@ function apiUrl(category: string, pageNumber: number): string {
   return `${BASE}/api/v1/?operationName=GetCategoryProductSearch&variables=${encodeURIComponent(JSON.stringify(variables))}&extensions=${encodeURIComponent(JSON.stringify(extensions))}`;
 }
 
-/** Replay the persisted query in-page (carries the session cookies + Akamai token). */
+/**
+ * Replay the persisted query in-page (carries the session cookies + Akamai token).
+ *
+ * THE TIMEOUT IS PASSED IN, NOT CLOSED OVER — see the same note in `scrape-metro.ts`.
+ * `page.evaluate` runs this in the BROWSER, where Node module scope does not exist, so a
+ * bare `REQUEST_TIMEOUT_MS` throws ReferenceError inside the page and every request returns
+ * `{ __err }`. Commit 568d283 introduced it here and in Metro at the same time.
+ */
 async function fetchPage(page: Page, category: string, pageNumber: number): Promise<any> {
   const url = apiUrl(category, pageNumber);
-  return page.evaluate(async (u) => {
+  return page.evaluate(async ({ u, timeoutMs }) => {
     try {
-      const r = await fetch(u, { headers: { "apollographql-client-name": "ro-mi-web-stores", "x-apollo-operation-name": "GetCategoryProductSearch" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      const r = await fetch(u, { headers: { "apollographql-client-name": "ro-mi-web-stores", "x-apollo-operation-name": "GetCategoryProductSearch" }, signal: AbortSignal.timeout(timeoutMs) });
       return r.ok ? await r.json() : { __err: r.status };
     } catch (e) {
       return { __err: String(e) };
     }
-  }, url);
+  }, { u: url, timeoutMs: REQUEST_TIMEOUT_MS });
 }
 
 /** Pull products + pagination.totalPages out of a GraphQL response. */

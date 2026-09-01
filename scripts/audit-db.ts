@@ -156,6 +156,47 @@ async function auditPrices() {
       [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
   }
 
+  // ── A MERCHANT THAT PRODUCES NOTHING IS NOT A QUIET MERCHANT.
+  //
+  //    Metro and Mega Image returned ZERO products from 31 August onward. A commit that
+  //    hardened every fetch in the project added `AbortSignal.timeout(REQUEST_TIMEOUT_MS)`
+  //    inside two `page.evaluate` callbacks, where Node module scope does not exist; the
+  //    ReferenceError was swallowed by each scraper's own catch and pagination stopped after
+  //    page one.
+  //
+  //    It hid for two days because the 60% drop guard WORKED. It refused each empty run and
+  //    kept the previous data instead of wiping it. So the data was safe and the merchant was
+  //    dead, and nothing in the system distinguished those two states — the offers still had
+  //    prices, still had dates, still looked live.
+  //
+  //    A guard that protects data is not a guard that reports health. This is the second one.
+  {
+    const ABORT_STREAK = 2;
+    const merchants = await prisma.merchant.findMany({
+      where: { active: true },
+      select: { id: true, slug: true },
+    });
+    const dead: string[] = [];
+    for (const m of merchants) {
+      const runs = await prisma.scraperRun.findMany({
+        where: { merchantId: m.id },
+        orderBy: { startedAt: "desc" },
+        take: ABORT_STREAK,
+        select: { aborted: true, offersParsed: true, startedAt: true, abortReason: true },
+      });
+      if (runs.length < ABORT_STREAK) continue;
+      const allBad = runs.every((r) => r.aborted || r.offersParsed === 0);
+      if (allBad) {
+        dead.push(
+          `${m.slug}: last ${ABORT_STREAK} runs produced nothing ` +
+          `(latest ${runs[0].startedAt.toISOString().slice(0, 16)}: ${runs[0].abortReason ?? "0 parsed"}) — ` +
+          `its stored offers still look live`,
+        );
+      }
+    }
+    record("Scraping", `no active merchant has ${ABORT_STREAK} consecutive runs that produced nothing`, dead);
+  }
+
   // ── A DAY IS NOT A MARKET EVENT.
   //
   //    On 30 August, 1,675 offers moved more than 50% in a single afternoon across nine
