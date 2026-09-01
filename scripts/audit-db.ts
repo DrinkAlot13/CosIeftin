@@ -53,7 +53,7 @@ async function auditPrices() {
   const offers = await prisma.offer.findMany({
     select: {
       id: true, price: true, priceBani: true, vatBasis: true, vatRateBp: true,
-      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastObservedAt: true, availability: true, priceSource: true,
+      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastObservedAt: true, availability: true, priceSource: true, promoValidTo: true,
       productId: true, merchant: { select: { name: true, slug: true } }, product: { select: { name: true, section: true } },
     },
   });
@@ -113,6 +113,48 @@ async function auditPrices() {
   record("Freshness", "no non-flyer offer lacks an observation date",
     offers.filter((o) => !o.lastObservedAt && (o.priceSource ?? "") !== "FLYER")
       .map((o) => `offer ${o.id} [${o.merchant.name}] priceSource=${o.priceSource ?? "null"} — ${o.product.name.slice(0, 40)}`));
+
+  // ── THE FLYER EXEMPTION IS A TRIPWIRE, SO IT MUST NOT BE DISARMABLE BY RELABELLING.
+  //
+  //    FLYER offers are excused the observation-date requirement on the grounds that they
+  //    expire by promoValidTo instead. That excuse is only honest if two things hold: the
+  //    offers actually carry a window, and the set of merchants issuing flyers does not quietly
+  //    grow. Otherwise a writer that stops recording observation dates can route around the
+  //    check by stamping priceSource = "FLYER", and the invariant reports green forever.
+  {
+    const flyers = offers.filter((o) => (o.priceSource ?? "") === "FLYER");
+
+    // An offer exempt because it expires by a window MUST have that window.
+    record("Freshness", "every FLYER offer carries a promoValidTo",
+      flyers.filter((o) => !o.promoValidTo)
+        .map((o) => `offer ${o.id} [${o.merchant.name}] priceSource=FLYER with no promoValidTo`));
+
+    // Only Kaufland publishes a weekly flyer today. A new name here is either a real change or
+    // a writer routing around the exemption; both are worth seeing, neither should be silent.
+    const EXPECTED_FLYER_MERCHANTS = new Set(["kaufland"]);
+    const byMerchant = new Map<string, number>();
+    for (const o of flyers) byMerchant.set(o.merchant.slug, (byMerchant.get(o.merchant.slug) ?? 0) + 1);
+    record("Freshness", "only expected merchants issue FLYER offers",
+      [...byMerchant.entries()]
+        .filter(([slug]) => !EXPECTED_FLYER_MERCHANTS.has(slug))
+        .map(([slug, n]) => `${slug} has ${n} FLYER offers but is not an expected flyer merchant`),
+      `flyer counts: ${[...byMerchant.entries()].map(([m, n]) => `${m}=${n}`).join(", ") || "none"}`);
+  }
+
+  // ── ONE FIELD, ONE VOCABULARY. priceSource is written by two paths that disagree on case:
+  //    backfill-phase1 writes SHELF/ONLINE/FLYER, while matchPoolToCatalog falls back to the
+  //    MERCHANT's own value, which is lowercase shelf/delivery. Consumers compare against
+  //    literals, so the same concept spelled two ways silently takes two different branches.
+  {
+    const ALLOWED = new Set(["SHELF", "ONLINE", "DELIVERY_PLATFORM", "FLYER"]);
+    const seen = new Map<string, number>();
+    for (const o of offers) {
+      const v = o.priceSource ?? "(null)";
+      if (!ALLOWED.has(v)) seen.set(v, (seen.get(v) ?? 0) + 1);
+    }
+    record("Prices", "priceSource uses only the documented vocabulary",
+      [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
+  }
 
   // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
   //    added, and its absence is why they drifted for weeks in total silence: every
