@@ -11,6 +11,8 @@
 //   • A run that collapses to <60% of the store's last offer count is REFUSED (site
 //     redesign / block) instead of wiping good data.
 //   • Price history is append-on-change only.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { prisma } from "./db";
 import { parseSize } from "./ingest-core";
 import { normalizeText } from "./matching";
@@ -348,8 +350,8 @@ export const AUTO_MATCH_THRESHOLD = 0.62;
 /** Score at or above this (but below AUTO) is persisted PENDING and reviewed, not shown. */
 export const REVIEW_THRESHOLD = 0.42;
 
-type PrepItem = { nname: string; raw: string; nbrand: string; tokens: Set<string>; over: Set<string>; ean: string };
-function prep(name: string, brand: string | null | undefined, ean: string | null | undefined): PrepItem {
+export type PrepItem = { nname: string; raw: string; nbrand: string; tokens: Set<string>; over: Set<string>; ean: string };
+export function prep(name: string, brand: string | null | undefined, ean: string | null | undefined): PrepItem {
   const nname = normalizeText(name);
   // keep the raw name too: normalizeText strips % and unit letters, which is exactly
   // where dosage lives ("1,5% grasime", "500 mg")
@@ -363,7 +365,7 @@ function prep(name: string, brand: string | null | undefined, ean: string | null
  */
 export const SIZE_TOLERANCE = 0.06;
 
-function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: PrepItem, stSize: { unit: string; unitSize: number } | null, section: string): Decision {
+export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: PrepItem, stSize: { unit: string; unitSize: number } | null, section: string): Decision {
   if (cat.ean && st.ean && cat.ean === st.ean) return { ok: true, band: "AUTO_MATCH", score: 1, reason: "ean" };
   if (!stSize || stSize.unit !== catSize.unit) return { ok: false, band: "REJECT", score: 0, reason: "size-unit" };
   if (Math.abs(stSize.unitSize - catSize.unitSize) > catSize.unitSize * SIZE_TOLERANCE + 1e-9) return { ok: false, band: "REJECT", score: 0, reason: "size" };
@@ -627,6 +629,13 @@ export async function matchPoolToCatalog(
 
   // PHASE 1 — catalog coverage: each catalog product takes the cheapest store product that
   // shares its head-noun and clears decide() (size ±6% + brand + section-aware overlap).
+  // POOL CENSUS. Where every pool item ends up, counted rather than inferred.
+  //
+  // Mega Image pools 7,160 products and writes 724 offers, and until now NOTHING said where
+  // the other 6,436 went. The three possible answers are completely different problems: the
+  // matcher rejected them, the matcher was unsure and queued them, or the matcher never saw
+  // them at all — and only the last is a pipeline bug. Guessing between those cost a session.
+  const consideredPool = new Set<Prepared>();
   for (const cp of rows) {
     const cItem = prep(cp.name, cp.brand, cp.ean);
     const chead = headNoun(cItem.nname);
@@ -636,6 +645,7 @@ export async function matchPoolToCatalog(
     const cSize = { unit: cp.unit, unitSize: cp.unitSize };
     for (const c of cands) {
       if (rejects.has(`${c.storeKey}:${cp.id}`)) continue;
+      consideredPool.add(c);
       const d = decide(cItem, cSize, c.item, c.size, section);
       if (!d.ok) { noteReview(cp.id, c, d); continue; }
       explained.add(c);
@@ -662,6 +672,51 @@ export async function matchPoolToCatalog(
       if (!prod) continue;
       if (!existingIds.has(prod.id)) createdIds.add(prod.id);
       consider(prod.id, unitSize, prod.image, c, 0.5, "new");
+    }
+  }
+
+  // ── Report the census. A match-only merchant (addNew false) DISCARDS everything it does
+  //    not match, and that is a deliberate design — Auchan is the catalog master and the
+  //    others attach prices to products it already carries. Deliberate is not the same as
+  //    measured: nothing had ever printed how much a match-only run throws away.
+  {
+    const reviewKeys = new Set([...review.values()].map((r) => r.c.storeKey));
+    const matched = prepared.filter((c) => explained.has(c)).length;
+    const seen = prepared.filter((c) => consideredPool.has(c)).length;
+    const inReview = prepared.filter((c) => !explained.has(c) && reviewKeys.has(c.storeKey)).length;
+    const rejected = seen - matched - inReview;
+    const neverSeen = prepared.length - seen;
+    const pct = (n: number): string => (prepared.length ? ((n / prepared.length) * 100).toFixed(1) : "0.0") + "%";
+    console.log(
+      `  pool census: ${prepared.length} items · matched ${matched} (${pct(matched)}) · ` +
+      `review ${inReview} (${pct(inReview)}) · rejected ${rejected} (${pct(rejected)}) · ` +
+      `never considered ${neverSeen} (${pct(neverSeen)})` +
+      `${addNew ? "" : " · addNew OFF, so everything unmatched is discarded"}`,
+    );
+    if (!addNew && neverSeen > prepared.length * 0.5) {
+      console.log(
+        `  ⚠ over half this pool shares no head-noun with ANY catalog product. That is a` +
+        ` catalog coverage gap, not a matcher decision.`,
+      );
+    }
+    // POOL_DUMP=1 writes the pool with each item's outcome, so the REJECTED population can
+    // be sampled offline. Rejections are not persisted anywhere — only the REVIEW band is —
+    // so without this the largest bucket in the census is the one nobody can look at.
+    if (process.env.POOL_DUMP) {
+      const dir = join(process.cwd(), "tmp-pools");
+      mkdirSync(dir, { recursive: true });
+      const dump = prepared.map((c) => ({
+        name: c.sp.name,
+        brand: c.sp.brand ?? null,
+        price: c.sp.price,
+        unit: c.size?.unit ?? null,
+        unitSize: c.size?.unitSize ?? null,
+        outcome: explained.has(c) ? "matched" : reviewKeys.has(c.storeKey) ? "review"
+          : consideredPool.has(c) ? "rejected" : "never-considered",
+      }));
+      const file = join(dir, `${opts.label ?? section}-pool.json`);
+      writeFileSync(file, JSON.stringify(dump), "utf8");
+      console.log(`  [POOL_DUMP] wrote ${dump.length} items to ${file}`);
     }
   }
 

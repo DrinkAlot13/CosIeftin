@@ -74,6 +74,7 @@
     "audit:unitprice": "tsx scripts/audit-unit-price.ts",
     "audit:price-moves": "tsx scripts/audit-price-moves.ts",
     "audit:dropped": "tsx scripts/audit-dropped.ts",
+    "audit:rejections": "tsx scripts/audit-rejections.ts",
     "audit:unit-oracle": "tsx scripts/audit-unit-oracle.ts",
     "audit:liveness": "tsx scripts/audit-liveness.ts",
     "audit:cutover": "tsx scripts/audit-cutover.ts",

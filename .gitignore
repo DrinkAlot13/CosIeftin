@@ -29,3 +29,4 @@ backups/history/*.csv
 # means the pre-commit hook dirties the tree it just validated.
 tsconfig.tsbuildinfo
 scripts/tmp/
+tmp-pools/
