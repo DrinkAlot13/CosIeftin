@@ -2,8 +2,10 @@ export type OfferLike = {
   price: number;
   priceBani?: number | null;
   availability: string;
-  /** when this offer was last actually OBSERVED in a feed */
-  lastSeen?: Date | null;
+  /** when this offer was last actually OBSERVED in a feed; null means we did not see it */
+  lastObservedAt?: Date | null;
+  /** "FLYER" offers expire by promoValidTo and need no observation date */
+  priceSource?: string | null;
   isStale?: boolean | null;
 };
 
@@ -27,8 +29,13 @@ export const MAX_DISPLAY_AGE_DAYS = 14;
 export function isCurrent(o: OfferLike, now: Date = new Date()): boolean {
   if (o.availability !== "in stock") return false;
   if (o.isStale) return false;
-  if (!o.lastSeen) return true; // no observation date recorded: do not punish it
-  return (now.getTime() - o.lastSeen.getTime()) / 86_400_000 <= MAX_DISPLAY_AGE_DAYS;
+  if (!o.lastObservedAt) {
+    // A FLYER offer expires by its promo window, not by observation, so a missing date is
+    // normal there. For every other source a null means we did not see it — and after a full
+    // scrape, "we did not see it" is exactly what must not be shown as a current price.
+    return (o.priceSource ?? "") === "FLYER";
+  }
+  return (now.getTime() - o.lastObservedAt.getTime()) / 86_400_000 <= MAX_DISPLAY_AGE_DAYS;
 }
 
 export type PriceSummary = {

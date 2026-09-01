@@ -123,14 +123,14 @@ async function main() {
         const provenance = {
           productUrl: url || null,
           rawPriceText: String(price),
-          lastSeenAt: new Date(),
+          lastObservedAt: new Date(),
           isStale: false,
           matchedBy: "catalog-master",
           matchScore: 1,
         };
         const offer = await prisma.offer.upsert({
           where: { productId_merchantId: { productId: product.id, merchantId: merchant.id } },
-          update: { price: priceLei, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, lastSeen: new Date(), ...provenance },
+          update: { price: priceLei, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, ...provenance },
           create: { productId: product.id, merchantId: merchant.id, price: priceLei, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: available ? "in stock" : "out of stock", url, currency: "RON", ...provenance },
         });
         // Append a history point only when the price actually moved — writing one per run

@@ -53,7 +53,7 @@ async function auditPrices() {
   const offers = await prisma.offer.findMany({
     select: {
       id: true, price: true, priceBani: true, vatBasis: true, vatRateBp: true,
-      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastSeenAt: true, availability: true,
+      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastObservedAt: true, availability: true, priceSource: true,
       productId: true, merchant: { select: { name: true, slug: true } }, product: { select: { name: true, section: true } },
     },
   });
@@ -91,9 +91,9 @@ async function auditPrices() {
       const priced = list.filter((o) => (o.priceBani ?? Math.round(o.price * 100)) > 0);
       if (priced.length === 0) continue;
       const cheapest = priced.reduce((a, b) => ((b.priceBani ?? 0) < (a.priceBani ?? 0) ? b : a));
-      const ageDays = (nowMs - (cheapest.lastSeenAt ?? new Date(0)).getTime()) / 86400000;
+      const ageDays = (nowMs - (cheapest.lastObservedAt ?? new Date(0)).getTime()) / 86400000;
       const oos = cheapest.availability !== "in stock";
-      if (cheapest.lastSeenAt && ageDays > 14) {
+      if (cheapest.lastObservedAt && ageDays > 14) {
         bad.push(`offer ${cheapest.id} [${cheapest.merchant.name}] is the cheapest and is ${ageDays.toFixed(0)} days old`);
       } else if (oos) {
         bad.push(`offer ${cheapest.id} [${cheapest.merchant.name}] is the cheapest and is OUT OF STOCK`);
@@ -101,6 +101,18 @@ async function auditPrices() {
     }
     record("Freshness", "no stale or out-of-stock offer is a product's cheapest price", bad);
   }
+
+  // ── OBSERVATION PROVENANCE. lastObservedAt is written by the scrape, on the rows the scrape
+  //    actually saw, and NOWHERE ELSE. A merchant-level job must never touch it: one did,
+  //    stamping merchant.lastScrapeAt onto 10,388 offers it had not observed, and three offers
+  //    last seen on 6 August were shown as current 26 days later.
+  //
+  //    A FLYER offer expires by promoValidTo and needs no observation date. For every other
+  //    source a null means we did not see it, and after a full scrape that should be near zero.
+  //    If it is not, something is writing offers without observing them.
+  record("Freshness", "no non-flyer offer lacks an observation date",
+    offers.filter((o) => !o.lastObservedAt && (o.priceSource ?? "") !== "FLYER")
+      .map((o) => `offer ${o.id} [${o.merchant.name}] priceSource=${o.priceSource ?? "null"} — ${o.product.name.slice(0, 40)}`));
 
   // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
   //    added, and its absence is why they drifted for weeks in total silence: every
@@ -274,12 +286,12 @@ async function auditMatching() {
 async function auditFreshness() {
   const cutoff = new Date(Date.now() - STALE_DAYS * 864e5);
   const staleNotMarked = await prisma.offer.findMany({
-    where: { lastSeenAt: { lt: cutoff }, isStale: false },
-    select: { id: true, lastSeenAt: true, merchant: { select: { name: true } } },
+    where: { lastObservedAt: { lt: cutoff }, isStale: false },
+    select: { id: true, lastObservedAt: true, merchant: { select: { name: true } } },
     take: 100,
   });
   record("Freshness", `no offer unseen for >${STALE_DAYS} days left unmarked as stale`,
-    staleNotMarked.map((o) => `offer ${o.id} [${o.merchant.name}] lastSeenAt=${o.lastSeenAt?.toISOString().slice(0, 10)}`));
+    staleNotMarked.map((o) => `offer ${o.id} [${o.merchant.name}] lastObservedAt=${o.lastObservedAt?.toISOString().slice(0, 10)}`));
 
   const expiredNotMarked = await prisma.offer.findMany({
     where: { promoValidTo: { lt: new Date() }, isExpired: false },
@@ -308,8 +320,8 @@ async function auditFreshness() {
 
   // rawPriceText only became mandatory once the column existed; judge recent rows only.
   const since = new Date(Date.now() - 2 * 864e5);
-  const noRaw = await prisma.offer.count({ where: { rawPriceText: null, lastSeenAt: { gte: since } } });
-  const withRaw = await prisma.offer.count({ where: { rawPriceText: { not: null }, lastSeenAt: { gte: since } } });
+  const noRaw = await prisma.offer.count({ where: { rawPriceText: null, lastObservedAt: { gte: since } } });
+  const withRaw = await prisma.offer.count({ where: { rawPriceText: { not: null }, lastObservedAt: { gte: since } } });
   record("Freshness", "every recently-seen offer carries its raw source string",
     noRaw > 0 ? [`${noRaw} offers seen in the last 2 days have no rawPriceText (vs ${withRaw} that do)`] : []);
 }

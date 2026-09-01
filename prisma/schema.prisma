@@ -211,9 +211,19 @@ model Offer {
   /// true when a sanity gate tripped (implausible price jump, low-confidence match)
   flagged      Boolean        @default(false)
   flagReason   String?
-  lastSeen     DateTime       @default(now())
-  /// last run in which this offer was actually observed in the store feed
-  lastSeenAt   DateTime?
+  /// WHEN THIS OFFER WAS LAST ACTUALLY OBSERVED IN A FEED. Nullable on purpose: an offer we
+  /// did not observe has no observation date, and inventing one is the harm.
+  ///
+  /// Replaces `lastSeen` and `lastSeenAt`, which were two fields with near-identical names
+  /// written by the same two scrapers at the same instant — redundant, not complementary. One
+  /// of them was then corrupted for a month by a merchant-level backfill that stamped
+  /// `merchant.lastScrapeAt` onto every offer of that merchant, including the ones the scrape
+  /// never saw. 10,388 rows were affected, and three offers last seen on 6 August were shown
+  /// as current prices 26 days later. Two names for one fact is how that goes unnoticed.
+  ///
+  /// NEVER write this from a merchant-level job. It is set by the scrape, on the rows the
+  /// scrape actually saw, and nowhere else. An audit invariant checks the claim.
+  lastObservedAt DateTime?
   history      PriceHistory[]
   anomalies    PriceAnomaly[]
 

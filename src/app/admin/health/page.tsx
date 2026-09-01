@@ -40,7 +40,7 @@ export default async function HealthPage() {
         prisma.scraperRun.findMany({ where: { merchantId: m.id }, orderBy: { startedAt: "desc" }, take: 2 }),
         prisma.offer.count({ where: { merchantId: m.id } }),
         prisma.offer.count({ where: { merchantId: m.id, flagged: true } }),
-        prisma.offer.count({ where: { merchantId: m.id, OR: [{ isStale: true }, { lastSeenAt: { lt: staleCutoff } }] } }),
+        prisma.offer.count({ where: { merchantId: m.id, OR: [{ isStale: true }, { lastObservedAt: { lt: staleCutoff } }] } }),
         prisma.offer.count({ where: { merchantId: m.id, isExpired: true } }),
         prisma.priceAnomaly.count({ where: { resolved: false, offer: { merchantId: m.id } } }),
         prisma.offer.count({ where: { merchantId: m.id, productUrl: null } }),

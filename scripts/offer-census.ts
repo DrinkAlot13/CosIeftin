@@ -30,8 +30,8 @@ type Row = {
   flagged: boolean;
   vatBasis: string;
   promoValidTo: Date | null;
-  lastSeenAt: Date | null;
-  lastSeen: Date;
+  lastObservedAt: Date | null;
+  priceSource?: string | null;
   anomalies: number;
 };
 
@@ -45,7 +45,7 @@ async function census(prisma: PrismaClient, label: string) {
   const offers = await prisma.offer.findMany({
     select: {
       id: true, isStale: true, isExpired: true, availability: true, stockStatus: true,
-      flagged: true, vatBasis: true, promoValidTo: true, lastSeenAt: true, lastSeen: true,
+      flagged: true, vatBasis: true, promoValidTo: true, lastObservedAt: true, priceSource: true,
       merchant: { select: { slug: true, active: true } },
       product: { select: { section: true } },
       anomalies: { where: { resolved: false }, select: { id: true } },
@@ -64,14 +64,14 @@ async function census(prisma: PrismaClient, label: string) {
   const since = new Date(now.getTime() - 36 * 3600_000);
   const freshest = await prisma.offer.groupBy({
     by: ["merchantId"],
-    _max: { lastSeen: true },
+    _max: { lastObservedAt: true },
   });
   const merchantSlugs = new Map(
     (await prisma.merchant.findMany({ select: { id: true, slug: true } })).map((m) => [m.id, m.slug]),
   );
   const scrapedRecently = new Set(
     freshest
-      .filter((f) => f._max.lastSeen && f._max.lastSeen >= since)
+      .filter((f) => f._max?.lastObservedAt && f._max.lastObservedAt >= since)
       .map((f) => merchantSlugs.get(f.merchantId)!)
       .filter(Boolean),
   );
@@ -88,8 +88,8 @@ async function census(prisma: PrismaClient, label: string) {
     flagged: o.flagged,
     vatBasis: o.vatBasis,
     promoValidTo: o.promoValidTo,
-    lastSeenAt: o.lastSeenAt,
-    lastSeen: o.lastSeen,
+    lastObservedAt: o.lastObservedAt,
+    priceSource: o.priceSource,
     anomalies: o.anomalies.length,
   }));
 
@@ -173,8 +173,8 @@ function printOverlap(c: Census): void {
   let oosOnly = 0;
   for (const r of c.rows) {
     const oos = r.availability !== "in stock" || r.stockStatus === "OUT_OF_STOCK";
-    const seen = r.lastSeenAt ?? r.lastSeen;
-    const stale = r.isStale || c.now.getTime() - seen.getTime() > STALE_AFTER_DAYS * 86_400_000;
+    const seen = r.lastObservedAt;
+    const stale = r.isStale || !seen || c.now.getTime() - seen.getTime() > STALE_AFTER_DAYS * 86_400_000;
     if (stale && oos) staleAndOos++;
     else if (stale) staleOnly++;
     else if (oos) oosOnly++;

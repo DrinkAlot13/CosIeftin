@@ -24,7 +24,7 @@ export function currentOfferWhere(now: Date = new Date()) {
     merchant: { active: true },
     availability: "in stock",
     isStale: false,
-    lastSeen: { gte: new Date(now.getTime() - MAX_DISPLAY_AGE_DAYS * 86_400_000) },
+    lastObservedAt: { gte: new Date(now.getTime() - MAX_DISPLAY_AGE_DAYS * 86_400_000) },
   } as const;
 }
 
@@ -347,6 +347,6 @@ export async function getAdminStats() {
     include: { _count: { select: { offers: true } } },
     orderBy: { name: "asc" },
   });
-  const newest = await prisma.offer.findFirst({ orderBy: { lastSeen: "desc" }, select: { lastSeen: true } });
-  return { products, offers, chains, merchantRows, lastUpdated: newest?.lastSeen ?? null };
+  const newest = await prisma.offer.findFirst({ orderBy: { lastObservedAt: "desc" }, select: { lastObservedAt: true } });
+  return { products, offers, chains, merchantRows, lastUpdated: newest?.lastObservedAt ?? null };
 }

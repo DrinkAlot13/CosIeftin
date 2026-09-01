@@ -105,7 +105,7 @@ async function main() {
   const rows = [
     ["offers total", total],
     ["with priceSource set", await prisma.offer.count({ where: { priceSource: { in: ["SHELF", "ONLINE", "DELIVERY_PLATFORM", "FLYER"] } } })],
-    ["with lastSeenAt", await prisma.offer.count({ where: { lastSeenAt: { not: null } } })],
+    ["with lastObservedAt", await prisma.offer.count({ where: { lastObservedAt: { not: null } } })],
     ["with referencePriceBani", await prisma.offer.count({ where: { referencePriceBani: { not: null } } })],
     ["with promo window", await prisma.offer.count({ where: { promoValidTo: { not: null } } })],
     ["with productUrl (deep link)", await prisma.offer.count({ where: { productUrl: { not: null } } })],

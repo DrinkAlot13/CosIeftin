@@ -23,8 +23,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         slug: true,
         offers: {
           where: { isStale: false, merchant: { active: true } },
-          select: { lastSeen: true },
-          orderBy: { lastSeen: "desc" },
+          select: { lastObservedAt: true },
+          orderBy: { lastObservedAt: "desc" },
           take: 1,
         },
       },
@@ -48,7 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const productPages: MetadataRoute.Sitemap = products.map((p) => ({
     url: abs(`/p/${p.slug}`),
-    lastModified: p.offers[0]?.lastSeen ?? undefined,
+    lastModified: p.offers[0]?.lastObservedAt ?? undefined,
     changeFrequency: "daily" as const,
     priority: 0.6,
   }));

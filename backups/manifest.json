@@ -58,5 +58,15 @@
     "products": 34860,
     "integrityOk": true,
     "gzipped": true
+  },
+  {
+    "file": "2026-09-01T14-20-30-860Z.db.gz",
+    "takenAt": "2026-09-01T14:20:33.556Z",
+    "bytes": 8934803,
+    "offers": 43765,
+    "priceHistory": 79567,
+    "products": 34860,
+    "integrityOk": true,
+    "gzipped": true
   }
 ]

@@ -126,7 +126,7 @@ async function censusForMerchant(merchantId: number): Promise<string> {
     where: { merchantId },
     select: {
       isStale: true, isExpired: true, availability: true, stockStatus: true, flagged: true,
-      vatBasis: true, promoValidTo: true, lastSeenAt: true, lastSeen: true,
+      vatBasis: true, promoValidTo: true, lastObservedAt: true, priceSource: true,
       merchant: { select: { active: true } },
       anomalies: { where: { resolved: false }, select: { id: true } },
     },
@@ -141,8 +141,8 @@ async function censusForMerchant(merchantId: number): Promise<string> {
       isExpired: o.isExpired,
       promoValidTo: o.promoValidTo,
       isStale: o.isStale,
-      lastSeenAt: o.lastSeenAt,
-      lastSeen: o.lastSeen,
+      lastObservedAt: o.lastObservedAt,
+      priceSource: o.priceSource,
       availability: o.availability,
       stockStatus: o.stockStatus,
       vatBasis: o.vatBasis,
@@ -716,7 +716,7 @@ export async function matchPoolToCatalog(
       referencePriceKind: o.sp.referencePriceKind ?? null,
       promoValidFrom: o.sp.promoValidFrom ?? null,
       promoValidTo: o.sp.promoValidTo ?? null,
-      lastSeenAt: new Date(),
+      lastObservedAt: new Date(),
       isStale: false,
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
     };
@@ -750,7 +750,7 @@ export async function matchPoolToCatalog(
     const avail = o.available ? "in stock" : "out of stock";
     const offer = await prisma.offer.upsert({
       where: { productId_merchantId: { productId, merchantId } },
-      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, lastSeen: new Date(), ...provenance },
+      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
       create: { productId, merchantId, price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
     });
     // append a history point only when the price actually changed (20–50× fewer rows)
