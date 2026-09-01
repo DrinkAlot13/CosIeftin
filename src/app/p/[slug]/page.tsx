@@ -4,6 +4,7 @@ import { AddToList } from "@/components/AddToList";
 import { OfferTable } from "@/components/OfferTable";
 import { BulkTierTable } from "@/components/BulkTierTable";
 import { visibleTiers } from "@/lib/bulk-tiers";
+import { priceDisplayFor, priceRange } from "@/lib/reference-price";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductImage } from "@/components/ProductImage";
@@ -87,11 +88,46 @@ export default async function ItemPage({ params }: { params: { slug: string } })
         <div>
           {product.brand && <div className="pbrand" style={{ fontSize: 13 }}>{product.brand}</div>}
           <h1 className="product-title">{product.name}</h1>
+          {/*
+            A STRIKETHROUGH IS A CLAIM ABOUT ONE OFFER'S OWN HISTORY.
+            This block used to render `summary.highest` — ANOTHER MERCHANT'S price for the
+            same product — struck through beside the lowest. That reads as "was 17,99, now
+            12,00": a discount nobody ever gave. It is the price at a different shop.
+            A range is now stated as a range, and a strike only appears when the cheapest
+            shown offer carries its own genuine former price.
+          */}
           <div className="price-block">
             <span className="from">cel mai mic preț</span>
             <span className="big">{formatRON(summary.lowest)}</span>
-            {summary.savings > 0 && <span className="strike">{formatRON(summary.highest)}</span>}
+            {bestOffer && (() => {
+              const d = priceDisplayFor(bestOffer);
+              if (d.kind === "strike") {
+                return (
+                  <span className="strike" title="prețul anterior la același magazin">
+                    {formatRON(d.wasBani / 100)}
+                  </span>
+                );
+              }
+              return null;
+            })()}
           </div>
+          {bestOffer && (() => {
+            // The Omnibus 30-day figure is a LEGAL FLOOR, not a former price. It is shown,
+            // labelled for what it is, and never struck through — striking it would claim a
+            // discount on what may well be a price increase.
+            const d = priceDisplayFor(bestOffer);
+            return d.kind === "omnibus" ? (
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
+                Preț minim în ultimele 30 de zile: {formatRON(d.lowBani / 100)}
+              </div>
+            ) : null;
+          })()}
+          {(() => {
+            const range = priceRange(summary.lowestBani, summary.highestBani, summary.inStockCount);
+            return range ? (
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>{range}</div>
+            ) : null;
+          })()}
           {/*
             ONE COUNT, SAID THE SAME WAY EVERYWHERE ON THIS PAGE.
             This line said "1 magazine" while the table below listed four rows, because it

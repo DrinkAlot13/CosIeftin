@@ -677,3 +677,128 @@ Backed up: `2026-08-31T12-41-27-309Z.db.gz`, 33.1 MB → 8.0 MB, integrity-check
 4. A pass to retire or re-match the legacy Auchan rows in #1 and #2.
 
 Items 1, 2 and 4 are mechanical. Item 3 is yours.
+
+---
+
+# Overnight session — every price a user sees is correct
+
+Branch `fix/pepsi-merge`. Ten phases, in order, no reordering.
+
+## PHASE 1 — finish the scrape
+
+Started from 3 merchants already done under mixed matcher code; killed that run, took a fresh
+backup, pushed the `offersWritten` schema change, and started `scrape:all` clean so every
+merchant goes through the current matcher (variant hard block + pack shape + tobacco
+exclusion).
+
+Completions as they landed, with the pool census printed by `matchPoolToCatalog`:
+
+| merchant | offers written | pool | matched | review | rejected |
+|---|---|---|---|---|---|
+| auchan | 5,944 | 5,695 | 5,692 (99.9%) | 0 | 3 |
+| freshful | 329 | 3,101 | 317 (10.2%) | 406 | 2,214 |
+| mega-image | 720 | 6,960 | 695 (10.0%) | 786 | 5,088 |
+| carrefour | 904 | 4,010 | 898 (22.4%) | 748 | 2,336 |
+| metro | 5,297 | 5,246 | 4,743 (90.4%) | 0 | 503 |
+| sezamo | 7,804 | 7,785 | 7,783 (100.0%) | 0 | 2 |
+| finestore | 276 | 276 | 275 (99.6%) | 0 | 1 |
+| lemanoir | 94 | 97 | 4 (4.1%) | 0 | 93 |
+| carrefour-alcohol | 1,202 | 1,212 | 762 (62.9%) | 56 | 394 |
+
+Notes on the numbers, so they are not read wrong later:
+
+- **"matched" counts matches to an EXISTING catalog product.** Le Manoir shows 4/97 matched
+  and still wrote 94 offers, because it runs with `addNew` and the other 93 became new
+  catalog products. A low match rate on an addNew merchant is not a failure.
+- **freshful, mega-image and carrefour are match-only** (`addNew` defaults false), so their
+  rejected column IS discarded work. Those three are the ones where the 70%+ rejection rate
+  matters, and the Mega Image diagnosis (37/50 sampled rejections correct, ~1,200 realistic
+  upside) is in the backlog, not tonight.
+- **metro wrote more offers than pool items** (5,297 from 5,246): one store item can back more
+  than one catalog product. Not an error, but worth watching for fan-out.
+
+The tobacco exclusion fired live during the run — 30 products on one merchant, 200 on another,
+printed with samples ("Tigari", "Tigari Tuned Blue XL").
+
+The rule-coverage table printed on every run. First full-catalog counts under the new matcher:
+`size=765139 · size-unit=159896 · brand=114035 · mutually-distinct=20765 · ean=5651 ·
+variant-flavour=1515 · brand+size=975 · pack-shape=409 · low-overlap=274 ·
+variant-mismatch=237 · name+size=217 · variant-qualifier=194 · variant-format=19 ·
+dose-mismatch=15 · variant-fat=2 · head-noun=0`.
+
+`variant-flavour` at 1,515 and `pack-shape` at 409 are the two blocks added for the Pepsi
+page doing real work across the whole catalog. `head-noun=0` is unreachable-by-construction,
+recorded in BACKLOG so nobody chases it as a second doseTokens.
+
+Remaining when this entry was written: dcneu (mid detail pass, ~2,500/6,019), farmaciatei,
+kaufland, penny.
+
+### Groundwork found while phase 1 finished (read-only, no changes)
+
+Two things that make phase 5 (SGR deposit) far cheaper than expected:
+
+- **Auchan PUBLISHES the deposit.** Its VTEX payload carries `"GARANTIE_SGR":["0,5"]` —
+  the per-container deposit in lei, stated by the merchant. 995 offers already hold it in
+  `rawSourceBlob`. That is an authoritative value, not a derivation, and it is the same shape
+  as Kaufland's `formattedBasePrice`: a merchant-computed figure that shares no assumption
+  with our parser.
+- **Auchan marks SGR products in the URL.** 1,134 offers have a `-sgr` suffix in
+  `productUrl` (VTEX `linkText`), which identifies deposit-bearing products even where the
+  attribute is absent.
+
+So the plan for phase 5 is: read `GARANTIE_SGR` where published, fall back to 50 bani per
+container for in-scope categories, and multiply by `containerCount` derived from `packCount`.
+The six-pack vs 2 L difference the brief calls out (3,00 lei vs 0,50) falls straight out of
+that.
+
+## PHASE 4 — the misleading strikethrough (done during the phase-1 wait)
+
+Implemented while DCNeu's detail pass ran. Phases 2 and 3 are reports against the freshly
+scraped data and could not start yet; this one needed no new data, only the rendered pages,
+which already exist.
+
+**The defect.** `src/app/p/[slug]/page.tsx` rendered `summary.highest` — the CROSS-STORE
+MAXIMUM — inside a `.strike` span next to the lowest price:
+
+    cel mai mic preț  12,00   ~~17,99~~
+
+17,99 was another merchant's price. Struck through, it reads "was 17,99, now 12,00": a
+discount nobody ever gave, on a product nobody ever discounted.
+
+**The fix.** `src/lib/reference-price.ts` decides what may be shown. A strike requires a
+reference on the SAME offer, strictly above that offer's own price, of kind STRIKETHROUGH. A
+range is stated as a range: "între 12,00 și 17,99 lei în 4 magazine".
+
+**A DEVIATION FROM THE BRIEF, for the morning decision.** The brief allows striking either
+STRIKETHROUGH or OMNIBUS_30D. CLAUDE.md says the opposite about the second, and I followed
+CLAUDE.md: the Omnibus figure is the LOWEST price of the past 30 days, printed because the law
+requires it, so striking it claims a saving on what may be a price *increase*. It is now shown
+with its own label — "Preț minim în ultimele 30 de zile: X" — so the number still reaches the
+page and only the discount claim is withheld. Decision 1 in the morning report.
+
+**Surfaces swept.** Only the item page made this claim. `/oferte` says "economisești până la
+X" while naming the cheapest shop, and the basket says "dacă mergi în N magazine în loc de
+unul" — both state the comparison explicitly rather than dressing it as a discount, so both
+were left alone.
+
+**Guard.** `audit:displayed` gains: no struck price may equal another offer's price on the
+same product. In `verify:site`.
+
+**VERIFIED BY RENDERED HTML** on five products that have a range:
+
+    /p/telemea-de-vaca-in-saramura-delaco-400-g-5941360013192
+      cel mai mic preț | 25,19 RON | între 25,19 și 25,49 lei în 2 magazine
+    /p/iaurt-grecesc-natur-olympus-2-grasime-900-g-5941875901359
+      cel mai mic preț | 15,49 RON | 20,79 RON | între 15,49 și 16,99 lei în 2 magazine
+    /p/cascaval-de-ibanesti-mirdatod-450-g-5941872204255
+      cel mai mic preț | 30,19 RON | între 30,19 și 30,79 lei în 3 magazine
+    /p/cascaval-delaco-sofia-400-g-5941360016346
+      cel mai mic preț | 28,29 RON | între 28,29 și 28,99 lei în 2 magazine
+    /p/telemea-de-vaca-hochland-350-g-5941238005052
+      cel mai mic preț | 18,96 RON | între 18,96 și 19,29 lei în 2 magazine
+
+Four show no strike at all. The fifth strikes 20,79 — which is NOT inside its own 15,49–16,99
+range, so it is a genuine former price at that same shop and is correctly kept. That is the
+distinction the whole phase is about, visible in one line of output.
+
+727 tests pass.

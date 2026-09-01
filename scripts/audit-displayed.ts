@@ -65,7 +65,7 @@ async function main(): Promise<void> {
       slug: true,
       offers: {
         where: { merchant: { active: true } },
-        select: { price: true, priceBani: true, isStale: true, flagged: true, availability: true, lastObservedAt: true, priceSource: true },
+        select: { price: true, priceBani: true, isStale: true, flagged: true, availability: true, lastObservedAt: true, priceSource: true, referencePriceBani: true, referencePriceKind: true },
       },
     },
   });
@@ -111,6 +111,29 @@ async function main(): Promise<void> {
   }
   record("every 'La magazin' link points at that merchant's own domain", wrongHost);
   record("every showable non-flyer offer has a usable link", noLink);
+
+  // ── NO STRUCK PRICE MAY EQUAL ANOTHER OFFER'S PRICE ON THE SAME PRODUCT.
+  //
+  //    The item page used to strike `summary.highest` — the cross-store maximum — beside the
+  //    lowest, which reads as a discount nobody ever gave. A struck price is a claim about ONE
+  //    offer's own history, so if the number being struck happens to be exactly what a
+  //    different shop charges, that is the bug coming back.
+  const crossStore: string[] = [];
+  for (const p2 of products) {
+    const priced = p2.offers.filter((o) => (o.priceBani ?? Math.round(o.price * 100)) > 0);
+    if (priced.length < 2) continue;
+    const prices = new Set(priced.map((o) => o.priceBani ?? Math.round(o.price * 100)));
+    for (const o of priced) {
+      const ref = (o as { referencePriceBani?: number | null }).referencePriceBani;
+      const kind = (o as { referencePriceKind?: string | null }).referencePriceKind;
+      if (ref == null || kind !== "STRIKETHROUGH") continue;
+      const own = o.priceBani ?? Math.round(o.price * 100);
+      if (ref !== own && prices.has(ref)) {
+        crossStore.push(`/p/${p2.slug}: an offer strikes ${(ref / 100).toFixed(2)}, which is another shop's price`);
+      }
+    }
+  }
+  record("no struck price equals another offer's price on the same product", crossStore);
 
   // ── The two withheld cohorts must still be withheld, or be correct.
   const keptOver = await prisma.priceAnomaly.findMany({
