@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToList } from "@/components/AddToList";
-import { BulkTiers } from "@/components/BulkTiers";
 import { OfferTable } from "@/components/OfferTable";
+import { BulkTierTable } from "@/components/BulkTierTable";
+import { visibleTiers } from "@/lib/bulk-tiers";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductImage } from "@/components/ProductImage";
@@ -120,9 +121,21 @@ export default async function ItemPage({ params }: { params: { slug: string } })
             <AddToList slug={product.slug} name={product.name} />
             <TrackPrice slug={product.slug} name={product.name} price={summary.lowest} />
           </div>
+          {/*
+            THE LADDER, from the VALIDATED BulkTier rows rather than the legacy JSON column.
+            `Offer.bulkTiers` (a JSON string) is populated on 247 offers; the BulkTier table
+            holds 3,938 — the same fact in two places, with the gated, validated copy being
+            the one that was not rendering. See docs/BACKLOG.md.
+            `visibleTiers` refuses a ladder hanging off a flagged, stale or out-of-stock
+            price: a discount computed against a withheld base is a made-up number wearing a
+            percentage.
+          */}
           {(() => {
-            const t = offers.find((o) => o.bulkTiers && o.bulkTiers !== "[]");
-            return t ? <BulkTiers tiers={t.bulkTiers} store={t.merchant.name} /> : null;
+            const withLadder = offers
+              .map((o) => ({ o, ladder: visibleTiers(o) }))
+              .filter((x) => x.ladder !== null)
+              .sort((a, b) => a.ladder!.bestUnitBani - b.ladder!.bestUnitBani)[0];
+            return withLadder ? <BulkTierTable ladder={withLadder.ladder!} /> : null;
           })()}
         </div>
       </div>

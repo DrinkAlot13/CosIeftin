@@ -5,8 +5,15 @@ import { normalizeText } from "@/lib/matching";
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
 import { rankSearch } from "@/lib/search/rank";
 import { buildDailyLowSeries, dropPercent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
+import { visibleTiers } from "./bulk-tiers";
 
-const activeInclude = { where: { merchant: { active: true } }, include: { merchant: true } } as const;
+const activeInclude = {
+  where: { merchant: { active: true } },
+  // `tiers` rides along so a listing card can show the quantity discount. DCNeu is a
+  // discounter: the ladder IS the offer, and a card showing only the single-unit price shows
+  // the least attractive number on it.
+  include: { merchant: true, tiers: { orderBy: { minQuantity: "asc" } } },
+} as const;
 
 /**
  * What "a price we can stand behind" means, expressed as a Prisma filter.
@@ -75,12 +82,35 @@ export async function getAlcoholCategories() {
 }
 
 /** Add headline price + lowest price-per-unit to a product's offers. */
-function decorate<T extends { offers: { price: number; availability: string; pricePerUnit: number }[] }>(products: T[]) {
+function decorate<T extends {
+  offers: {
+    price: number; availability: string; pricePerUnit: number;
+    priceBani?: number | null; flagged?: boolean; isStale?: boolean;
+    tiers?: { minQuantity: number; unitPriceBani: number; discountBp: number | null }[];
+  }[];
+}>(products: T[]) {
   return products.map((p) => {
     const inStock = p.offers.filter((o) => o.availability === "in stock");
     const pool = inStock.length > 0 ? inStock : p.offers;
     const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
-    return { ...p, summary: summarize(p.offers), unitLowest };
+    // Best trusted ladder across this product's offers. `visibleTiers` refuses one hanging
+    // off a flagged, stale or out-of-stock price, so a card cannot advertise a discount
+    // against a base we are withholding.
+    let bulk: { bestUnitBani: number; bestFromQty: number; bestDiscountBp: number } | null = null;
+    for (const o of p.offers) {
+      const l = visibleTiers({
+        priceBani: o.priceBani ?? null,
+        price: o.price,
+        flagged: o.flagged ?? false,
+        isStale: o.isStale ?? false,
+        availability: o.availability,
+        tiers: o.tiers,
+      });
+      if (l && (!bulk || l.bestUnitBani < bulk.bestUnitBani)) {
+        bulk = { bestUnitBani: l.bestUnitBani, bestFromQty: l.bestFromQty, bestDiscountBp: l.bestDiscountBp };
+      }
+    }
+    return { ...p, summary: summarize(p.offers), unitLowest, bulk };
   });
 }
 
@@ -107,7 +137,7 @@ export async function getItemPage(slug: string) {
     where: { slug },
     include: {
       category: true,
-      offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } } } },
+      offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } }, tiers: { orderBy: { minQuantity: "asc" } } } },
     },
   });
   if (!product) return null;

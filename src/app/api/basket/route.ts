@@ -24,11 +24,20 @@ export async function POST(req: NextRequest) {
     slug: p.slug,
     name: p.name,
     unit: p.unit,
+    // THIS IS THE pool.map() PATTERN CLAUDE.md WARNS ABOUT. A narrower object literal is a
+    // valid OfferForBasket, so the compiler cannot object when a field is left out — which is
+    // how Metro and Mega Image lost productUrl and rawPriceText on every offer they wrote.
+    // Anything added to OfferForBasket must be added here too, or it silently arrives as
+    // undefined and the optimizer quietly prices the basket without it.
     offers: p.offers.map((o) => ({
       price: o.price,
       availability: o.availability,
       loyaltyPrice: o.loyaltyPrice,
       priceSource: o.priceSource,
+      priceBani: o.priceBani,
+      flagged: o.flagged,
+      isStale: o.isStale,
+      tiers: o.tiers,
       merchant: {
         id: o.merchant.id,
         slug: o.merchant.slug,

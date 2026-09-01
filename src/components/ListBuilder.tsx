@@ -27,7 +27,14 @@ import { formatRON } from "@/lib/format";
 type Store = { slug: string; name: string; color: string | null };
 type Suggestion = { slug: string; name: string; brand: string | null; lowest: number };
 
-type Cheapest = { merchantId: number; merchantName: string; merchantSlug: string; unitPrice: number; linePrice: number; loyalty?: boolean; priceSource?: string };
+type Cheapest = {
+  merchantId: number; merchantName: string; merchantSlug: string;
+  unitPrice: number; linePrice: number; loyalty?: boolean; priceSource?: string;
+  /** set when this line's quantity reached a quantity-discount rung */
+  bulk?: { fromQty: number; unitPrice: number; savedOnLine: number } | null;
+  /** the next rung, only when reaching it costs LESS IN TOTAL than the current quantity */
+  nextRung?: { addUnits: number; atQty: number; newUnitPrice: number; savesTotal: number } | null;
+};
 type PerItem = { productId: number; slug: string; name: string; qty: number; cheapest: Cheapest | null };
 type StoreTotal = {
   merchantId: number; slug: string; name: string; color: string | null; storeType: string | null;
@@ -280,9 +287,35 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                       <div className="lr-name">
                         <Link href={`/p/${it.slug}`}>{it.name}</Link>
                         {pi?.cheapest ? (
-                          <div className="muted lr-cheap">
-                            cel mai ieftin: <b>{pi.cheapest.merchantName}</b> · {formatRON(pi.cheapest.linePrice)}
-                          </div>
+                          <>
+                            <div className="muted lr-cheap">
+                              cel mai ieftin: <b>{pi.cheapest.merchantName}</b> · {formatRON(pi.cheapest.linePrice)}
+                            </div>
+                            {/*
+                              The line already reached a quantity rung, so the total above IS
+                              the discounted total. Saying so matters: an unexplained lower
+                              number reads as an error.
+                            */}
+                            {pi.cheapest.bulk && (
+                              <div className="lr-cheap" style={{ color: "var(--primary)", fontSize: 12.5 }}>
+                                preț la cantitate: {formatRON(pi.cheapest.bulk.unitPrice)}/buc de la{" "}
+                                {pi.cheapest.bulk.fromQty} buc · economisești {formatRON(pi.cheapest.bulk.savedOnLine)}
+                              </div>
+                            )}
+                            {/*
+                              And the near-miss. Only shown when the bigger quantity costs LESS
+                              IN TOTAL — buying two more to save four bani a unit is an upsell,
+                              not a saving, and this site exists not to do that.
+                            */}
+                            {pi.cheapest.nextRung && (
+                              <div className="lr-cheap muted" style={{ fontSize: 12.5 }}>
+                                💡 mai adaugă {pi.cheapest.nextRung.addUnits} și plătești{" "}
+                                {formatRON(pi.cheapest.nextRung.newUnitPrice)}/buc în loc de{" "}
+                                {formatRON(pi.cheapest.unitPrice)} — total cu{" "}
+                                {formatRON(pi.cheapest.nextRung.savesTotal)} mai puțin
+                              </div>
+                            )}
+                          </>
                         ) : (
                           <div className="muted lr-cheap">indisponibil în magazinele monitorizate</div>
                         )}

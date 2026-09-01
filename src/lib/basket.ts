@@ -1,4 +1,5 @@
 import { isShelfPrice, normalizePriceSource } from "./price-source";
+import { visibleTiers, unitPriceAtQty, nextRungHint } from "./bulk-tiers";
 // Grocery-list optimizer: given items + every chain's offers, work out the two
 // answers users care about — cheapest SINGLE store (one trip) vs cheapest SPLIT
 // (buy each item wherever it's cheapest) — and the savings/convenience trade-off.
@@ -14,6 +15,11 @@ export type OfferForBasket = {
   availability: string;
   loyaltyPrice?: number | null;
   priceSource?: string | null;
+  priceBani?: number | null;
+  flagged?: boolean;
+  isStale?: boolean;
+  /** DCNeu-style quantity discounts. The ladder IS the offer at a discounter. */
+  tiers?: { minQuantity: number; unitPriceBani: number; discountBp: number | null }[];
   merchant: {
     id: number;
     slug: string;
@@ -58,6 +64,16 @@ export type PerItemResult = {
     /** true when this price needs the store's loyalty card */
     loyalty: boolean;
     priceSource: string;
+    /** set when the line's quantity reached a quantity-discount rung */
+    bulk?: { fromQty: number; unitPrice: number; savedOnLine: number } | null;
+    /**
+     * "Add one more and you pay 6,61 instead of 7,00."
+     *
+     * Only present when reaching the next rung costs LESS IN TOTAL than the current
+     * quantity. Buying two more to save four bani a unit is an upsell, not a saving, and
+     * suggesting it on a price-comparison site is the one thing this project exists not to do.
+     */
+    nextRung?: { addUnits: number; atQty: number; newUnitPrice: number; savesTotal: number } | null;
   } | null;
 };
 
@@ -128,7 +144,23 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
     if (!p) continue;
     const best = bestOffer(p.offers, useLoyalty);
     if (best) {
-      const line = best.price * qty;
+      // QUANTITY DISCOUNTS. If this line's qty reaches a rung, the shopper pays the rung
+      // price — so the basket must too, or the total we advertise is one nobody is charged.
+      const baseBani = best.offer.priceBani ?? Math.round(best.offer.price * 100);
+      const ladder = visibleTiers({
+        priceBani: best.offer.priceBani ?? null,
+        price: best.offer.price,
+        flagged: best.offer.flagged ?? false,
+        isStale: best.offer.isStale ?? false,
+        availability: best.offer.availability,
+        tiers: best.offer.tiers,
+      });
+      // Only applies to the shelf price. A loyalty price is a different ladder we do not have.
+      const tierUnitBani = best.loyalty ? null : (ladder ? unitPriceAtQty(ladder, baseBani, qty) : null);
+      const usesTier = tierUnitBani != null && tierUnitBani < baseBani;
+      const unitPrice = usesTier ? tierUnitBani / 100 : best.price;
+      const hint = best.loyalty ? null : nextRungHint(ladder, baseBani, qty);
+      const line = unitPrice * qty;
       splitGoods += line;
       splitByMerchant.set(best.offer.merchant.id, (splitByMerchant.get(best.offer.merchant.id) ?? 0) + line);
       perItem.push({
@@ -140,10 +172,25 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
           merchantId: best.offer.merchant.id,
           merchantName: best.offer.merchant.name,
           merchantSlug: best.offer.merchant.slug,
-          unitPrice: best.price,
+          unitPrice,
           linePrice: line,
           loyalty: best.loyalty,
           priceSource: best.offer.priceSource ?? "shelf",
+          bulk: usesTier
+            ? {
+                fromQty: ladder!.rungs.filter((r) => qty >= r.minQuantity).slice(-1)[0].minQuantity,
+                unitPrice,
+                savedOnLine: (baseBani / 100) * qty - line,
+              }
+            : null,
+          nextRung: hint
+            ? {
+                addUnits: hint.addUnits,
+                atQty: hint.atQty,
+                newUnitPrice: hint.newUnitBani / 100,
+                savesTotal: hint.savesBani / 100,
+              }
+            : null,
         },
       });
     } else {
