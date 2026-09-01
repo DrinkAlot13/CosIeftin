@@ -17,15 +17,17 @@ import { decideMatch, bulkReject, undoDecision } from "@/app/admin/matches/actio
 const lei = (bani: number | null): string =>
   bani == null ? "—" : `${(bani / 100).toFixed(2).replace(".", ",")} lei`;
 
-type Props = { initial: PendingCandidate[]; totalPending: number };
+type Props = { initial: PendingCandidate[]; totalPending: number; rate: { confirmed: number; total: number; rate: number } };
 
-export function MatchReview({ initial, totalPending }: Props) {
+export function MatchReview({ initial, totalPending, rate }: Props) {
   const [rows, setRows] = useState(initial);
   const [cursor, setCursor] = useState(0);
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [lastDecided, setLastDecided] = useState<number | null>(null);
+  // Running rate, updated locally so it moves as you work rather than only on reload.
+  const [tally, setTally] = useState({ confirmed: rate.confirmed, total: rate.total });
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const current = rows[cursor];
@@ -42,10 +44,14 @@ export function MatchReview({ initial, totalPending }: Props) {
     if (!current || busy) return;
     setBusy(true);
     const id = current.id;
-    const res = await decideMatch(id, decision);
+    // The rank is recorded WITH the decision: a confirm rate is only interpretable against
+    // position, and reconstructing it later from a ranking function that may have changed
+    // would be inventing the measurement.
+    const res = await decideMatch(id, decision, { rank: cursor + 1, createsComparison: current.createsComparison });
     setBusy(false);
     if (!res.ok) { setNote(res.error ?? "Failed."); return; }
     setLastDecided(id);
+    setTally((t) => ({ confirmed: t.confirmed + (decision === "confirm" ? 1 : 0), total: t.total + 1 }));
     setNote(`${decision === "confirm" ? "Confirmat" : "Respins"}: ${current.productName.slice(0, 44)}`);
     setRows((r) => r.filter((x) => x.id !== id));
     setCursor((c) => Math.min(c, Math.max(0, rows.length - 2)));
@@ -59,6 +65,7 @@ export function MatchReview({ initial, totalPending }: Props) {
     setBusy(false);
     if (!res.ok) { setNote(res.error ?? "Failed."); return; }
     setNote(`${res.done} respinse.`);
+    setTally((t) => ({ confirmed: t.confirmed, total: t.total + (res.done ?? 0) }));
     setRows((r) => r.filter((x) => !marked.has(x.id)));
     setMarked(new Set());
   }, [marked, busy]);
@@ -109,6 +116,13 @@ export function MatchReview({ initial, totalPending }: Props) {
           <b>{rows.length}</b> în coadă
           {totalPending > rows.length && <span className="muted"> din {totalPending} în total</span>}
           {marked.size > 0 && <span className="mr-marked"> · {marked.size} marcate</span>}
+          {tally.total > 0 && (
+            <span className="mr-rate" title="confirmate / decizii">
+              {" · "}<b>{((tally.confirmed / tally.total) * 100).toFixed(0)}%</b> confirmate
+              <span className="muted"> ({tally.confirmed}/{tally.total})</span>
+              {" · "}<a href="/admin/matches/stats">detalii</a>
+            </span>
+          )}
         </div>
         <div className="mr-keys">
           <kbd>J</kbd>/<kbd>K</kbd> navighează · <kbd>Y</kbd> confirmă · <kbd>N</kbd> respinge ·

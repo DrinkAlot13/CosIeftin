@@ -582,11 +582,21 @@ model PendingMatch {
   resolved   Boolean  @default(false)
   decision   String?
   decidedAt  DateTime?
+  /// Where this sat in the ranked queue when it was decided (1 = top).
+  ///
+  /// Recorded because confirm rate is only interpretable against position: if the top 100 by
+  /// value confirm at 30% and the tail confirms at 3%, the queue is worth working through in
+  /// order and abandoning early. Without the rank, a single blended rate hides that entirely.
+  rankAtDecision Int?
+  /// Snapshot of the ranking inputs at decision time, so a later change to rankValue cannot
+  /// silently rewrite the history that judged it.
+  createdComparison Boolean?
 
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @default(now())
 
   @@unique([merchantId, storeKey, productId])
   @@index([resolved, score])
+  @@index([decision, reason])
   @@index([merchantId])
 }

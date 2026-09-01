@@ -25,7 +25,12 @@ async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string
  * Both write a MatchOverride keyed by (merchantId, storeKey) — the same key the matcher checks
  * before any heuristic runs — so the next scrape acts on the decision without re-asking.
  */
-export async function decideMatch(id: number, decision: "confirm" | "reject"): Promise<DecisionResult> {
+export async function decideMatch(
+  id: number,
+  decision: "confirm" | "reject",
+  /** 1-based position in the ranked queue when the decision was made. */
+  meta?: { rank?: number; createsComparison?: boolean },
+): Promise<DecisionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return { ok: false, error: auth.error };
 
@@ -41,7 +46,16 @@ export async function decideMatch(id: number, decision: "confirm" | "reject"): P
     }),
     prisma.pendingMatch.update({
       where: { id },
-      data: { resolved: true, decision, decidedAt: new Date() },
+      data: {
+        resolved: true,
+        decision,
+        decidedAt: new Date(),
+        // Confirm rate is only interpretable against position and rule, so both are recorded
+        // at the moment of the decision rather than reconstructed later from a ranking
+        // function that may since have changed.
+        rankAtDecision: meta?.rank ?? null,
+        createdComparison: meta?.createsComparison ?? null,
+      },
     }),
   ]);
 
@@ -76,6 +90,8 @@ export async function bulkReject(ids: number[]): Promise<DecisionResult> {
     ),
     prisma.pendingMatch.updateMany({
       where: { id: { in: rows.map((r) => r.id) } },
+      // No rank is recorded for a bulk rejection: these were marked from anywhere in the list
+      // and attributing one position to all of them would be a fabricated measurement.
       data: { resolved: true, decision: "reject", decidedAt: new Date() },
     }),
   ]);
@@ -94,7 +110,10 @@ export async function undoDecision(id: number): Promise<DecisionResult> {
 
   await prisma.$transaction([
     prisma.matchOverride.deleteMany({ where: { merchantId: pm.merchantId, storeKey: pm.storeKey } }),
-    prisma.pendingMatch.update({ where: { id }, data: { resolved: false, decision: null, decidedAt: null } }),
+    prisma.pendingMatch.update({
+      where: { id },
+      data: { resolved: false, decision: null, decidedAt: null, rankAtDecision: null, createdComparison: null },
+    }),
   ]);
 
   revalidatePath("/admin/matches");

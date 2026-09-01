@@ -8,6 +8,7 @@ import { MatchReview } from "@/components/MatchReview";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { loadPendingQueue } from "@/lib/pending-matches";
+import { runningConfirmRate } from "@/lib/match-stats";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Potriviri de verificat" };
@@ -18,7 +19,7 @@ export default async function AdminMatchesPage({
   const user = await getCurrentUser();
   if (!user?.isAdmin) notFound();
 
-  const [queue, totalPending, byMerchant] = await Promise.all([
+  const [queue, totalPending, byMerchant, rate] = await Promise.all([
     loadPendingQueue({ limit: 150, merchant: searchParams.merchant, section: searchParams.section }),
     prisma.pendingMatch.count({ where: { resolved: false } }),
     prisma.pendingMatch.groupBy({
@@ -26,6 +27,7 @@ export default async function AdminMatchesPage({
       where: { resolved: false },
       _count: true,
     }),
+    runningConfirmRate(),
   ]);
 
   const merchants = await prisma.merchant.findMany({
@@ -57,7 +59,7 @@ export default async function AdminMatchesPage({
         ))}
       </div>
 
-      <MatchReview initial={queue} totalPending={totalPending} />
+      <MatchReview initial={queue} totalPending={totalPending} rate={rate} />
     </div>
   );
 }

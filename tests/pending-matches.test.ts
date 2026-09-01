@@ -67,7 +67,11 @@ describe("pending matches are not offers", () => {
         if (e.isDirectory()) { walk(full); continue; }
         if (!/\.tsx?$/.test(e.name)) continue;
         const rel = full.split(path.sep).join("/");
-        if (rel.includes("/lib/pending-matches") || rel.includes("/admin/matches") || rel.includes("/scrape-util")) continue;
+        // The admin review path and the matcher that queues them are the ONLY legitimate
+        // readers. Everything else — any page, the optimizer, any count — must not see this
+        // table, which is the property under test.
+        const allowed = ["/lib/pending-matches", "/lib/match-stats", "/admin/matches", "/scrape-util"];
+        if (allowed.some((a) => rel.includes(a))) continue;
         if (fs.readFileSync(full, "utf8").includes("pendingMatch")) offenders.push(rel.split("/src/")[1] ?? rel);
       }
     };
