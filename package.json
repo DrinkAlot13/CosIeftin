@@ -81,6 +81,7 @@
     "audit:kept-over-refused": "tsx scripts/audit-kept-over-refused.ts",
     "audit:addnew-impact": "tsx scripts/audit-addnew-impact.ts",
     "audit:rejections": "tsx scripts/audit-rejections.ts",
+    "audit:unit-recompute": "tsx scripts/audit-unit-price-recompute.ts",
     "audit:unit-oracle": "tsx scripts/audit-unit-oracle.ts",
     "audit:variant-block": "tsx scripts/audit-variant-block.ts",
     "audit:comparability": "tsx scripts/audit-comparability.ts",
