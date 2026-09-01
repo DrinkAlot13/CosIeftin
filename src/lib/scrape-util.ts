@@ -354,10 +354,16 @@ function prep(name: string, brand: string | null | undefined, ean: string | null
 }
 
 /** Core rule: does store item `st` correspond to catalog item `cat` in this section? */
+/**
+ * How far two sizes may differ and still be the same product. Also the tolerance used to decide
+ * that an offer's own size DISAGREES with the catalog product it was matched to.
+ */
+export const SIZE_TOLERANCE = 0.06;
+
 function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: PrepItem, stSize: { unit: string; unitSize: number } | null, section: string): Decision {
   if (cat.ean && st.ean && cat.ean === st.ean) return { ok: true, band: "AUTO_MATCH", score: 1, reason: "ean" };
   if (!stSize || stSize.unit !== catSize.unit) return { ok: false, band: "REJECT", score: 0, reason: "size-unit" };
-  if (Math.abs(stSize.unitSize - catSize.unitSize) > catSize.unitSize * 0.06 + 1e-9) return { ok: false, band: "REJECT", score: 0, reason: "size" };
+  if (Math.abs(stSize.unitSize - catSize.unitSize) > catSize.unitSize * SIZE_TOLERANCE + 1e-9) return { ok: false, band: "REJECT", score: 0, reason: "size" };
   const chead = headNoun(cat.nname);
   if (chead && !st.tokens.has(chead) && !st.nname.includes(chead)) return { ok: false, band: "REJECT", score: 0, reason: "head-noun" };
   const branded = cat.nbrand.length > 0;
@@ -536,16 +542,19 @@ export async function matchPoolToCatalog(
     }
   }
 
-  const chosen = new Map<number, { unitSize: number; price: number; available: boolean; url: string; image: string | null; fillImage: boolean; category?: string; score: number; reason: string; source: string; sp: StoreProduct }>();
+  const chosen = new Map<number, { unitSize: number; ownSize: { unit: string; unitSize: number } | null; price: number; available: boolean; url: string; image: string | null; fillImage: boolean; category?: string; score: number; reason: string; source: string; sp: StoreProduct }>();
   const consider = (productId: number, unitSize: number, catImage: string | null, c: Prepared, score: number, reason: string) => {
     const prev = chosen.get(productId);
     const better = !prev || (c.sp.available && !prev.available) || (c.sp.available === prev.available && c.sp.price < prev.price);
-    if (better) chosen.set(productId, { unitSize, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: c.sp.priceSource ?? merchant?.priceSource ?? "SHELF", sp: c.sp });
+    // ownSize is the size parsed from THIS offer's own name. It is what the unit price must be
+    // computed from; the catalog product's size is a different product's size.
+    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: c.sp.priceSource ?? merchant?.priceSource ?? "SHELF", sp: c.sp });
   };
   // productId a store item is forbidden from (reject override), keyed by storeKey.
   const rejects = new Set<string>();
   for (const [k, o] of overrides) if (o.decision === "reject") rejects.add(`${k}:${o.productId}`);
   const rowById = new Map(rows.map((r) => [r.id, r]));
+  const catUnitById = new Map(rows.map((r) => [r.id, r.unit]));
 
   const explained = new Set<Prepared>();
 
@@ -659,6 +668,21 @@ export async function matchPoolToCatalog(
     const jump = prev && prev > 0 && (o.price > prev * 4 || o.price < prev * 0.25);
     const outlier = med > 0 && others.length >= 2 && (o.price > med * 6 || o.price < med / 6);
     const lowConf = o.score < 0.35;
+
+    // Does this offer's OWN size agree with the catalog product it was matched to?
+    //
+    // When it does not, the match is wrong — that is what a size disagreement MEANS. The old
+    // code computed the unit price from the catalog size, which made a mismatched offer look
+    // plausible instead of absurd and hid the disagreement completely. Now the disagreement is
+    // the flag, and a flagged offer is withheld from display rather than shown with a
+    // believable-looking number.
+    const ownSize = o.ownSize;
+    const catUnit = catUnitById.get(productId);
+    const sizeDisagrees =
+      ownSize != null && o.unitSize > 0 &&
+      (ownSize.unit !== catUnit ||
+       Math.abs(ownSize.unitSize - o.unitSize) > o.unitSize * SIZE_TOLERANCE + 1e-9);
+
     let writePrice = o.price;
     let flagged = false;
     let flagReason: string | null = null;
@@ -666,6 +690,11 @@ export async function matchPoolToCatalog(
       flagged = true;
       flagReason = jump ? `price jump ${prev}→${o.price}` : `outlier vs median ${med.toFixed(2)}`;
       if (prev && prev > 0) writePrice = prev; // keep the trusted price; don't write garbage
+    } else if (sizeDisagrees && ownSize) {
+      flagged = true;
+      flagReason =
+        `size disagreement: offer is ${ownSize.unitSize} ${ownSize.unit}, ` +
+        `catalog product is ${o.unitSize} ${catUnit} — the match is wrong`;
     } else if (lowConf) {
       flagged = true;
       flagReason = `low match confidence ${o.score.toFixed(2)} (${o.reason})`;
@@ -675,6 +704,11 @@ export async function matchPoolToCatalog(
     // Provenance travels with every write: the raw string that produced this price, the
     // deep link (null when the source has none), and any advertised reference price.
     const provenance = {
+      // The offer's OWN identity, so the unit price can be re-derived and checked without a
+      // re-scrape. Its absence is why the catalog-size bug was unverifiable from stored data.
+      storeName: o.sp.name,
+      ownUnit: ownSize?.unit ?? null,
+      ownUnitSize: ownSize?.unitSize ?? null,
       rawPriceText: o.sp.rawPriceText ?? null,
       rawSourceBlob: o.sp.rawSourceBlob ? o.sp.rawSourceBlob.slice(0, 4096) : null,
       productUrl: o.sp.productUrl ?? null,
@@ -697,11 +731,22 @@ export async function matchPoolToCatalog(
     // the integer column was validated by nothing at all.
     const priceBani = leiToBaniExact(writePrice);
     const writeFloat = baniToLei(priceBani);
-    const ppu = o.unitSize > 0 ? writeFloat / o.unitSize : writeFloat;
+    // ── UNIT PRICE COMES FROM THE OFFER'S OWN SIZE. ALWAYS.
+    //
+    // This used to divide by the CATALOG product's unitSize, which is the single most damaging
+    // bug this codebase has had, because it CONCEALS every matching error instead of exposing
+    // one. A 2 L Pepsi Cola wrongly matched to a "6 x 0.33 l zmeura" catalog entry was shown at
+    // 10.49 / 1.98 = 5.30 lei/L — a completely plausible number. Divided by its OWN 2 L it is
+    // 5.25, and the two sizes disagreeing is the signal that the match is wrong. Using the
+    // catalog size threw that signal away and printed a believable price on a wrong product.
+    //
+    // If the offer's own size cannot be parsed there is no honest unit price, so none is stored.
+    // A fallback to the catalog size would reintroduce exactly this bug.
+    const ppu = ownSize && ownSize.unitSize > 0 ? writeFloat / ownSize.unitSize : 0;
     // Null rather than a crash or a lie: a mis-parsed pack size ("3 mg/ml" read as the pack)
     // can push this past what an INT column holds, and the column is nullable for exactly
     // that reason. See perUnitBaniOrNull.
-    const ppuBani = perUnitBaniOrNull(writeFloat, o.unitSize);
+    const ppuBani = ownSize && ownSize.unitSize > 0 ? perUnitBaniOrNull(writeFloat, ownSize.unitSize) : null;
     const avail = o.available ? "in stock" : "out of stock";
     const offer = await prisma.offer.upsert({
       where: { productId_merchantId: { productId, merchantId } },

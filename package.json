@@ -69,7 +69,8 @@
     "backfill:pricebani": "tsx scripts/backfill-pricebani.ts",
     "rotate:admin": "tsx scripts/rotate-admin.ts",
     "audit:pending": "tsx scripts/audit-pending.ts",
-    "compute:home": "tsx scripts/compute-home.ts"
+    "compute:home": "tsx scripts/compute-home.ts",
+    "audit:unitprice": "tsx scripts/audit-unit-price.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

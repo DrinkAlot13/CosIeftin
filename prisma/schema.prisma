@@ -145,6 +145,31 @@ model Offer {
   /// genuinely have none, and CLAUDE.md requires deep-linking, so an absent link must be
   /// visibly null rather than silently pointing at a generic page.
   productUrl   String?
+  /// ── THE OFFER'S OWN IDENTITY, as the merchant states it.
+  ///
+  /// Missing until now, and its absence made a whole class of bug unverifiable: the unit price
+  /// was computed from the CATALOG product's size instead of the offer's own, and nothing
+  /// stored could prove it, because the store's own name and size were never kept. A 2 L Pepsi
+  /// Cola matched onto a "6 x 0.33 l zmeura" entry showed 10.49 / 1.98 = 5.30 lei/L — a
+  /// plausible number that concealed the wrong match.
+  ///
+  /// With these, "recompute the unit price from the offer's own size and compare" is a query
+  /// rather than a re-scrape.
+  storeName    String?
+  ownUnit      String?
+  ownUnitSize  Float?
+  /// ── ELECTRONICS (affiliate feeds). Absent for grocery offers.
+  /// WHO IS ACTUALLY SELLING THIS. An eMAG marketplace listing is a third-party seller, not
+  /// eMAG, and showing its price as "eMAG price" is a lie the shopper discovers at checkout.
+  /// Required whenever isMarketplace is true — the validator refuses the row otherwise.
+  sellerName   String?
+  isMarketplace Boolean @default(false)
+  /// "NEW" | "RESIGILAT" | "REFURBISHED". Open-box is a large part of the Romanian
+  /// electronics market and is NOT price-comparable with new stock: a resigilat price may
+  /// never win a comparison against new, and the two are sorted separately.
+  condition    String   @default("NEW")
+  /// A resigilat item with 24 months of warranty and one with 3 are not the same offer.
+  warrantyMonths Int?
   /// we stopped seeing this offer in the store's feed
   isStale      Boolean        @default(false)
   /// we KNOW its promo window has passed (different from stale, different user copy)
