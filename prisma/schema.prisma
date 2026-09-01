@@ -49,6 +49,7 @@ model Merchant {
   offers     Offer[]
   overrides  MatchOverride[]
   runs       ScraperRun[]
+  pendingMatches PendingMatch[]
   feeds      FeedSource[]
   createdAt  DateTime @default(now())
 }
@@ -81,6 +82,7 @@ model Product {
   favorites  UserFavorite[]
   blocked    UserBlocklist[]
   packChanges ProductPackChange[]
+  pendingMatches PendingMatch[]
   specs       ProductSpec[]
   createdAt  DateTime          @default(now())
 
@@ -517,4 +519,51 @@ model UserBlocklist {
   createdAt    DateTime @default(now())
 
   @@index([userId])
+}
+
+/// A match the three-band matcher scored in the REVIEW band: plausible, not certain.
+///
+/// These used to be COMPUTED AND THROWN AWAY. `matchPoolToCatalog` did `if (!d.ok) continue;`
+/// and `ok` is true only for AUTO_MATCH, so the middle band existed in the type system and
+/// nowhere else. The three-band design was specified and never landed, which meant every
+/// mid-confidence match — the ones a human could resolve in two seconds — was discarded on
+/// every run, unrecorded and uncounted.
+///
+/// A PendingMatch is NOT an offer. It is never shown to a shopper, never enters the optimizer,
+/// never appears in a count, and never affects the comparability metric. It exists so that a
+/// person can turn it into a MatchOverride, which is the thing the matcher then obeys forever.
+model PendingMatch {
+  id         Int      @id @default(autoincrement())
+  merchantId Int
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  /// the catalog product this store item would attach to
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  /// stable id for the store product — the SAME key MatchOverride uses, so a decision here
+  /// binds the pairing permanently rather than just this one row
+  storeKey   String
+  section    String   @default("grocery")
+
+  /// enough of the store product to decide without re-scraping or opening the merchant
+  storeName  String
+  storeBrand String?
+  storePriceBani Int
+  storeUrl   String?
+  storeImage String?
+
+  /// 0..1 from the matcher, and the rule that produced it ("low-overlap", "mutually-distinct")
+  score      Float
+  reason     String
+
+  /// resolved rows are kept, not deleted: a rejected pairing is evidence about the matcher
+  resolved   Boolean  @default(false)
+  decision   String?
+  decidedAt  DateTime?
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([merchantId, storeKey, productId])
+  @@index([resolved, score])
+  @@index([merchantId])
 }

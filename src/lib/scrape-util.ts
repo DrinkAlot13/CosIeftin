@@ -441,7 +441,15 @@ export function matchDecision(cat: CatalogLite, store: StoreLite, section = "gro
 // A store pool product with its parse results cached.
 type Prepared = { sp: StoreProduct; item: PrepItem; size: { unit: string; unitSize: number } | null; storeKey: string };
 
-export type IngestResult = { offers: number; created: number; flagged: number; aborted?: boolean; reason?: string };
+export type IngestResult = {
+  offers: number;
+  created: number;
+  flagged: number;
+  /** REVIEW-band candidates queued for /admin/matches. Never counted as coverage. */
+  pending?: number;
+  aborted?: boolean;
+  reason?: string;
+};
 
 /**
  * Match `pool` onto the catalog for one merchant.
@@ -541,6 +549,19 @@ export async function matchPoolToCatalog(
 
   const explained = new Set<Prepared>();
 
+  // REVIEW-band candidates. These used to be discarded by `if (!d.ok) continue` — the middle
+  // band existed in the type system and nowhere else, so every mid-confidence match was thrown
+  // away on every run, unrecorded and uncounted. They are collected here and persisted as
+  // PendingMatch: never shown, never counted, never in the optimizer, but reviewable.
+  const review = new Map<string, { productId: number; c: Prepared; score: number; reason: string }>();
+  const noteReview = (productId: number, c: Prepared, d: Decision): void => {
+    if (d.band !== "REVIEW") return;
+    if (rejects.has(`${c.storeKey}:${productId}`)) return;
+    const key = `${c.storeKey}:${productId}`;
+    const prev = review.get(key);
+    if (!prev || d.score > prev.score) review.set(key, { productId, c, score: d.score, reason: d.reason });
+  };
+
   // PHASE 0 — human overrides + EAN joins take priority over any heuristic.
   for (const c of prepared) {
     const ov = overrides.get(c.storeKey);
@@ -569,7 +590,7 @@ export async function matchPoolToCatalog(
     for (const c of cands) {
       if (rejects.has(`${c.storeKey}:${cp.id}`)) continue;
       const d = decide(cItem, cSize, c.item, c.size, section);
-      if (!d.ok) continue;
+      if (!d.ok) { noteReview(cp.id, c, d); continue; }
       explained.add(c);
       consider(cp.id, cp.unitSize, cp.image, c, d.score, d.reason);
     }
@@ -707,5 +728,28 @@ export async function matchPoolToCatalog(
     previousRunCount: merchant?.lastOfferCount ?? 0,
     censusJson,
   });
-  return { offers: chosen.size, created: createdIds.size, flagged: flaggedCount };
+  // Persist the REVIEW band. A candidate that has since been AUTO-matched or explicitly
+  // rejected is not pending any more, so those are skipped rather than re-queued.
+  let pending = 0;
+  for (const { productId, c, score, reason } of review.values()) {
+    if (chosen.get(productId)?.sp === c.sp) continue; // it won outright; nothing to review
+    try {
+      await prisma.pendingMatch.upsert({
+        where: { merchantId_storeKey_productId: { merchantId, storeKey: c.storeKey, productId } },
+        update: { lastSeenAt: new Date(), score, reason, storePriceBani: leiToBaniExact(c.sp.price) },
+        create: {
+          merchantId, productId, storeKey: c.storeKey, section,
+          storeName: c.sp.name, storeBrand: c.sp.brand || null,
+          storePriceBani: leiToBaniExact(c.sp.price),
+          storeUrl: c.sp.productUrl ?? c.sp.url ?? null,
+          storeImage: c.sp.image ?? null,
+          score, reason,
+        },
+      });
+      pending++;
+    } catch { /* a pending row is a convenience, never a reason to fail a run */ }
+  }
+  if (pending > 0) console.log(`  ${pending} REVIEW-band candidate(s) queued for /admin/matches`);
+
+  return { offers: chosen.size, created: createdIds.size, flagged: flaggedCount, pending };
 }
