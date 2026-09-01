@@ -57,7 +57,19 @@ describe("adapter JSON parser", () => {
   const ad = { slug: "t", name: "T", websiteUrl: "https://t.ro", section: "grocery", mode: "json" as const, routes: [] };
   const out = parseJsonPayload(payload, map, { url: "" }, ad);
 
-  it("drops items with no usable price", () => expect(out.length).toBe(2));
+  it("KEEPS an item with no usable price, at price 0, so the refusal can be recorded", () => {
+    // This used to assert `out.length === 2` — the third item, whose price could not be
+    // parsed, was dropped by the parser and never seen again. A gate that discards leaves
+    // no evidence, and evidence is the whole point: the item now travels into the pool at
+    // price 0, where matchPoolToCatalog records it as a pre-offer refusal WITH its
+    // rawPriceText, and still never becomes an offer.
+    expect(out.length).toBe(3);
+    const refused = out.filter((p) => p.price === 0);
+    expect(refused.length).toBe(1);
+    // the evidence a parser change would need in order to be replayed against it
+    expect(typeof refused[0].rawPriceText).toBe("string");
+    expect(refused[0].name.length > 0).toBe(true);
+  });
   it("parses RO decimal commas", () => expect(out[0].price).toBeCloseTo(6.49));
   it("resolves relative URLs against the site", () => expect(out[0].url).toBe("https://t.ro/p/1"));
   it("maps stock:false to unavailable", () => expect(out[1].available).toBeFalsy());

@@ -52,6 +52,7 @@ model Merchant {
   /// minimum order value the store accepts
   minOrder       Float?
   /// offer count from the last successful scrape — powers the "run dropped >40%" guard
+  anomalies  PriceAnomaly[]
   lastOfferCount Int   @default(0)
   lastScrapeAt DateTime?
   offers     Offer[]
@@ -346,16 +347,37 @@ model ScraperRun {
 
 /// A price the sanity gates REFUSED to write, kept for review. The offer keeps its
 /// previously-trusted price; this records what we rejected and why.
+/// Every value a sanity gate refused, with what was kept instead.
+///
+/// A gate anchored on stored history can only ever be as right as the data it compares
+/// against, and it refuses a CORRECTION at exactly the moment a wrong value is being fixed.
+/// Auchan proved it: 28,14 was the anomaly and 12,00 the correction, and a >50% gate would
+/// have refused the correction and kept the anomaly. So no gate may discard — it defers, and
+/// what it deferred is recorded here for a human to arbitrate.
 model PriceAnomaly {
   id                Int      @id @default(autoincrement())
-  offerId           Int
-  offer             Offer    @relation(fields: [offerId], references: [id])
+  /// Null when the value was refused BEFORE it could become an offer — an unparseable price
+  /// or a pool item with no price at all. Those used to vanish with no record of any kind.
+  offerId           Int?
+  offer             Offer?   @relation(fields: [offerId], references: [id])
+  /// Which store the refused value came from. Set even when there is no offer.
+  merchantId        Int?
+  merchant          Merchant? @relation(fields: [merchantId], references: [id])
+  /// The store's own name for the item, so a pre-offer refusal is identifiable.
+  storeName         String?
+  /// The value the gate refused, in bani. 0 when the price could not be parsed at all.
   rejectedPriceBani Int
+  /// What was kept instead — the previously trusted price. Null when nothing was kept
+  /// (the item was dropped entirely), which is itself the thing worth seeing.
+  acceptedPriceBani Int?
+  /// The exact source string. Without it no parser change can be checked against the refusal.
+  rawPriceText      String?
   reason            String
   detectedAt        DateTime @default(now())
   resolved          Boolean  @default(false)
 
   @@index([resolved, detectedAt])
+  @@index([merchantId, detectedAt])
 }
 
 /// A detected pack-size reduction. NOTHING here is published without a human look —

@@ -21,6 +21,7 @@
 
 import { chromium, type Browser, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
+import { recordRefusal } from "../src/lib/record-refusal";
 import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { deriveVatRateBp } from "../src/lib/price/vat";
 import { validateTiers, findSmearedLadders, type RawTier } from "../src/lib/price/bulkTiers";
@@ -356,9 +357,17 @@ async function main() {
     if (!v.ok) {
       tierRejects++;
       // A ladder that cannot be true is a parse error worth reviewing, not silent data.
-      await prisma.priceAnomaly.create({
-        data: { offerId: offer.id, rejectedPriceBani: p.tiers?.[0]?.unitPriceBani ?? 0, reason: `bulk tier: ${v.reason}` },
-      }).catch(() => {});
+      // Routed through recordRefusal so it carries the same context as every other refusal:
+      // which merchant, which item, what was kept instead, and the source string.
+      await recordRefusal({
+        offerId: offer.id,
+        merchantId: merchant.id,
+        storeName: p.name,
+        rejectedPriceBani: p.tiers?.[0]?.unitPriceBani ?? 0,
+        acceptedPriceBani: storedBaseBani,
+        rawPriceText: p.rawPriceText ?? null,
+        reason: `bulk tier: ${v.reason}`,
+      });
       continue;
     }
     if (v.tiers.length) {

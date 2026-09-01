@@ -72,6 +72,7 @@
     "compute:home": "tsx scripts/compute-home.ts",
     "audit:unitprice": "tsx scripts/audit-unit-price.ts",
     "audit:price-moves": "tsx scripts/audit-price-moves.ts",
+    "audit:dropped": "tsx scripts/audit-dropped.ts",
     "audit:cutover": "tsx scripts/audit-cutover.ts",
     "audit:staleness": "tsx scripts/audit-staleness.ts",
     "backfill:pricesource": "tsx scripts/backfill-pricesource.ts",

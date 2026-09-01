@@ -18,6 +18,7 @@ import { parseEan } from "./product/ean";
 import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "./price/parsePrice";
 import { tally as tallyCensus } from "./offer-census";
 import { ensureBackup } from "./ensure-backup";
+import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
 import { toPriceSource } from "./price-source";
 import { recordScraperRun } from "./scraper-run";
 
@@ -507,8 +508,24 @@ export async function matchPoolToCatalog(
   // Prepare + index the store pool by each significant name token.
   const prepared: Prepared[] = [];
   const storeByToken = new Map<string, Prepared[]>();
+  // A POOL ITEM WITH NO USABLE PRICE IS A REFUSAL, NOT A NON-EVENT.
+  //
+  // This line used to be a bare `continue`: silent, uncounted, and unrecoverable. An item
+  // whose price could not be read simply did not exist, which is indistinguishable from the
+  // store not selling it. Now it is recorded like any other refusal — with no offerId,
+  // because it never got that far, which is exactly why it needed recording.
+  const preOfferRefusals: { storeName: string; rawPriceText: string | null; reason: string }[] = [];
   for (const sp of pool) {
-    if (!(sp.price > 0) || !sp.name) continue;
+    if (!(sp.price > 0) || !sp.name) {
+      if (sp.name) {
+        preOfferRefusals.push({
+          storeName: sp.name,
+          rawPriceText: sp.rawPriceText ?? null,
+          reason: `no usable price in the pool (price=${sp.price})`,
+        });
+      }
+      continue;
+    }
     const item = prep(sp.name, sp.brand, sp.ean);
     const pr: Prepared = { sp, item, size: parseSize(sp.name), storeKey: slugify(sp.name) || sp.url };
     prepared.push(pr);
@@ -517,6 +534,21 @@ export async function matchPoolToCatalog(
       if (!b) { b = []; storeByToken.set(t, b); }
       b.push(pr);
     }
+  }
+  // Flush the pre-offer refusals. Capped: a wholly broken run would otherwise write one row
+  // per product, and the run-level tripwires already say "this run is broken" far louder.
+  for (const r of preOfferRefusals.slice(0, MAX_PRE_OFFER_REFUSALS)) {
+    await recordRefusal({
+      offerId: null, merchantId, storeName: r.storeName,
+      rejectedPriceBani: 0, acceptedPriceBani: null,
+      rawPriceText: r.rawPriceText, reason: r.reason,
+    });
+  }
+  if (preOfferRefusals.length > 0) {
+    console.log(
+      `  ${preOfferRefusals.length} pool item(s) had no usable price` +
+      `${preOfferRefusals.length > MAX_PRE_OFFER_REFUSALS ? ` (first ${MAX_PRE_OFFER_REFUSALS} recorded)` : " (recorded)"}`,
+    );
   }
 
   // FABRICATION GUARD (pool level, BEFORE matching): distinct store products sharing one
@@ -781,13 +813,15 @@ export async function matchPoolToCatalog(
     // previous price in memory and then lost. That is what made the Auchan 28,14 -> 12,00
     // question take a scrape to answer: nothing had kept what was refused, or why.
     if (jump || outlier) {
-      await prisma.priceAnomaly.create({
-        data: {
-          offerId: offer.id,
-          rejectedPriceBani: leiToBaniExact(o.price),
-          reason: flagReason ?? (jump ? "price jump" : "outlier vs median"),
-        },
-      }).catch(() => {});
+      await recordRefusal({
+        offerId: offer.id,
+        merchantId,
+        storeName: o.sp.name,
+        rejectedPriceBani: leiToBaniExact(o.price),
+        acceptedPriceBani: priceBani,
+        rawPriceText: o.sp.rawPriceText ?? null,
+        reason: flagReason ?? (jump ? "price jump" : "outlier vs median"),
+      });
     }
   }
 

@@ -29,6 +29,24 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 - A price that deviates >70% from the same product's cross-store median, or
   >50% from its own last recorded price, is NOT written. It is flagged into
   a `PriceAnomaly` table for review.
+- **A GATE DEFERS; IT NEVER DISCARDS.** A gate anchored on stored history can only ever be
+  as right as the data it compares against, and it is most likely to fire at exactly the
+  moment a wrong value is being corrected. Auchan offer 1905 held 28,14 from 6 August, moved
+  to 12,00 on 30 August — a 57% drop, past the gate — and re-scraped independently today
+  reads 11,69. **28,14 was the anomaly; 12,00 was the correction.** A discarding gate would
+  have thrown away the right answer and kept the wrong one, silently. So every refusal is
+  recorded with the refused value, the value kept instead, `rawPriceText` and the reason.
+- **`src/lib/record-refusal.ts` is the ONLY writer of `PriceAnomaly`**, and it is called from
+  inside `matchPoolToCatalog`, so no merchant path can skip it. This rule was in this file
+  from session one and held for one merchant of twelve, because a rule enforced only by
+  documentation is enforced by nothing. It is now guarded by `tests/gates-defer.test.ts`.
+- **Availability is read BEFORE the price.** A store that marks an item unavailable
+  legitimately carries no price — VTEX writes `Price: 0`, which is 16.4% of Auchan's catalog,
+  and across 304 sampled products `Price===0` and `IsAvailable===false` agreed with no
+  exceptions either way. Parsing first turns every one of those into a "null price" and trips
+  the 5% tripwire on a healthy run. Exempting them without a bound would disable the tripwire
+  instead, so unavailable items are counted separately AND capped at 60%: "everything is
+  unavailable" is what a broken availability read looks like too.
 
 ### Scraping
 - **Persist `rawPriceText` on every write.** Without the exact source string, no parser

@@ -156,6 +156,62 @@ async function auditPrices() {
       [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
   }
 
+  // ── A DAY IS NOT A MARKET EVENT.
+  //
+  //    On 30 August, 1,675 offers moved more than 50% in a single afternoon across nine
+  //    merchants, almost all upward. That turned out to be legitimate — the first full
+  //    re-scrape after several parsers were fixed, and 1,652 of 1,653 current values agree
+  //    with their own rawPriceText — but NOBODY KNEW THAT FOR TWO DAYS. Answering it took a
+  //    fresh Auchan scrape to arbitrate against, because the evidence had not been kept.
+  //
+  //    The point of this invariant is not that a mass move is wrong. It is that a mass move
+  //    must be NOTICED and explained at the time, while the cause is still knowable. A real
+  //    market does not move 7% of a re-scraped catalog by more than half in one afternoon;
+  //    a code change does.
+  //
+  //    THE DENOMINATOR IS OFFERS WRITTEN THAT DAY, not the whole catalog. A 200-offer run
+  //    with 20 big moves is a broken run; 20 big moves across 40,000 offers is Tuesday.
+  //
+  //    THE THRESHOLD IS PROVISIONAL. It is set from five days of history: ordinary re-scrape
+  //    days sit at 1.3%, 3.1% and 3.2%; the 30 August event was 7.3%. That is a thin margin
+  //    and five days is not a distribution. Revisit it once the soak has produced a month.
+  {
+    const MASS_MOVE_PCT = 5;        // of the offers written that day
+    const MIN_DAY_WRITES = 200;     // below this, a percentage is noise
+    const hist = await prisma.priceHistory.findMany({
+      select: { offerId: true, price: true, priceBani: true, recordedAt: true },
+      orderBy: [{ offerId: "asc" }, { recordedAt: "asc" }],
+    });
+    const moves = new Map<string, number>();
+    const writes = new Map<string, Set<number>>();
+    let prevId = -1;
+    let prevBani = 0;
+    for (const h of hist) {
+      const bani = h.priceBani ?? Math.round(h.price * 100);
+      const day = h.recordedAt.toISOString().slice(0, 10);
+      const w = writes.get(day) ?? new Set<number>();
+      w.add(h.offerId);
+      writes.set(day, w);
+      if (h.offerId !== prevId) { prevId = h.offerId; prevBani = bani; continue; }
+      if (prevBani > 0 && bani > 0 && Math.abs(bani - prevBani) / prevBani > 0.5) {
+        moves.set(day, (moves.get(day) ?? 0) + 1);
+      }
+      prevBani = bani;
+    }
+    const spikes: string[] = [];
+    for (const [day, written] of [...writes.entries()].sort()) {
+      const n = moves.get(day) ?? 0;
+      const pct = written.size === 0 ? 0 : (n / written.size) * 100;
+      if (written.size >= MIN_DAY_WRITES && pct > MASS_MOVE_PCT) {
+        spikes.push(
+          `${day}: ${n} of ${written.size} offers written that day moved >50% (${pct.toFixed(1)}%) — ` +
+          `identify the cause before trusting the day's prices`,
+        );
+      }
+    }
+    record("Prices", `no day moves >50% on more than ${MASS_MOVE_PCT}% of the offers written that day`, spikes);
+  }
+
   // ── MERCHANT-SIDE VOCABULARY. Merchant.priceChannel answers "how does this store's price
   //    reach us"; Offer.priceSource answers "what kind of price is it". They used to share the
   //    name priceSource, and that shared name turned a translation across two vocabularies into

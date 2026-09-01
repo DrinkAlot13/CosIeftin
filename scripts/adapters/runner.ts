@@ -105,11 +105,16 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
       continue;
     }
     const price = tally ? tally.record(rawPrice, det.priceBani) : det.priceBani;
-    if (price == null) continue;
+    // NOT a `continue`. An unparseable price is a REFUSAL, and refusals are recorded rather
+    // than dropped — the item goes into the pool carrying price 0, and matchPoolToCatalog
+    // records it as a pre-offer refusal with its rawPriceText intact. It still never becomes
+    // an offer, and the 5% tripwire above still counts it, so nothing is weakened; what
+    // changes is that the exact string that could not be read survives the run instead of
+    // vanishing beyond ParseTally's 20 samples.
     const p: StoreProduct = {
       name,
       brand: map.brand ? String(dig(it, map.brand) ?? "") : "",
-      price: baniToLei(price),
+      price: price == null ? 0 : baniToLei(price),
       rawPriceText: rawPrice,
       rawSourceBlob: JSON.stringify(it).slice(0, 4096),
       referencePriceBani: det.referencePriceBani ?? null,
@@ -162,12 +167,12 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
     const name = String(r.name || "").trim();
     if (!name) continue;
     const det = parsePriceDetailed(r.priceText);
+    // Same rule as the JSON path: an unparseable price is refused and RECORDED, not dropped.
     const price = tally ? tally.record(r.priceText, det.priceBani) : det.priceBani;
-    if (price == null) continue;
     const p: StoreProduct = {
       name,
       brand: r.brand || "",
-      price: baniToLei(price),
+      price: price == null ? 0 : baniToLei(price),
       rawPriceText: r.priceText,
       referencePriceBani: det.referencePriceBani ?? null,
       referencePriceKind: det.referencePriceKind ?? null,
