@@ -82,3 +82,15 @@ The category is now scraped (133 products listed, 140 pooled) and its ladders re
 specific SKU the user pointed at is gone from DCNeu itself: zero TOPORAS products and no
 "A-80600" anywhere in that category page. Nothing to fix — recorded so the question is not
 reopened.
+
+## Found while setting up the soak (2026-09-02) — not started
+
+- **`backups/manifest.json` is a generated file tracked in git.** Every `npm run backup` dirties
+  the working tree, and a dirty tree blocks a branch switch — which is exactly what blocked the
+  `fix/pepsi-merge` merge. Either gitignore it (losing the record from history) or stop writing
+  it on every run. `logs/soak/*.json` was gitignored from the start for this reason.
+- **`/admin/health` had the Secțiuni table above the liveness block**, which put a composition
+  metric ahead of the only block on the page that can tell a live source from a dead one — the
+  exact ordering the liveness comment warns against. Fixed while adding the dead-source banner,
+  but it says something that a comment saying "LIVENESS FIRST, above everything else on this
+  page" did not prevent the section being inserted above it a session later.

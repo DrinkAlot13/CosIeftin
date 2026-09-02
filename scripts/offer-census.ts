@@ -13,6 +13,7 @@
 //                 npm run census -- --compare backups/<file>.db   (before/after)
 
 import { PrismaClient } from "@prisma/client";
+import { emitJson } from "../src/lib/audit-json";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { BUCKETS, STALE_AFTER_DAYS, classifyOffer, type Bucket } from "../src/lib/offer-census";
@@ -216,6 +217,22 @@ async function main(): Promise<void> {
 
   console.log("\n  merchants with a completed run in the last 36h: " +
     ([...now.scrapedRecently].sort().join(", ") || "(none)"));
+
+  // Withheld rows BY REASON, whole-catalog and per merchant. `no reason found` is the one
+  // that must stay zero; the rest are all legitimate exclusions, and the soak's job is to
+  // notice when the mix shifts rather than to object to any single bucket being large.
+  emitJson({
+    total: now.total,
+    byBucket: Object.fromEntries(BUCKETS.map((b) => [b, now.byBucket.get(b) ?? 0])),
+    byMerchant: Object.fromEntries(
+      [...now.byMerchant.entries()].map(([slug, inner]) => [
+        slug,
+        Object.fromEntries(BUCKETS.map((b) => [b, inner.get(b) ?? 0])),
+      ]),
+    ),
+    bucketsClose: BUCKETS.reduce((s, b) => s + (now.byBucket.get(b) ?? 0), 0) === now.total,
+    scrapedRecently: [...now.scrapedRecently].sort(),
+  });
 
   // ── before/after ────────────────────────────────────────────────────────────────
   const i = process.argv.indexOf("--compare");

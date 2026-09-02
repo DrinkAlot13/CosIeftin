@@ -12,6 +12,7 @@
 // Read-only. Run: npm run audit:liveness
 
 import { PrismaClient } from "@prisma/client";
+import { emitJson } from "../src/lib/audit-json";
 import { computeLiveness, formatSilence, MAX_SILENCE_HOURS, EXPECTED_CADENCE_HOURS } from "../src/lib/liveness";
 import { newestBackupAgeMs, missingBackupFiles, BACKUP_MAX_AGE_MS } from "../src/lib/ensure-backup";
 
@@ -84,6 +85,26 @@ async function main(): Promise<void> {
 
   const dead = rows.filter((r) => r.dead);
   const lying = rows.filter((r) => r.claimsWithoutWrites);
+
+  // Emitted BEFORE the process.exit below, because the exit path is the interesting one: a
+  // soak entry for a night when a merchant died is worth more than one for a night when
+  // nothing happened, and writing the file only on the happy path would lose exactly those.
+  emitJson({
+    maxSilenceHours: MAX_SILENCE_HOURS,
+    merchants: rows.map((r) => ({
+      slug: r.slug,
+      hoursSinceWrite: r.hoursSinceWrite == null ? null : Number(r.hoursSinceWrite.toFixed(2)),
+      liveOffers: r.liveOffers,
+      deadRunStreak: r.deadRunStreak,
+      dead: r.dead,
+      claimsWithoutWrites: r.claimsWithoutWrites,
+      lastAbortReason: r.lastAbortReason ?? null,
+    })),
+    dead: dead.map((r) => r.slug),
+    claimsWithoutWrites: lying.map((r) => r.slug),
+    backupAgeHours: Number(backupAgeH.toFixed(2)),
+    missingBackupFiles: missing.length,
+  });
 
   console.log();
   if (lying.length > 0) {

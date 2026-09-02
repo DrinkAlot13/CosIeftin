@@ -15,6 +15,7 @@
 // Read-only. Run: npm run audit:displayed
 
 import { PrismaClient } from "@prisma/client";
+import { emitJson } from "../src/lib/audit-json";
 import { MAX_DISPLAY_AGE_DAYS } from "../src/lib/pricing";
 
 const prisma = new PrismaClient();
@@ -184,6 +185,15 @@ async function main(): Promise<void> {
   }
   console.log(`\n  products with NO showable price at all: ${noHeadline} of ${products.length}`);
   console.log(`\n  ${findings.length - failed}/${findings.length} checks pass.\n`);
+
+  emitJson({
+    total: findings.length,
+    passing: findings.length - failed,
+    failing: failed,
+    invariants: findings.map((f) => ({ name: f.check, pass: f.count === 0, count: f.count })),
+    productsWithNoShowablePrice: noHeadline,
+    products: products.length,
+  });
   await prisma.$disconnect();
   if (failed > 0) process.exit(1);
 }

@@ -16,6 +16,7 @@
 //      npm run audit:db -- --run <scraperRunId>   (record the result against a run)
 
 import { PrismaClient } from "@prisma/client";
+import { emitJson } from "../src/lib/audit-json";
 import { parsePrice } from "../src/lib/price/parsePrice";
 import { findOutliers, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
 import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
@@ -665,6 +666,17 @@ async function main() {
   }
 
   const failed = checks.filter((c) => !c.pass);
+
+  // Every invariant by name, green or red, for the soak log. Names, not indices: the list
+  // grows, and a soak that compared position 14 across a fortnight would silently start
+  // comparing two different checks the day one was inserted above it.
+  emitJson({
+    total: checks.length,
+    passing: checks.length - failed.length,
+    failing: failed.length,
+    invariants: checks.map((c) => ({ name: c.name, group: c.group, pass: c.pass, count: c.count })),
+  });
+
   console.log(`\n${"─".repeat(60)}`);
   console.log(`  ${checks.length - failed.length}/${checks.length} invariants hold`);
   if (failed.length) console.log(`  FAILING: ${failed.map((f) => f.name).join(" | ")}`);

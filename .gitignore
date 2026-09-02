@@ -30,3 +30,10 @@ backups/history/*.csv
 tsconfig.tsbuildinfo
 scripts/tmp/
 tmp-pools/
+
+# Soak logs are written by the nightly, one file per night. Ignored for the same reason
+# backups/*.db is: a generated file tracked in git dirties the working tree every time the
+# job runs, and a dirty tree blocks a branch switch — which is exactly what backups/manifest.json
+# did to the fix/pepsi-merge merge. Read them with `npm run soak:report`, not with git.
+logs/soak/*.json
+logs/soak/.tmp/

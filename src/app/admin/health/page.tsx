@@ -105,6 +105,45 @@ export default async function HealthPage() {
 
   return (
     <div className="container">
+      {/*
+        THE ONE ALERT THAT MUST BE IMPOSSIBLE TO MISS.
+
+        The soak reports weekly and deliberately does not mail anything nightly — with one
+        exception, and this is it. A merchant with no successful write in 48 hours is the
+        Metro/Mega failure: the data is still correct, still passes every correctness check,
+        and is being shown to shoppers as today's price by a shop that stopped answering.
+        Nothing else on this page can tell that state apart from a healthy one.
+
+        So it is a full-width banner ABOVE the page title, not a coloured cell inside a table
+        forty rows down. It renders only when something is actually wrong — a banner that is
+        always present is wallpaper within a week, and the next real one goes unread.
+      */}
+      {deadMerchants.length > 0 && (
+        <div
+          role="alert"
+          style={{
+            margin: "12px 0 4px",
+            padding: "14px 16px",
+            borderRadius: 8,
+            background: "#c0392b",
+            color: "#fff",
+            boxShadow: "0 2px 10px rgba(192,57,43,0.35)",
+          }}
+        >
+          <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.2 }}>
+            SURSĂ MOARTĂ — {deadMerchants.length} magazin(e) nu au mai scris de peste {MAX_SILENCE_HOURS} h
+          </div>
+          <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
+            {deadMerchants
+              .map((d) => `${d.name} (${formatSilence(d.hoursSinceWrite)}, ${d.liveOffers} oferte încă afișate)`)
+              .join(" · ")}
+          </div>
+          <div style={{ fontSize: 13, marginTop: 8, opacity: 0.92 }}>
+            Prețurile lor sunt corecte și vechi în același timp: verificările de corectitudine
+            trec, pentru că datele nu s-au stricat — magazinul a încetat să răspundă.
+          </div>
+        </div>
+      )}
       <div className="section" style={{ paddingBottom: 8 }}>
         <h1 style={{ fontSize: 26 }}>Sănătatea scraperelor</h1>
         <p className="muted" style={{ fontSize: 13.5 }}>
@@ -115,37 +154,6 @@ export default async function HealthPage() {
           <Link href="/admin">← Panou admin</Link> · <Link href="/admin/review">Verificare potriviri</Link>
         </p>
       </div>
-
-      <section className="section" style={{ paddingTop: 0 }}>
-        <div className="section-head"><h2 style={{ margin: 0 }}>Secțiuni</h2></div>
-        <div className="card" style={{ overflowX: "auto" }}>
-          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
-            Secțiunile <b>de comparație</b> au mai multe magazine, deci comparabilitatea are
-            sens acolo. Secțiunile <b>de preț</b> au un singur magazin prin construcție —
-            pentru ele contează acoperirea, nu comparabilitatea.
-          </p>
-          <table className="admin-table">
-            <thead>
-              <tr><th>Secțiune</th><th>Tip</th><th>Produse</th><th>Cu preț azi</th><th>Cu preț la cantitate</th></tr>
-            </thead>
-            <tbody>
-              {kindStats.sort((a, b) => b.products - a.products).map((k) => (
-                <tr key={k.section}>
-                  <td style={{ fontWeight: 600 }}>{SECTION_LABELS[k.section] ?? k.section}</td>
-                  <td className="muted">{k.kind === "comparison" ? "comparație" : "preț"}</td>
-                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{k.products}</td>
-                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {k.priced} ({k.products ? Math.round((k.priced / k.products) * 100) : 0}%)
-                  </td>
-                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {k.kind === "price" ? k.laddered : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       <section className="section" style={{ paddingTop: 0 }}>
         <div className="section-head">
@@ -197,6 +205,42 @@ export default async function HealthPage() {
                   <td style={{ fontVariantNumeric: "tabular-nums" }}>{l.liveOffers}</td>
                   <td style={{ fontVariantNumeric: "tabular-nums" }}>{l.deadRunStreak || "—"}</td>
                   <td className="muted" style={{ fontSize: 12 }}>{l.lastAbortReason ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/*
+        Sections come AFTER liveness, not before. This table used to sit above it, which put a
+        composition metric ahead of the only block on the page that can tell a live source from
+        a dead one — the exact ordering mistake the liveness comment above warns against.
+      */}
+      <section className="section" style={{ paddingTop: 0 }}>
+        <div className="section-head"><h2 style={{ margin: 0 }}>Secțiuni</h2></div>
+        <div className="card" style={{ overflowX: "auto" }}>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
+            Secțiunile <b>de comparație</b> au mai multe magazine, deci comparabilitatea are
+            sens acolo. Secțiunile <b>de preț</b> au un singur magazin prin construcție —
+            pentru ele contează acoperirea, nu comparabilitatea.
+          </p>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Secțiune</th><th>Tip</th><th>Produse</th><th>Cu preț azi</th><th>Cu preț la cantitate</th></tr>
+            </thead>
+            <tbody>
+              {kindStats.sort((a, b) => b.products - a.products).map((k) => (
+                <tr key={k.section}>
+                  <td style={{ fontWeight: 600 }}>{SECTION_LABELS[k.section] ?? k.section}</td>
+                  <td className="muted">{k.kind === "comparison" ? "comparație" : "preț"}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{k.products}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {k.priced} ({k.products ? Math.round((k.priced / k.products) * 100) : 0}%)
+                  </td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {k.kind === "price" ? k.laddered : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

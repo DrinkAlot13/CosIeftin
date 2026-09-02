@@ -27,6 +27,7 @@
 // Read-only. Run: npm run audit:comparability
 
 import { PrismaClient } from "@prisma/client";
+import { emitJson } from "../src/lib/audit-json";
 import { MAX_DISPLAY_AGE_DAYS } from "../src/lib/pricing";
 import { sectionKind } from "../src/lib/section-type";
 
@@ -221,6 +222,31 @@ async function main(): Promise<void> {
   console.log(`  products with NO showable price at all:    ${products.length - withAny}`);
   console.log(`\n  The second number is the one that matters for trust: a page with no current`);
   console.log(`  price must say so rather than show an old one.\n`);
+
+  // The SPLIT figures, not the blended one. The blended number moves when the catalog's
+  // composition changes, so a fortnight of it would record DCNeu's growth as a decline in
+  // matching quality — which is precisely the reading the split exists to prevent.
+  emitJson({
+    comparison: {
+      products: cmp.products,
+      comparable: cmp.comparable,
+      share: cmp.products === 0 ? 0 : Number(((cmp.comparable / cmp.products) * 100).toFixed(2)),
+    },
+    price: {
+      products: prc.products,
+      withOffer: prc.withOffer,
+      offers: prc.offers,
+      withTiers: prc.withTiers,
+      pricedShare: prc.products === 0 ? 0 : Number(((prc.withOffer / prc.products) * 100).toFixed(2)),
+      ladderShare: prc.offers === 0 ? 0 : Number(((prc.withTiers / prc.offers) * 100).toFixed(2)),
+    },
+    bySection: Object.fromEntries(
+      [...bySection.entries()].map(([k, e]) => [k, { kind: sectionKind(k), total: e.total, comparable: e.comparable }]),
+    ),
+    lost: { outOfStock: lostStock, stale: lostFresh, flagged: lostFlag },
+    carriedBy2Plus: carriedBy2,
+    pricedTodayAt2Plus: pricedToday,
+  });
 
   await prisma.$disconnect();
 }
