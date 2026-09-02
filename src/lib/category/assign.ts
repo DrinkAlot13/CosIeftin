@@ -15,7 +15,7 @@
 // this project already hit in the matcher and in the search ranker.
 
 import { normalizeRo } from "../text/normalizeRo";
-import { ALL_LEAVES, type Leaf } from "./tree";
+import { ALL_LEAVES, GROCERY_TREE, catchAllSlugFor, type Leaf } from "./tree";
 
 export const AUTO_THRESHOLD = 0.62;
 export const REVIEW_THRESHOLD = 0.42;
@@ -136,21 +136,70 @@ export function assignByName(productName: string): Assignment {
   };
 }
 
+/** Words that carry no taxonomic weight in a merchant's own path label. */
+const PATH_FILLER = new Set(["produse", "si", "de", "la", "din", "cu", "pentru", "alte", "altele"]);
+
+function pathTokens(level: string): Set<string> {
+  return new Set(normalizeRo(level).split(/\s+/).filter((t) => t && !PATH_FILLER.has(t)));
+}
+
+/**
+ * Is this path level the merchant NAMING A DEPARTMENT rather than a shelf?
+ *
+ * This is the distinction that was missing, and its absence is what made two leaves into
+ * catch-alls. "Lactate si oua" is Sezamo's department; scored as a product name it matches the
+ * word `oua` and files every cheese under Eggs. A department name must never be allowed to pick
+ * a leaf — the merchant did not tell us a shelf, and inventing one is the same error as filling
+ * a gap with a plausible value.
+ *
+ * Deliberately strict: the level's tokens must CONTAIN all of the department's own tokens.
+ * "produse congelate" ⊇ {congelate} matches Congelate; "curatenie si intretinere" does NOT match
+ * "Curățenie și igienă", because `igiena` is absent and a partial overlap is a guess. An
+ * unmatched level stays unmapped, which is the honest outcome and is counted.
+ */
+function departmentFromLevel(level: string): string | null {
+  const lv = pathTokens(level);
+  if (lv.size === 0) return null;
+  for (const d of GROCERY_TREE) {
+    const dt = pathTokens(d.label);
+    const st = new Set(d.slug.split("-").filter((t) => !PATH_FILLER.has(t)));
+    const covers = (need: Set<string>) => need.size > 0 && [...need].every((t) => lv.has(t));
+    if (covers(dt) || covers(st)) return d.slug;
+  }
+  return null;
+}
+
 /**
  * Map a MERCHANT-supplied path onto our tree.
  *
  * Preferred over `assignByName` wherever it exists: the merchant is describing its own shelf and
  * we are guessing from a string. Matching is on the deepest level first, then outward, because
- * "Lactate si oua / Oua / Oua de gaina" should land on Ouă rather than on the department.
+ * "Lactate si oua / Oua / Oua de gaina" should land on Ouă rather than on the department — and a
+ * level that names only the DEPARTMENT is now recorded as such rather than scored as a product.
  */
 export function assignByMerchantPath(levels: string[]): Assignment {
+  let department: string | null = null;
   for (const level of [...levels].reverse()) {
+    // A department name is recorded and then SKIPPED, never scored as a product name.
+    const d = departmentFromLevel(level);
+    if (d) { department ??= d; continue; }
     const a = assignByName(level);
-    // A department-level word like "Bacanie" scores low as a product name; accept a REVIEW-band
-    // hit here because the SOURCE is authoritative even when the wording is generic.
+    // A shelf-level word scores low as a product name; accept a REVIEW-band hit here because
+    // the SOURCE is authoritative even when the wording is generic.
     if (a.leafSlug && a.score >= REVIEW_THRESHOLD) {
       return { ...a, band: "AUTO", score: Math.max(a.score, AUTO_THRESHOLD), reason: `merchant path "${level}" — ${a.reason}` };
     }
+  }
+  if (department) {
+    // The merchant told us a department and nothing finer. That is a real fact, and it belongs
+    // in a leaf that says so.
+    return {
+      leafSlug: catchAllSlugFor(department),
+      department,
+      score: AUTO_THRESHOLD,
+      band: "AUTO",
+      reason: `merchant named the department "${department}" and no shelf — filed as Altele`,
+    };
   }
   return { leafSlug: null, department: null, score: 0, band: "NONE", reason: `merchant path unmapped: ${levels.join(" / ")}` };
 }

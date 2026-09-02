@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "./run";
 import { assignByName, assignByMerchantPath, AUTO_THRESHOLD, REVIEW_THRESHOLD } from "../src/lib/category/assign";
-import { ALL_LEAVES, GROCERY_TREE } from "../src/lib/category/tree";
+import { ALL_LEAVES, GROCERY_TREE, isCatchAll } from "../src/lib/category/tree";
 import { recoverPath } from "../src/lib/category/recover";
 
 const leafOf = (name: string) => assignByName(name).leafSlug;
@@ -22,8 +22,42 @@ describe("category tree — structure", () => {
     const depts = new Set(GROCERY_TREE.map((d) => d.slug));
     expect(ALL_LEAVES.some((l) => depts.has(l.slug))).toBeFalsy();
   });
-  it("every leaf carries at least one match rule", () => {
-    expect(ALL_LEAVES.every((l) => l.match.length > 0)).toBeTruthy();
+  it("every leaf carries at least one match rule, EXCEPT the catch-alls", () => {
+    // A leaf with no rules can never be filled by name — which is precisely what an "Altele"
+    // leaf is for. It exists so a merchant's DEPARTMENT-level path has an honest home, and it
+    // must be reachable only that way.
+    expect(ALL_LEAVES.filter((l) => !isCatchAll(l.slug)).every((l) => l.match.length > 0)).toBeTruthy();
+  });
+
+  it("a catch-all has NO match rules, so no product name can score into it", () => {
+    const catchAlls = ALL_LEAVES.filter((l) => isCatchAll(l.slug));
+    expect(catchAlls.length).toBe(GROCERY_TREE.length);
+    expect(catchAlls.every((l) => l.match.length === 0)).toBeTruthy();
+  });
+
+  it("every department has exactly one catch-all", () => {
+    for (const d of GROCERY_TREE) {
+      expect(d.children.filter((c) => isCatchAll(c.slug)).length).toBe(1);
+    }
+  });
+
+  it("a merchant DEPARTMENT name lands in Altele, never on a shelf leaf", () => {
+    // The bug this exists for: "lactate si oua" is Sezamo's department, and scored as a product
+    // name it matched the word `oua` at 0.82 and filed 1,047 cheeses under EGGS.
+    expect(assignByMerchantPath(["lactate si oua"]).leafSlug).toBe("lactate-oua-altele");
+    expect(assignByMerchantPath(["produse congelate"]).leafSlug).toBe("congelate-altele");
+    expect(assignByMerchantPath(["fructe si legume"]).leafSlug).toBe("fructe-legume-altele");
+  });
+
+  it("a DEEPER shelf level still wins over the department", () => {
+    // Altele is the last resort, not the first: a real shelf name must still take precedence.
+    expect(assignByMerchantPath(["lactate si oua", "oua de gaina"]).leafSlug).toBe("oua");
+    expect(assignByMerchantPath(["produse congelate", "inghetata"]).leafSlug).toBe("inghetata");
+  });
+
+  it("an unrecognised path is still unmapped rather than guessed into Altele", () => {
+    expect(assignByMerchantPath(["ready to eat cook"]).leafSlug).toBe(null);
+    expect(assignByMerchantPath(["curatenie si intretinere"]).leafSlug).toBe(null);
   });
   it("every department has children", () => {
     expect(GROCERY_TREE.every((d) => d.children.length > 0)).toBeTruthy();

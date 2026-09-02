@@ -16,6 +16,7 @@
 //      npm run audit:db -- --run <scraperRunId>   (record the result against a run)
 
 import { PrismaClient } from "@prisma/client";
+import { GROCERY_TREE, ALL_LEAVES } from "../src/lib/category/tree";
 import { emitJson } from "../src/lib/audit-json";
 import { membershipOk, rulesFromAttributes } from "../src/lib/substitution/class-rules";
 import { parsePrice } from "../src/lib/price/parsePrice";
@@ -847,6 +848,46 @@ async function auditCategoryPathRegression() {
     rows.length ? rows.join("; ") : undefined);
 }
 
+/**
+ * The tree in CODE and the tree in the DATABASE must be the same tree.
+ *
+ * They were not: GROCERY_TREE declared 12 grocery departments and the database held 15. The
+ * extra three — `lactate`, `legume-fructe`, `menaj` — are legacy rows superseded by renamed
+ * departments, with no children and no products. Nothing was wrong with any product, so no
+ * existing invariant had any reason to fire; the mismatch would simply have appeared as three
+ * empty departments in a sidebar built from the database, and the first person to notice would
+ * have been a shopper.
+ *
+ * Deliberately compares COUNTS AND SLUGS in both directions. A count check alone passes the
+ * moment someone adds a thirteenth department while a legacy row still sits there.
+ */
+async function auditTreeMatchesDatabase() {
+  const inCode = new Set(GROCERY_TREE.map((d) => d.slug));
+  const dbDepts = await prisma.category.findMany({
+    where: { section: "grocery", parentId: null },
+    select: { slug: true, name: true },
+  });
+  const inDb = new Set(dbDepts.map((d) => d.slug));
+  const extra = [...inDb].filter((s) => !inCode.has(s));
+  const missing = [...inCode].filter((s) => !inDb.has(s));
+  const problems = [
+    ...extra.map((s) => `database has department "${s}" that GROCERY_TREE does not declare`),
+    ...missing.map((s) => `GROCERY_TREE declares "${s}" but the database has no such department`),
+  ];
+  record("Categories", "the grocery tree in code and in the database are the same tree", problems,
+    `code ${inCode.size} departments, database ${inDb.size}`);
+
+  // A leaf in the database that the code no longer declares will render and can never be filled.
+  const codeLeaves = new Set(ALL_LEAVES.map((l) => l.slug));
+  const dbLeaves = await prisma.category.findMany({
+    where: { section: "grocery", NOT: { parentId: null } },
+    select: { slug: true },
+  });
+  const strayLeaves = dbLeaves.map((l) => l.slug).filter((s) => !codeLeaves.has(s));
+  record("Categories", "no leaf exists in the database that the code does not declare",
+    strayLeaves.map((s) => `database leaf "${s}" is not in GROCERY_TREE — it can never be filled`));
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("\n═══ DATABASE INVARIANT AUDIT ═══");
@@ -859,6 +900,7 @@ async function main() {
   await auditEquivalence();
   await auditDeliveryPlatform();
   await auditCategoryPathRegression();
+  await auditTreeMatchesDatabase();
 
   let lastGroup = "";
   for (const c of checks) {

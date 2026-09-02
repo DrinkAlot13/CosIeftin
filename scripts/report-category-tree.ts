@@ -13,6 +13,7 @@
 //      npm run report:tree -- --md    (also writes reports/category-tree.md)
 
 import { PrismaClient } from "@prisma/client";
+import { isCatchAll } from "../src/lib/category/tree";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
@@ -121,8 +122,18 @@ async function main(): Promise<void> {
   }
 
   // ── The three flags, gathered so they can be read without the tree.
-  const thin = depts.flatMap((d) => d.leaves.filter((l) => l.count < THIN_LEAF).map((l) => ({ d, l })));
-  const incoherent = depts.flatMap((d) => d.leaves.filter((l) => l.count > 0 && (l.topTokens[0]?.share ?? 0) < COHESION_FLOOR).map((l) => ({ d, l })));
+  // A CATCH-ALL IS ITS OWN CLASS AND MUST NOT POLLUTE THE OTHER TWO FLAGS.
+  //
+  // "Altele" holds whatever a merchant filed at department level and nothing finer, so it is
+  // heterogeneous BY CONSTRUCTION — flagging it for sharing no common token is noise, and an
+  // empty one is not a dead end, it just means no merchant named that department. Excluding
+  // them is not the same as raising a threshold to make a count fall: they get their own
+  // section below, with their sizes stated plainly, because a large Altele is exactly where
+  // the remaining vocabulary work is.
+  const shelves = (d: Dept) => d.leaves.filter((l) => !isCatchAll(l.slug));
+  const thin = depts.flatMap((d) => shelves(d).filter((l) => l.count < THIN_LEAF).map((l) => ({ d, l })));
+  const incoherent = depts.flatMap((d) => shelves(d).filter((l) => l.count > 0 && (l.topTokens[0]?.share ?? 0) < COHESION_FLOOR).map((l) => ({ d, l })));
+  const catchAlls = depts.flatMap((d) => d.leaves.filter((l) => isCatchAll(l.slug)).map((l) => ({ d, l })));
   const withDirect = depts.filter((d) => d.direct > 0);
   const emptyDepts = depts.filter((d) => d.leaves.length === 0);
 
@@ -142,6 +153,18 @@ async function main(): Promise<void> {
     say(`     ${lp(l.count, 5)}  ${pad(d.name, 20)} ${pad(l.name, 30)} top: ${l.topTokens.map((x) => `${x.t} ${(x.share * 100).toFixed(0)}%`).join(", ")}`);
     for (const s of l.samples.slice(0, 4)) say(`              · ${s.slice(0, 74)}`);
   }
+
+  say("");
+  const caTotal = catchAlls.reduce((a, x) => a + x.l.count, 0);
+  say(`  CATCH-ALL ("ALTELE") LEAVES  —  ${catchAlls.filter((x) => x.l.count > 0).length} populated, ${caTotal} products`);
+  say("  Not a flag. This is where a merchant named a DEPARTMENT and no shelf, so it is the");
+  say("  honest home for a department-level fact — and the size of each is the best map we have");
+  say("  of where vocabulary work would pay. Big ones are not errors; they are unfinished.");
+  for (const { d, l } of catchAlls.sort((a, b) => b.l.count - a.l.count)) {
+    if (l.count === 0) continue;
+    say(`     ${lp(l.count, 5)}  ${pad(d.name, 24)} ${l.topTokens.map((x) => `${x.t} ${(x.share * 100).toFixed(0)}%`).join(", ")}`);
+  }
+  say(`     ${lp(catchAlls.filter((x) => x.l.count === 0).length, 5)}  empty (no merchant named that department)`);
 
   say("");
   say(`  DEPARTMENTS HOLDING PRODUCTS DIRECTLY  —  ${withDirect.length}`);

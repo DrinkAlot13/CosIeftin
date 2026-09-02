@@ -138,7 +138,22 @@ export const GROCERY_TREE: Department[] = [
     slug: "congelate", label: "Congelate", icon: "🧊",
     children: [
       { slug: "legume-congelate", label: "Legume congelate", match: ["legume congelate", "mazare congelata", "spanac congelat", "amestec de legume"], avoid: [] },
-      { slug: "carne-peste-congelate", label: "Carne și pește congelate", match: ["congelat", "congelate"], avoid: ["legume", "cartofi", "pizza", "inghetata"] },
+      // THE RULE WAS THE BARE WORD "congelat", i.e. anything frozen at all, so this leaf held
+      // frozen broccoli, cherries and breaded cheese under a label promising meat and fish.
+      // A single word cannot express "frozen AND meat", but a PHRASE can, and the assigner
+      // already scores multi-word matches higher precisely because they are unambiguous.
+      // Anything frozen that is not meat or fish now falls to its department's Altele or stays
+      // honestly unassigned, rather than being renamed into this leaf.
+      {
+        slug: "carne-peste-congelate", label: "Carne și pește congelate",
+        match: [
+          "carne congelata", "peste congelat", "pui congelat", "porc congelat", "vita congelata",
+          "somon congelat", "file congelat", "creveti", "calamar", "fructe de mare congelate",
+          "mici congelati", "chiftele congelate", "snitel congelat", "burger congelat",
+          "fish fingers", "peste pane", "crispy strips",
+        ],
+        avoid: ["legume", "cartofi", "pizza", "inghetata", "cascaval", "branza", "visine", "capsuni", "fructe de padure"],
+      },
       { slug: "pizza-preparate", label: "Pizza și preparate", match: ["pizza", "lasagna congelata", "preparat congelat"], avoid: [] },
       { slug: "inghetata", label: "Înghețată", match: ["inghetata"], avoid: [] },
       { slug: "cartofi-congelati", label: "Cartofi congelați", match: ["cartofi pai", "cartofi congelati", "cartofi prajiti", "wedges"], avoid: [] },
@@ -146,11 +161,25 @@ export const GROCERY_TREE: Department[] = [
   },
   {
     slug: "bebelusi", label: "Bebeluși", icon: "🍼",
+    // ONE LEAF, DELIBERATELY. Four leaves held 66 products between them and two held nothing at
+    // all: no merchant we scrape carries baby food or formula in any volume, so the sub-shelves
+    // were a taxonomy we could describe but not fill. Three clicks that lead to an empty page
+    // teach a shopper the sidebar is broken faster than a missing category does.
+    //
+    // The department stays — baby products are a real aisle and the day a merchant carries them
+    // this splits again. Until then the rules are merged rather than deleted, so nothing that
+    // used to be found stops being found.
     children: [
-      { slug: "lapte-praf", label: "Lapte praf și formule", match: ["formula de lapte", "lapte bebe", "lapte praf bebe"], avoid: ["baton", "cacao", "adulti"] },
-      { slug: "mancare-bebe", label: "Mâncare pentru bebeluși", match: ["piure bebe", "mancare bebelusi", "gustare bebe", "biscuiti bebe"], avoid: [] },
-      { slug: "scutece", label: "Scutece", match: ["scutece", "pampers", "chilotei"], avoid: ["adulti", "adult", "incontinenta", "seni", "tena"] },
-      { slug: "ingrijire-bebe", label: "Îngrijire bebeluși", match: ["servetele bebe", "crema bebe", "sampon bebe"], avoid: [] },
+      {
+        slug: "bebelusi-toate", label: "Tot pentru bebeluși",
+        match: [
+          "scutece", "pampers", "chilotei",
+          "formula de lapte", "lapte bebe", "lapte praf bebe",
+          "piure bebe", "mancare bebelusi", "gustare bebe", "biscuiti bebe",
+          "servetele bebe", "crema bebe", "sampon bebe",
+        ],
+        avoid: ["adulti", "adult", "incontinenta", "seni", "tena", "baton", "cacao"],
+      },
     ],
   },
   {
@@ -169,7 +198,7 @@ export const GROCERY_TREE: Department[] = [
       { slug: "detergent-vase", label: "Detergent de vase", match: ["detergent de vase", "vase", "tablete masina de spalat vase"], avoid: [] },
       { slug: "curatenie-casa", label: "Curățenie casă", match: ["solutie", "anticalcar", "dezinfectant", "inalbitor", "clor", "pardoseli", "geamuri", "mobila", "aragaz", "universal", "degresant", "wc", "baie"], avoid: [] },
       // Household hardware sold beside the cleaning products: brushes, mops, cloths, buckets.
-      { slug: "ustensile-menaj", label: "Ustensile de menaj", match: ["perie", "matura", "faras", "lavete", "burete", "galeata", "mop", "manusi", "carpa", "storcator", "lighean", "covoras", "plastic", "bucatarie", "cos de rufe", "umeras", "sfoara"], avoid: ["dinti", "par"] },
+      { slug: "ustensile-menaj", label: "Ustensile de menaj", match: ["perie", "matura", "faras", "lavete", "burete", "galeata", "mop", "manusi", "carpa", "storcator", "lighean", "covoras", "plastic", "bucatarie", "cos de rufe", "umeras", "sfoara"], avoid: ["maturat", "dinti", "par"] },
       { slug: "hartie-servetele", label: "Hârtie igienică și șervețele", match: ["hartie igienica", "servetele", "prosoape de bucatarie", "servetele umede", "prosop", "prosoape", "hartie", "straturi"], avoid: [] },
       { slug: "igiena-personala", label: "Igienă personală", match: ["sampon", "gel de dus", "sapun", "deodorant", "pasta de dinti", "periuta de dinti", "apa de gura", "aparat de ras", "spuma de ras", "absorbante", "tampoane", "crema de fata", "crema de corp", "crema de maini", "lotiune", "balsam de par", "vopsea", "fixativ", "gel de par", "parfum", "unghii", "demachiant", "antiperspirant", "ras", "dus", "corp", "periuta", "aftershave", "masca de par", "crema de par", "balsam de par", "spray de par", "crema hidratanta", "incontinenta", "scutece adulti"], avoid: ["rufe", "vase", "branza", "smantana", "ciocolata", "zahar"] },
       { slug: "saci-pungi", label: "Saci și pungi menaj", match: ["saci menaj", "pungi", "folie alimentara", "hartie de copt", "saci gunoi", "gunoi", "saci"], avoid: [] },
@@ -177,6 +206,37 @@ export const GROCERY_TREE: Department[] = [
     ],
   },
 ];
+
+/**
+ * EVERY DEPARTMENT NEEDS SOMEWHERE FOR "THIS DEPARTMENT, BUT NO PARTICULAR SHELF" TO GO.
+ *
+ * Without one, a merchant that files a product under its DEPARTMENT ("Lactate si oua",
+ * "Produse congelate") had its path scored as if it were a product name, and it landed on
+ * whichever leaf's word happened to appear in the department's own title. "lactate si oua"
+ * matched the word `oua` at index 2 and scored 0.82, so 1,047 pieces of feta, mascarpone and
+ * urda were filed under EGGS. "produse congelate" matched `congelat` and put frozen broccoli
+ * under frozen meat. Both leaves became their department's catch-all while still claiming, in
+ * the sidebar, to be about eggs and about meat.
+ *
+ * The answer is not a tighter rule on those two leaves — the products have to go somewhere, and
+ * a department-level fact is genuinely all the merchant told us. So the catch-all is explicit
+ * and honestly labelled: a shopper reads "Altele" as the rest of the department, which is what
+ * it is, rather than as a category that lied about its contents.
+ *
+ * `match: []` on purpose — NO product name can ever score into one of these. They are reachable
+ * only from `assignByMerchantPath`, when the merchant named a department and nothing deeper.
+ */
+export const CATCH_ALL_SUFFIX = "-altele";
+export function catchAllSlugFor(departmentSlug: string): string {
+  return `${departmentSlug}${CATCH_ALL_SUFFIX}`;
+}
+export function isCatchAll(leafSlug: string): boolean {
+  return leafSlug.endsWith(CATCH_ALL_SUFFIX);
+}
+
+for (const d of GROCERY_TREE) {
+  d.children.push({ slug: catchAllSlugFor(d.slug), label: `Altele — ${d.label}`, match: [], avoid: [] });
+}
 
 export const ALL_LEAVES: (Leaf & { department: string })[] = GROCERY_TREE.flatMap((d) =>
   d.children.map((c) => ({ ...c, department: d.slug })),
