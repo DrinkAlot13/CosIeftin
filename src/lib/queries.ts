@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { deliveryPlatformWhere } from "@/lib/platform/visibility";
 import { normalizeText } from "@/lib/matching";
 
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
@@ -26,11 +27,14 @@ const activeInclude = {
  * `isStale` alone was not enough: it is set by the scrape and 3,468 Auchan offers were 26 days
  * old with isStale=false, so the age is checked directly against the observation date.
  */
-export function currentOfferWhere(now: Date = new Date()) {
+export function currentOfferWhere(now: Date = new Date(), showDeliveryPlatform = false) {
   return {
     merchant: { active: true },
     availability: "in stock",
     isStale: false,
+    // DELIVERY_PLATFORM prices carry a platform markup and are OFF by default everywhere —
+    // optimizer, item pages, deals, counts, search, comparability. See lib/platform/visibility.
+    ...(showDeliveryPlatform ? {} : { NOT: { priceSource: "DELIVERY_PLATFORM" } }),
     // Must match isCurrent: a withheld offer is not a current price. Its absence here meant
     // every listing and count treated flagged rows as live.
     flagged: false,
@@ -135,7 +139,7 @@ export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") 
   return { category, products: decorated };
 }
 
-export async function getItemPage(slug: string) {
+export async function getItemPage(slug: string, showDeliveryPlatform = false) {
   const product = await prisma.product.findUnique({
     where: { slug },
     include: {
@@ -150,8 +154,13 @@ export async function getItemPage(slug: string) {
       // "Mega Image · Stoc epuizat · 10,49 RON" and the same for Carrefour — on a six-pack
       // neither of them sells. Those rows were stale AND withheld, and still claimed two
       // shops carried the product. Greying a false claim does not make it true.
+      //
+      // AND A DELIVERY-PLATFORM OFFER DOES NOT RENDER EITHER, unless explicitly asked for.
+      // This where clause is its own — `currentOfferWhere` carries the exclusion but is not
+      // used here — so the item page was the one surface that would have listed a Glovo price
+      // in the same table as shelf prices, under a heading that says "cel mai mic preț".
       offers: {
-        where: { merchant: { active: true }, flagged: false },
+        where: { merchant: { active: true }, flagged: false, ...deliveryPlatformWhere(showDeliveryPlatform) },
         include: { merchant: true, history: { orderBy: { recordedAt: "asc" } }, tiers: { orderBy: { minQuantity: "asc" } } },
       },
     },

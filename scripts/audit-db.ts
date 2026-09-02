@@ -535,6 +535,7 @@ async function auditMatching() {
   const merchants = await prisma.merchant.findMany({ where: { active: true }, select: { id: true, name: true } });
   const rows: string[] = [];
   const fanoutFailures: string[] = [];
+  const weakIdentity: string[] = [];
 
   for (const m of merchants) {
     const offers = await prisma.offer.findMany({
@@ -555,6 +556,13 @@ async function auditMatching() {
       s.add(o.product.name);
       byKey.set(key, s);
     }
+    // SAY WHEN THE IDENTITY IS A GUESS. `url|price` is the last-resort key, and for a source
+    // whose `url` is a category page it manufactures fan-out out of nothing but a shared price.
+    // A merchant leaning on it is not measured, and the number below is not evidence about it.
+    const guessed = offers.filter((o) => !o.productUrl && !/"offerId"\s*:\s*"/.test(o.rawSourceBlob ?? "")).length;
+    if (guessed > 0) {
+      weakIdentity.push(`${m.name}: ${guessed}/${offers.length} offers identified only by url+price`);
+    }
     const counts = [...byKey.values()].map((v) => v.size).sort((a, b) => a - b);
     const p95 = percentile(counts, 0.95);
     const max = counts[counts.length - 1];
@@ -566,7 +574,8 @@ async function auditMatching() {
       fanoutFailures.push(`${m.name}: grocery p95 ${p95} > ${FANOUT_P95_GROCERY}`);
     }
   }
-  record("Matching", `fan-out within limits (grocery p95 <= ${FANOUT_P95_GROCERY}, max <= ${FANOUT_MAX_ANY} anywhere)`, fanoutFailures);
+  record("Matching", `fan-out within limits (grocery p95 <= ${FANOUT_P95_GROCERY}, max <= ${FANOUT_MAX_ANY} anywhere)`, fanoutFailures,
+    weakIdentity.length > 0 ? `identity fallback in use — ${weakIdentity.join("; ")}` : undefined);
   console.log("\n  FAN-OUT DISTRIBUTION");
   console.log("  " + "merchant".padEnd(15) + "section".padEnd(19) + " offers   mean   p50   p95   max");
   for (const r of rows) console.log(r);
@@ -623,12 +632,22 @@ async function auditFreshness() {
       where: { merchantId: m.id, productUrl: null, isStale: false, flagged: false, availability: "in stock" },
     });
     if (nulls === 0) continue;
-    const flyerNulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null, priceSource: "FLYER", isStale: false, flagged: false, availability: "in stock" } });
-    if (flyerNulls > 0) expectedRows.push(`${m.name}: ${flyerNulls} FLYER offers — expected`);
-    const rest = nulls - flyerNulls;
-    if (rest > 0) unexpectedNullUrl.push(`${m.name}: ${rest} non-flyer offers with no deep link`);
+    // A FLYER has no per-product page, and neither does a DELIVERY_PLATFORM tile: verified on
+    // Glovo, a product tile has no ancestor or descendant <a> at all. Both are sources where a
+    // null is the HONEST value, and the schema says so explicitly — "an absent link must be
+    // visibly null rather than silently pointing at a generic page". Pointing them at the
+    // category page instead is what tripped the fabrication guard at 71.7%.
+    const noLinkSources = await prisma.offer.count({
+      where: {
+        merchantId: m.id, productUrl: null, isStale: false, flagged: false, availability: "in stock",
+        priceSource: { in: ["FLYER", "DELIVERY_PLATFORM"] },
+      },
+    });
+    if (noLinkSources > 0) expectedRows.push(`${m.name}: ${noLinkSources} FLYER/DELIVERY_PLATFORM offers — expected`);
+    const rest = nulls - noLinkSources;
+    if (rest > 0) unexpectedNullUrl.push(`${m.name}: ${rest} offers with no deep link from a source that publishes one`);
   }
-  record("Freshness", "no missing deep link outside flyer sources", unexpectedNullUrl,
+  record("Freshness", "no missing deep link outside flyer and delivery-platform sources", unexpectedNullUrl,
     expectedRows.length ? `expected nulls: ${expectedRows.join("; ")}` : undefined);
 
   // rawPriceText only became mandatory once the column existed; judge recent rows only.
@@ -693,6 +712,53 @@ async function auditEquivalence() {
   record("Substitution", "no equivalence class is stranded at a single merchant", [], singles.length ? `${singles.length} class(es): ${singles.slice(0, 6).map((s) => s.split(" ")[0]).join(", ")}` : undefined);
 }
 
+/**
+ * Delivery-platform prices must be written as DELIVERY_PLATFORM, and must not be reachable as
+ * ordinary prices.
+ *
+ * Checked from OUTSIDE the writer, because the writer got this wrong: `matchPoolToCatalog`
+ * passed the offer's own value through the merchant-vocabulary translator, which has no case for
+ * it, so 2,217 Glovo offers were written as SHELF. Every exclusion keyed on DELIVERY_PLATFORM
+ * therefore passed them through, and a marked-up platform price was competing against shelf
+ * prices. Nothing in the write path noticed; only a query that does not share its vocabulary can.
+ */
+async function auditDeliveryPlatform() {
+  const aggregators = await prisma.merchant.findMany({
+    where: { priceChannel: "aggregator" },
+    select: { id: true, slug: true },
+  });
+  if (aggregators.length === 0) {
+    record("Delivery platform", "every aggregator merchant's offers are DELIVERY_PLATFORM", []);
+    return;
+  }
+  const ids = aggregators.map((a) => a.id);
+  const wrong = await prisma.offer.findMany({
+    where: { merchantId: { in: ids }, NOT: { priceSource: "DELIVERY_PLATFORM" } },
+    select: { id: true, priceSource: true, merchant: { select: { slug: true } }, product: { select: { name: true } } },
+    take: 20,
+  });
+  const wrongCount = await prisma.offer.count({
+    where: { merchantId: { in: ids }, NOT: { priceSource: "DELIVERY_PLATFORM" } },
+  });
+  record(
+    "Delivery platform",
+    "every aggregator merchant's offers are written as DELIVERY_PLATFORM",
+    wrong.map((o) => `offer ${o.id} [${o.merchant.slug}] is ${o.priceSource} — ${o.product.name.slice(0, 42)}`),
+    wrongCount > wrong.length ? `${wrongCount} total` : undefined,
+  );
+
+  // And the converse: nothing outside an aggregator merchant should claim to be one.
+  const strays = await prisma.offer.count({
+    where: { priceSource: "DELIVERY_PLATFORM", merchantId: { notIn: ids } },
+  });
+  record("Delivery platform", "no non-aggregator merchant writes a DELIVERY_PLATFORM price",
+    strays > 0 ? [`${strays} offer(s) claim DELIVERY_PLATFORM from a merchant that is not an aggregator`] : []);
+
+  const total = await prisma.offer.count({ where: { merchantId: { in: ids } } });
+  record("Delivery platform", "aggregator offers exist and are counted", [],
+    `${total} offer(s) across ${aggregators.length} aggregator merchant(s): ${aggregators.map((a) => a.slug).join(", ")} — excluded from display by default`);
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("\n═══ DATABASE INVARIANT AUDIT ═══");
@@ -703,6 +769,7 @@ async function main() {
   await auditMatching();
   await auditFreshness();
   await auditEquivalence();
+  await auditDeliveryPlatform();
 
   let lastGroup = "";
   for (const c of checks) {

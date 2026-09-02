@@ -12,6 +12,7 @@ import { ProductImage } from "@/components/ProductImage";
 import { TrackPrice } from "@/components/TrackPrice";
 import { formatPerUnit, formatRON } from "@/lib/format";
 import { getAlternatives, getClassEquivalents, getItemPage } from "@/lib/queries";
+import { showDeliveryPlatform } from "@/lib/platform/visibility";
 import { abs, breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
 
 // Prices refresh once a night, so serve these from cache and regenerate hourly —
@@ -45,8 +46,11 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function ItemPage({ params }: { params: { slug: string } }) {
-  const data = await getItemPage(params.slug);
+export default async function ItemPage({
+  params, searchParams,
+}: { params: { slug: string }; searchParams?: Record<string, string | string[] | undefined> }) {
+  // ?dp=1 opts THIS request into delivery-platform rows and nothing else. Default is off.
+  const data = await getItemPage(params.slug, showDeliveryPlatform(searchParams ?? null));
   if (!data) notFound();
   const { product, offers, summary, bestOffer, priceInsight } = data;
   const alternatives = await getAlternatives(product.id);

@@ -30,6 +30,7 @@ import { PrismaClient } from "@prisma/client";
 import { emitJson } from "../src/lib/audit-json";
 import { MAX_DISPLAY_AGE_DAYS } from "../src/lib/pricing";
 import { sectionKind } from "../src/lib/section-type";
+import { deliveryPlatformEnabledByEnv } from "../src/lib/platform/visibility";
 
 const prisma = new PrismaClient();
 
@@ -73,7 +74,12 @@ async function main(): Promise<void> {
     },
   });
 
-  const hasPrice = (o: Row): boolean => (o.priceBani ?? Math.round(o.price * 100)) > 0;
+  // DELIVERY_PLATFORM offers are excluded unless explicitly enabled, exactly as every display
+  // surface excludes them. Counting a Glovo price toward comparability would inflate the number
+  // with prices the site does not show and would not let compete anyway.
+  const showDP = deliveryPlatformEnabledByEnv();
+  const hasPrice = (o: Row): boolean =>
+    (o.priceBani ?? Math.round(o.price * 100)) > 0 && (showDP || o.priceSource !== "DELIVERY_PLATFORM");
   const inStock = (o: Row): boolean => o.availability === "in stock" && !o.isStale;
   // A FLYER offer expires by its promo window, not by observation age — the one exemption.
   const fresh = (o: Row): boolean =>

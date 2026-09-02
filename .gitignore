@@ -37,3 +37,8 @@ tmp-pools/
 # did to the fix/pepsi-merge merge. Read them with `npm run soak:report`, not with git.
 logs/soak/*.json
 logs/soak/.tmp/
+
+# The Glovo delivery-address session: cookies plus the coordinates of a real residential
+# address. It is credentials-shaped and personal-data-shaped at once, and it is recreated by
+# running the address flow once, so it has no business in the repository.
+config/glovo-session.json

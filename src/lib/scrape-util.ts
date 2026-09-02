@@ -23,7 +23,7 @@ import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "./price/parsePrice
 import { tally as tallyCensus } from "./offer-census";
 import { ensureBackup } from "./ensure-backup";
 import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
-import { toPriceSource } from "./price-source";
+import { toPriceSource, isPriceSource, type PriceSource } from "./price-source";
 import { variantConflict } from "./variant-classes";
 import { depositFor, readPublishedDepositBani } from "./deposit";
 import { parseQuantity } from "./units/parseQuantity";
@@ -584,6 +584,27 @@ export type IngestResult = {
  * @param opts.section  which catalog section to match within / create into (default "grocery")
  * @param opts.addNew   create a new catalog product for pool items that match nothing
  */
+/**
+ * Which price source to write: the OFFER's own value when it already states one, otherwise a
+ * translation of the MERCHANT's channel.
+ *
+ * This exists because `toPriceSource(sp.priceSource ?? merchant.priceChannel)` silently
+ * corrupted every adapter that sets the offer value explicitly. `toPriceSource` translates the
+ * MERCHANT vocabulary ("shelf" | "delivery" | "aggregator"); handed an OFFER value like
+ * "DELIVERY_PLATFORM" it matches no case and returns SHELF from its default branch. Every one of
+ * the 2,217 Glovo offers was therefore written as a SHELF price — the one thing CLAUDE.md's
+ * ninth invariant forbids, since a marked-up platform price would then compete in "cel mai mic
+ * preț" against real shelf prices.
+ *
+ * It is the same class of mistake `lib/price-source` was created to end: a value copied across a
+ * vocabulary boundary because the two vocabularies share a field name. The fix is to stop
+ * translating something that is already in the target vocabulary.
+ */
+function resolvePriceSource(offerValue: string | null | undefined, merchantChannel: string | null | undefined): PriceSource {
+  if (isPriceSource(offerValue)) return offerValue;
+  return toPriceSource(merchantChannel);
+}
+
 export async function matchPoolToCatalog(
   merchantId: number,
   pool: StoreProduct[],
@@ -736,7 +757,7 @@ export async function matchPoolToCatalog(
     const better = !prev || (c.sp.available && !prev.available) || (c.sp.available === prev.available && c.sp.price < prev.price);
     // ownSize is the size parsed from THIS offer's own name. It is what the unit price must be
     // computed from; the catalog product's size is a different product's size.
-    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: toPriceSource(c.sp.priceSource ?? merchant?.priceChannel), sp: c.sp });
+    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: resolvePriceSource(c.sp.priceSource, merchant?.priceChannel), sp: c.sp });
   };
   // productId a store item is forbidden from (reject override), keyed by storeKey.
   const rejects = new Set<string>();

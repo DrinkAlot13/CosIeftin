@@ -101,7 +101,9 @@
     "audit:search-quality": "tsx scripts/audit-search-quality.ts",
     "audit:recipes": "tsx scripts/audit-recipes.ts",
     "assign:categories": "tsx scripts/assign-categories.ts",
-    "audit:categories": "tsx scripts/audit-categories.ts"
+    "audit:categories": "tsx scripts/audit-categories.ts",
+    "scrape:platform": "tsx scripts/scrape-platform.ts",
+    "audit:markup": "tsx scripts/audit-platform-markup.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -23,7 +23,7 @@ exposure:
 | Auchan, Carrefour, Mega Image, Metro, Sezamo, Freshful, DCNeu, Farmacia Tei, FineStore, Le Manoir | ✅ live | existing scrapers | see `scripts/scrape-*.ts` |
 | **Lidl** | ❌ **no prices published** | — | `/p/api/gridboxes/RO/ro` returns real products but **empty price objects** — Lidl RO's assortment is in-store only ("În magazin"), and its pagination is fake (same 25 items on every page). There is nothing to scrape. Lidl must come from an aggregator, Monitorul, or flyers. |
 | **Monitorul Prețurilor** | ⚠️ unreachable here | — | DNS resolution failed for every variant tried (`monitorulpreturilor.info`/`.ro`, ±`www`, `api.`) while `consiliulconcurentei.ro` resolved fine — so it's the host, not the network. `scripts/scrape-monitorul.ts` probes candidates and **writes nothing** unless a payload parses. Finish it by capturing one real request from the web/mobile app. |
-| **Glovo** | ⚠️ needs a session | — | Store pages load (`/ro/ro/bucuresti/kaufland-buc/`) but render **no catalog** until a delivery address is set; only identity/features XHR fire. Needs address-state reverse-engineering. Would unlock Kaufland+Lidl+Profi at once — highest-leverage remaining integration. |
+| **Glovo** | ✅ **live** (Kaufland Bucharest) | ~2,200 | Delivery address created once, stored client-side in our own cookie; nothing written to Glovo. Playwright over RSC. Prices carry a **+11.5% median markup** and are `DELIVERY_PLATFORM`, excluded from everything user-facing by default. **See "Glovo, RESOLVED" at the foot of this file — it supersedes the two recon sections below.** |
 | **Selgros** | ⚠️ selectors unresolved | — | Cards are `a.product-item[data-product-id]`, but the category listing renders client-side and category slugs aren't in the HTML. Adapter exists (`scripts/adapters/selgros.ts`); the price selector yields nothing, so the runner refuses to write. Needs one more recon pass. |
 | **Profi** | ❌ blocked | — | HTTP 403 to plain requests. |
 | **Douglas** | ⛔ **dropped deliberately** | — | Yielded 5 products behind aggressive anti-bot. Beating it meant residential proxies, which turns a manageable legal question into a real one. Not worth it. |
@@ -99,6 +99,9 @@ crawling — robots.txt permits reading their pages; it does not authorize creat
 their user database as a synthetic customer. **Not attempted deliberately.** It needs an explicit
 decision and a ToS review, which has still never been done.
 
+> **SUPERSEDED 2026-09-02.** This paragraph is wrong. Creating the address through the ordinary
+> web UI writes nothing to Glovo — it is a cookie on our own browser. See the foot of this file.
+
 **There is no JSON product API to prefer over rendering.** Control experiment, same method
 against a fully-served market:
 
@@ -145,3 +148,111 @@ would answer it in minutes; guessing at it from the web page will not.
 **Monitorul Prețurilor remains the better investment** for the same coverage goal: it is
 mandatory-reporting shelf data across Kaufland, Lidl, Penny, Selgros, Carrefour, Mega and
 Auchan, with no markup to justify and no ToS exposure.
+
+---
+
+## Glovo, RESOLVED — 2026-09-02 (supersedes the two sections above)
+
+Address creation was authorised, and the answer changed three of the conclusions above. They are
+left in place because being wrong in a documented way is how the correction is legible.
+
+### 1. Creating the address wrote NOTHING to Glovo's servers
+
+The recon called this "a write to Glovo's customer_profile service" and declined to attempt it.
+**That was wrong.** The address created through the ordinary web UI lives entirely in a
+first-party cookie on our own browser, `glovo_delivery_address` on `glovoapp.com`:
+
+    {"latitude":44.4164141,"longitude":26.0481675,"cityCode":"BUC","countryCode":"RO",
+     "cityName":"București","text":"Aleea Meseriașilor, 3","details":"",
+     "placeId":"ChIJPa4eDikAskAR_dBX4RmzB1s","isVerified":true,"postalCode":null}
+
+Every request to Glovo across the whole session was a GET, with exactly one exception:
+`POST /identity/v4/devices`, the Incognia device fingerprint that fires on ANY page load of the
+site including the front page, before any address exists. No account, no credentials, no
+`address_book` POST, no customer record. **Nothing was written to their user database**, so the
+ToS concern the recon raised does not arise in the form it was raised.
+
+Confirmed by watching every non-GET request for the entire run, not by reading the code that
+sends them. No 401, 403, 429 or challenge was returned at any point, before or since.
+
+Place type is **"Casă"**, not "Apartament": under Apartament, Etaj and Apartament are both marked
+`(obligatoriu)`, and the supplied address has neither. Inventing a floor and flat number at a
+real Bucharest residential address is not a form field, so the house type was used instead.
+
+Session persisted at `config/glovo-session.json` — **one address, created once, reused by every
+run**. It is not recreated per run, per merchant or per session.
+
+### 2. It was never an app-API reverse-engineering problem
+
+The recon concluded the catalog sat behind "a device/session handshake the web page never
+completes" and recommended proxying the Android app. **Also wrong.** The web page completes it
+fine. The catalog renders for an ordinary browser with an ordinary address, and a plain
+Playwright adapter reads it. No proxy, no app, no auth flow.
+
+### 3. The city slug is `bucharest`, not `bucuresti`
+
+`/ro/ro/bucuresti/...` 302s into a soft 404 — which is the "**404**" row in the control-experiment
+table above, misread at the time as an address problem. The live path is the ENGLISH city slug:
+
+    https://glovoapp.com/ro/ro/bucharest/stores/kaufland-buc
+
+Glovo's own `/ro/ro/glovo-delivery/categories/supermarket` page links the `bucuresti` form, so
+the site links URLs that do not work. Trusting a site's own links cost a whole recon pass.
+Asserted in `tests/delivery-platform.test.ts`.
+
+### What the adapter is
+
+`scripts/adapters/glovo.ts`, driven by config rows in `src/lib/platform/config.ts` — one adapter,
+six discovered storefronts, **one enabled**. Rate limits are config, not code: 4 s between
+category pages, 1.2 s between scroll steps, 40 scroll ceiling per category.
+
+- No product JSON API exists (re-confirmed) — the catalog is RSC, so the DOM is the source.
+- Tiles are selected by CSS-module PREFIX (`[class*="ItemTile_itemTile"]`). The hash suffix
+  changes every deploy. `data-test-id="product-tile"` exists only on the landing carousels, not
+  in category views — matching on it harvested 0 products from 20 opened categories.
+- **`productUrl` is null and stays null.** A Glovo tile has no ancestor or descendant `<a>`;
+  there is no per-product permalink to record. Pointing it at the category page instead tripped
+  the fabrication guard at 71.7% — correctly, since every product in a category then shared
+  `(price, url)`. `audit-db`'s deep-link invariant now scopes to sources that publish links.
+- `rawSourceBlob` carries `offerId`, the key `audit-db` reads to identify a store product when
+  there is no deep link. Omitting it made the audit fall back to `url|price` and report a
+  20-way matcher fan-out that was really 20 different Dove shower gels priced 31,99 in one
+  category. The audit now declares when it is using that fallback.
+
+### Robots
+
+Re-checked at the start of the run, as instructed: `Allow: /`, disallowing only
+`/embedded-web-views/*`, `/*/order-tracking/*/share`, `/*/password-recovery`. Unchanged, and
+store and category pages remain allowed.
+
+### The prices are marked up, and are hidden by default
+
+Glovo's own Kaufland header claims **"Preț ca în magazin"**. Measured against the cheapest
+non-platform price for the same catalog product, on 269 overlapping products:
+
+| | |
+|---|---|
+| median markup | **+11.6%** (median absolute +0,56 lei) |
+| spread | p10 −6.3% · p25 0.0% · p75 +35.7% · p90 +63.0% |
+| dearer / cheaper / identical | 174 / 59 / 36 |
+
+Two independent scrapes a few hours apart gave +11.5% and +11.6% on ~270 pairs, so the figure is
+the assortment's, not one run's.
+
+So the claim is false at the median, though a quarter of the assortment does match shelf price
+exactly. The largest premiums are all measured against Metro, a cash-and-carry whose prices are
+not a fair consumer comparison — read that tail with that caveat.
+
+Comparability (a product priced by 2+ merchants) is **7.5%** with platform rows excluded and
+**8.2%** with them included, of 26,272 products — the platform adds ~1,900 single-merchant
+products to the denominator while lifting the numerator, which is why turning it on flatters the
+number without making a single extra product genuinely comparable on shelf terms.
+
+`npm run audit:markup` re-measures this. It reads platform rows regardless of visibility, which
+is the only reason it can measure the gap at all.
+
+**A DELIVERY_PLATFORM price is excluded from everything user-facing by default** — optimizer,
+item pages, deals, counts, search, comparability. One definition, `deliveryPlatformWhere()` in
+`src/lib/platform/visibility.ts`, expressed as a `NOT` rather than an allow-list so a future
+fifth price source stays visible instead of silently vanishing. Enabled only by
+`SHOW_DELIVERY_PLATFORM=1` or a per-request `?dp=1`. **Off in production.**

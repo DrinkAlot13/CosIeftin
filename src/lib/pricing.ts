@@ -27,9 +27,13 @@ export const MAX_DISPLAY_AGE_DAYS = 14;
  * in one card is a rule the next card does not have. An offer that fails this is still SHOWN,
  * greyed and dated; it just cannot be the number we stand behind.
  */
-export function isCurrent(o: OfferLike, now: Date = new Date()): boolean {
+export function isCurrent(o: OfferLike, now: Date = new Date(), showDeliveryPlatform = false): boolean {
   if (o.availability !== "in stock") return false;
   if (o.isStale) return false;
+  // A DELIVERY_PLATFORM price is another shop's stock resold with a markup. It is not a current
+  // price for comparison purposes unless explicitly enabled — the query twin in
+  // `currentOfferWhere` applies the same rule, and the two must agree.
+  if (!showDeliveryPlatform && (o.priceSource ?? "") === "DELIVERY_PLATFORM") return false;
   // A FLAGGED offer is one a gate withheld. It was missing from this rule entirely, so the
   // 135 kept-over-refused rows and the 62 excluded-category rows still counted as current
   // prices in every summary that called this — the withholding was real on the item table

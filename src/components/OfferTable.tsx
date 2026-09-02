@@ -1,4 +1,5 @@
 import { StoreTypeBadge } from "@/components/StoreTypeBadge";
+import { DELIVERY_PLATFORM_LABEL, isDeliveryPlatform } from "@/lib/platform/visibility";
 import { AVAILABILITY_LABELS, formatDate, formatPerUnit, formatRON } from "@/lib/format";
 import type { OfferRow } from "@/lib/queries";
 
@@ -28,6 +29,19 @@ export function OfferTable({ offers, unit }: { offers: OfferRow[]; unit: string 
                 <td>
                   <span className="m-name">{o.merchant.name}</span>
                   <div style={{ marginTop: 3 }}><StoreTypeBadge type={o.merchant.storeType} /></div>
+                  {/*
+                    A PLATFORM PRICE THAT IS SHOWN AT ALL MUST SAY WHAT IT IS. These rows are
+                    excluded by default and only appear behind ?dp=1, but the moment one is on
+                    screen next to shelf prices it needs to carry its own explanation — measured
+                    median markup is +11.5%, so it is not the same number as the row above it.
+                  */}
+                  {isDeliveryPlatform(o) && (
+                    <div style={{ marginTop: 3 }}>
+                      <span className="badge" title={DELIVERY_PLATFORM_LABEL} style={{ whiteSpace: "nowrap" }}>
+                        🛵 {DELIVERY_PLATFORM_LABEL}
+                      </span>
+                    </div>
+                  )}
                   {o.packLabel && <div className="m-net">{o.packLabel}</div>}
                 </td>
                 <td className="hide-sm">
@@ -59,8 +73,22 @@ export function OfferTable({ offers, unit }: { offers: OfferRow[]; unit: string 
                 </td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatPerUnit(o.pricePerUnit, unit)}</td>
                 <td>
-                  <a className={isBest ? "btn btn-accent" : "btn btn-outline"} href={o.url || "#"} target="_blank" rel="nofollow noopener">
-                    La magazin →
+                  {/*
+                    A BUTTON MAY NOT PROMISE A LINK THAT DOES NOT EXIST. Two sources publish no
+                    per-product page — the Kaufland flyer and the Glovo storefront — and for
+                    their rows `productUrl` is null and `url` is a listing or the shop front.
+                    Labelling that "La magazin" sends the shopper to a homepage to hunt, which
+                    is the display-side version of the rule that an absent link must be VISIBLY
+                    null rather than silently pointing at a generic page.
+                  */}
+                  <a
+                    className={isBest ? "btn btn-accent" : "btn btn-outline"}
+                    href={o.url || "#"}
+                    target="_blank"
+                    rel="nofollow noopener"
+                    title={o.productUrl ? undefined : "Magazinul nu publică o pagină pentru fiecare produs — te ducem la magazin, unde îl poți căuta."}
+                  >
+                    {o.productUrl ? "La magazin →" : "Vezi magazinul →"}
                   </a>
                 </td>
               </tr>
