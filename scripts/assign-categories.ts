@@ -10,7 +10,7 @@
 import { prisma } from "../src/lib/db";
 import { assignByMerchantPath, assignByName, type Assignment } from "../src/lib/category/assign";
 import { recoverPath } from "../src/lib/category/recover";
-import { GROCERY_TREE, ALL_LEAVES } from "../src/lib/category/tree";
+import { GROCERY_TREE, ALL_LEAVES, isCatchAll } from "../src/lib/category/tree";
 
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + " ".repeat(n - s.length));
 const lp = (s: string | number, n: number) => String(s).padStart(n);
@@ -62,7 +62,18 @@ async function main(): Promise<void> {
   let recoveredCount = 0;
 
   for (const p of products) {
-    // ── STAGE 1: what did a merchant already tell us?
+    // THREE STAGES, AND THE ORDER IS THE WHOLE POINT.
+    //
+    //   1. the merchant named a SHELF          — strongest, it is their own taxonomy
+    //   2. the product NAME says what it is    — strong, and the catalog is full of it
+    //   3. the merchant named only a DEPARTMENT — weakest, so it is the last resort
+    //
+    // Getting 2 and 3 the wrong way round cost 895 of 1,076 dairy products their shelf: a
+    // department-level path short-circuited straight to "Altele" and the name was never
+    // scored, so "Branza feta in saramura Olympus" sat in the remainder pile while a
+    // `branzeturi` leaf existed and would have taken it at AUTO. "Merchant truth beats
+    // inference" is true about a SHELF and false about a department — a department is barely
+    // more than the section we already knew.
     let a: Assignment | null = null;
     let via: "recovered" | "name" = "name";
     for (const o of p.offers) {
@@ -72,9 +83,18 @@ async function main(): Promise<void> {
       });
       if (!rp) continue;
       const cand = assignByMerchantPath(rp.levels);
-      if (cand.leafSlug) { a = cand; via = "recovered"; recoveredCount++; break; }
+      if (cand.leafSlug) { a = cand; via = "recovered"; break; }
     }
-    // ── STAGE 2: otherwise infer from the name.
+
+    // A catch-all from stage 1 means the merchant gave us a department and nothing else. Try
+    // the name before settling for it, and keep the catch-all only if the name cannot do better.
+    if (a && a.leafSlug && isCatchAll(a.leafSlug)) {
+      const byName = assignByName(p.name);
+      if (byName.band === "AUTO" && byName.leafSlug) { a = byName; via = "name"; }
+    }
+    if (via === "recovered") recoveredCount++;
+
+    // ── otherwise infer from the name.
     if (!a) a = assignByName(p.name);
 
     if (a.band === "AUTO") decided.push({ id: p.id, name: p.name, a, via });

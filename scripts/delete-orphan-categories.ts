@@ -20,10 +20,19 @@
 
 import { prisma } from "../src/lib/db";
 import { ensureBackup } from "../src/lib/ensure-backup";
+import { CATEGORIES, ALCOHOL_CATEGORIES } from "../src/data/catalog";
 
-/** Only these. Deliberately a list, not a query — a query would have swept the departments in. */
-const SAFE_TO_DELETE = ["lapte-praf", "mancare-bebe", "scutece", "ingrijire-bebe"];
-const BLOCKED = ["lactate", "legume-fructe", "menaj"];
+/** Only these. Deliberately a list, not a query — a query would have swept live rows in. */
+const SAFE_TO_DELETE = [
+  // The four Bebeluși leaves, superseded by the merged `bebelusi-toate`. Deleted 2026-09-03.
+  "lapte-praf", "mancare-bebe", "scutece", "ingrijire-bebe",
+  // The three legacy departments. UNBLOCKED 2026-09-03, and only after the first half of the
+  // change landed: `src/data/catalog.ts` no longer declares them, so `seed-catalog` can no
+  // longer recreate them. Deleting the rows while the seed still declared them would have been
+  // a delete that undoes itself on the next `npm run setup`.
+  "lactate", "legume-fructe", "menaj",
+];
+const BLOCKED: string[] = [];
 
 async function main(): Promise<void> {
   const apply = process.argv.includes("--apply");
@@ -34,10 +43,18 @@ async function main(): Promise<void> {
     select: { id: true, slug: true, name: true, parentId: true },
   });
 
+  // THE GUARD THAT MAKES THIS SAFE TO RE-RUN: never delete a category the seed still declares.
+  // Read from the seed's own source of truth rather than from a note in a comment.
+  const seedDeclares = new Set([...CATEGORIES, ...ALCOHOL_CATEGORIES].map((c) => c.slug));
+
   const deletable: number[] = [];
   for (const slug of SAFE_TO_DELETE) {
     const c = rows.find((r) => r.slug === slug);
     if (!c) { console.log(`  ${slug.padEnd(18)} already gone`); continue; }
+    if (seedDeclares.has(slug)) {
+      console.log(`  ${slug.padEnd(18)} REFUSED — src/data/catalog.ts still declares it; the seed would recreate it`);
+      continue;
+    }
     const products = await prisma.product.count({ where: { categoryId: c.id } });
     const children = await prisma.category.count({ where: { parentId: c.id } });
     if (products > 0 || children > 0) {

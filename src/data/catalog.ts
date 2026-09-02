@@ -32,14 +32,27 @@ export type ItemDef = {
   packLabel: string;
 };
 
+/**
+ * Grocery categories this seed is allowed to create.
+ *
+ * THE REAL GROCERY TREE IS `src/lib/category/tree.ts`, built by `assign:categories`. This list
+ * predates it and survives only because `seed-catalog` needs something to put in an empty
+ * database. Every slug here must therefore also be a department in GROCERY_TREE, or the seed
+ * quietly creates a category that the tree does not declare and that nothing can ever fill.
+ *
+ * `lactate`, `legume-fructe` and `menaj` were removed on 2026-09-03 for exactly that reason:
+ * they had been superseded by `lactate-oua`, `fructe-legume` and `curatenie-igiena`, and the
+ * three rows they had created sat in the database with 0 products and 0 children — enough to
+ * render three empty departments in a sidebar. Deleting the database rows alone would not have
+ * held, because the next `npm run setup` would have recreated them from this array.
+ *
+ * Guarded by audit-db: "the grocery tree in code and in the database are the same tree".
+ */
 export const CATEGORIES: CategoryDef[] = [
-  { slug: "lactate", name: "Lactate & Ouă", icon: "🥛" },
   { slug: "panificatie", name: "Panificație", icon: "🍞" },
   { slug: "bauturi", name: "Băuturi", icon: "🥤" },
   { slug: "mezeluri", name: "Mezeluri & Carne", icon: "🥩" },
-  { slug: "legume-fructe", name: "Legume & Fructe", icon: "🥦" },
   { slug: "bacanie", name: "Băcănie", icon: "🧂" },
-  { slug: "menaj", name: "Menaj & Igienă", icon: "🧴" },
 ];
 
 // Separate "alcool" storefront (compared across specialist stores, never mixed
@@ -63,6 +76,12 @@ export const CHAINS: ChainDef[] = [
   { slug: "profi", name: "Profi", websiteUrl: "https://www.profi.ro", color: "#008300", priceBias: 1.05, coverage: 0.85 },
 ];
 
+/**
+ * UNUSED. Nothing imports `ITEMS` or `CHAINS` — `seed-catalog` takes only the category lists,
+ * and real products come from the scrapers. The `categorySlug` values below are historical and
+ * are NOT authoritative; several name categories that no longer exist. Left in place because
+ * they are harmless demo fixtures, flagged here so nobody reads them as a live mapping.
+ */
 export const ITEMS: ItemDef[] = [
   // Lactate & Ouă
   { slug: "lapte-zuzu-35-1l", name: "Lapte Zuzu 3.5% 1L", brand: "Zuzu", categorySlug: "lactate", unit: "l", unitSize: 1, packLabel: "1 L" },
