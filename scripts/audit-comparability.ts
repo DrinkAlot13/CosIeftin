@@ -28,6 +28,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { MAX_DISPLAY_AGE_DAYS } from "../src/lib/pricing";
+import { sectionKind } from "../src/lib/section-type";
 
 const prisma = new PrismaClient();
 
@@ -104,6 +105,48 @@ async function main(): Promise<void> {
     if (merchants(p.offers as Row[], all) >= 2) e.comparable++;
     bySection.set(p.section, e);
   }
+  // ── THE SPLIT. Comparison sections get comparability; price sections get coverage.
+  //
+  //    A blended figure measures catalog COMPOSITION, not matching quality. DCNeu grew from
+  //    6,019 to 12,914 products when its scraper stopped truncating, and the headline fell
+  //    from 5.6% to 5.0% — the catalog got strictly better and the metric got worse, because
+  //    6,895 single-merchant products joined the denominator. A number that falls when you fix
+  //    a bug is measuring the wrong thing.
+  const cmp = { products: 0, comparable: 0 };
+  const prc = { products: 0, withOffer: 0, offers: 0, withTiers: 0 };
+  for (const p of products) {
+    if (sectionKind(p.section) === "comparison") {
+      cmp.products++;
+      if (merchants(p.offers as Row[], all) >= 2) cmp.comparable++;
+    } else {
+      prc.products++;
+      const shown = (p.offers as Row[]).filter(all);
+      if (shown.length > 0) prc.withOffer++;
+      prc.offers += shown.length;
+    }
+  }
+  prc.withTiers = await prisma.offer.count({
+    where: {
+      isStale: false, flagged: false, availability: "in stock",
+      tiers: { some: {} },
+      product: { section: { notIn: ["grocery", "alcohol"] } },
+    },
+  });
+
+  console.log(`\n\n════ THE PRODUCT METRIC — COMPARISON SECTIONS ONLY ══════════════════════════`);
+  console.log(`  grocery + alcool: sections where more than one merchant sells the same thing.`);
+  console.log(`  This is the number to track over time.\n`);
+  console.log(`    comparable: ${cmp.comparable} of ${cmp.products}  ${pct(cmp.comparable, cmp.products)}`);
+
+  console.log(`\n════ PRICE SECTIONS — COVERAGE, NOT COMPARABILITY ═══════════════════════════`);
+  console.log(`  dcneu + cosmetice + farmacie: ONE merchant each, by construction. Nothing in`);
+  console.log(`  them can ever be comparable, so reporting 0.0% frames a design decision as a`);
+  console.log(`  failure. What matters here is how much is covered, priced and laddered.\n`);
+  console.log(`    products:                      ${prc.products}`);
+  console.log(`    with a showable price:         ${prc.withOffer}  ${pct(prc.withOffer, prc.products)}`);
+  console.log(`    showable offers:               ${prc.offers}`);
+  console.log(`    offers with a quantity ladder: ${prc.withTiers}  ${pct(prc.withTiers, prc.offers)}`);
+
   console.log(`\n  BY SECTION, on the honest filter:`);
   console.log(`  ${pad("section", 14)}${lp("products", 11)}${lp("comparable", 12)}${lp("share", 9)}`);
   for (const [k, e] of [...bySection.entries()].sort((a, b) => b[1].comparable - a[1].comparable)) {

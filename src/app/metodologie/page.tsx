@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
+import { sectionKind } from "@/lib/section-type";
 
 export const revalidate = 3600;
 export const metadata = {
@@ -76,13 +77,43 @@ export default async function MetodologiePage() {
             </tbody>
           </table>
         </div>
-        <p className="muted" style={{ fontSize: 13.5, marginTop: 10 }}>
-          Secțiuni acoperite:{" "}
-          {sections
-            .filter((s) => s._count._all > 0)
-            .map((s) => `${SECTION_LABEL[s.section] ?? s.section} (${s._count._all})`)
-            .join(" · ")}
+        {/*
+          COMPARISON vs PRICE sections, said plainly. Three of five sections have exactly one
+          merchant, so nothing in them can be compared — and a shopper who lands on a DCNeu
+          page expecting a comparison and finding one shop deserves to have been told why,
+          rather than concluding the site is broken.
+        */}
+        <h3 style={{ fontSize: 16, marginTop: 22, marginBottom: 6 }}>Ce poți compara și ce nu</h3>
+        <p style={{ lineHeight: 1.65, marginTop: 0 }}>
+          Nu toate secțiunile sunt comparații. La <b>Alimentare</b> și <b>Alcool</b> mai multe
+          magazine vând aceleași produse, deci îți arătăm prețul fiecăruia și care e cel mai
+          mic. La <b>DCNeu</b>, <b>Cosmetice</b> și <b>Farmacie</b> avem un singur magazin
+          pentru fiecare — acolo îți arătăm prețul și reducerile pe cantitate, dar nu o
+          comparație între magazine, pentru că nu există cu ce compara.
         </p>
+        <div className="card" style={{ overflowX: "auto", marginTop: 10 }}>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Secțiune</th><th>Tip</th><th>Produse</th></tr>
+            </thead>
+            <tbody>
+              {sections
+                .filter((s) => s._count._all > 0)
+                .sort((a, b) => b._count._all - a._count._all)
+                .map((s) => (
+                  <tr key={s.section}>
+                    <td style={{ fontWeight: 600 }}>{SECTION_LABEL[s.section] ?? s.section}</td>
+                    <td className="muted">
+                      {sectionKind(s.section) === "comparison"
+                        ? "comparație între magazine"
+                        : "un singur magazin — preț, nu comparație"}
+                    </td>
+                    <td style={{ fontVariantNumeric: "tabular-nums" }}>{s._count._all}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section style={{ marginTop: 32 }}>

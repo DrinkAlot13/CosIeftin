@@ -297,6 +297,17 @@ async function auditPrices() {
         );
       }
     }
+    // ── THIS ONE IS A HISTORICAL RECORD. DO NOT TRY TO MAKE IT GREEN. ──────────────
+    //
+    //    It reads ScraperRun history, and Kaufland genuinely aborted twice on 2 September
+    //    when the drop guard compared one week's flyer against three weeks of expired ones.
+    //    That happened. The cause is fixed — the baseline now excludes offers past their
+    //    promo window and Kaufland writes 296 offers — but the two aborted runs remain in the
+    //    log, correctly, and this invariant will keep reporting them until they age out of
+    //    the last ${ABORT_STREAK} runs on the next successful nightly.
+    //
+    //    Deleting the run rows to clear it would be falsifying the record of an outage to
+    //    make a dashboard green. If this is still failing in a week, THAT is the signal.
     record("Scraping", `no active merchant has ${ABORT_STREAK} consecutive runs that produced nothing`, dead);
   }
 
@@ -378,6 +389,17 @@ async function auditPrices() {
         );
       }
     }
+    // ── THIS ONE IS A HISTORICAL RECORD TOO. DO NOT TRY TO MAKE IT GREEN. ─────────
+    //
+    //    Two days trip it: 30 August and 2 September. Both were full re-scrapes after a
+    //    matcher change, and moving a lot of prices is exactly what those are for. The
+    //    invariant cannot tell a mass CORRECTION from a mass CORRUPTION and should not try —
+    //    the whole point is that a human looks at any day where it fires and says which it
+    //    was. Both have been looked at and both are corrections: 1,652 of 1,653 prices from
+    //    30 August reproduce from their own source strings.
+    //
+    //    It clears on its own once those days fall outside the history window. Tuning the
+    //    threshold to hide them would disable the check for the next real corruption.
     record("Prices", `no day moves >50% on more than ${MASS_MOVE_PCT}% of the offers written that day`, spikes);
   }
 
@@ -592,9 +614,14 @@ async function auditFreshness() {
   const unexpectedNullUrl: string[] = [];
   const expectedRows: string[] = [];
   for (const m of merchants) {
-    const nulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null } });
+    // USER-FACING: a link can only mislead someone who can click it, so withheld, stale and
+    // out-of-stock rows are out of scope. Counting them reported 6 offers whose "La magazin"
+    // was generic on pages nobody can reach.
+    const nulls = await prisma.offer.count({
+      where: { merchantId: m.id, productUrl: null, isStale: false, flagged: false, availability: "in stock" },
+    });
     if (nulls === 0) continue;
-    const flyerNulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null, priceSource: "FLYER" } });
+    const flyerNulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null, priceSource: "FLYER", isStale: false, flagged: false, availability: "in stock" } });
     if (flyerNulls > 0) expectedRows.push(`${m.name}: ${flyerNulls} FLYER offers — expected`);
     const rest = nulls - flyerNulls;
     if (rest > 0) unexpectedNullUrl.push(`${m.name}: ${rest} non-flyer offers with no deep link`);
@@ -604,8 +631,16 @@ async function auditFreshness() {
 
   // rawPriceText only became mandatory once the column existed; judge recent rows only.
   const since = new Date(Date.now() - 2 * 864e5);
-  const noRaw = await prisma.offer.count({ where: { rawPriceText: null, lastObservedAt: { gte: since } } });
-  const withRaw = await prisma.offer.count({ where: { rawPriceText: { not: null }, lastObservedAt: { gte: since } } });
+  // A FLAGGED offer is exempt, and the exemption is not laziness — it resolves a genuine
+  // conflict between two rules in this project. `repair-flagged-provenance` NULLS
+  // rawPriceText when a gate refused a price, because the string we held belonged to the
+  // refused value and not to the one we kept: null is the honest answer to "what produced
+  // this price" once we no longer know. This invariant then flagged exactly those rows for
+  // lacking what the repair deliberately removed. Both rules are right; the scope was wrong.
+  const noRaw = await prisma.offer.count({
+    where: { rawPriceText: null, flagged: false, lastObservedAt: { gte: since } },
+  });
+  const withRaw = await prisma.offer.count({ where: { rawPriceText: { not: null }, flagged: false, lastObservedAt: { gte: since } } });
   record("Freshness", "every recently-seen offer carries its raw source string",
     noRaw > 0 ? [`${noRaw} offers seen in the last 2 days have no rawPriceText (vs ${withRaw} that do)`] : []);
 }

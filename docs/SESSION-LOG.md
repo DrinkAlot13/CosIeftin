@@ -1142,3 +1142,47 @@ Corrected numbers after the re-scope:
 | run successful with zero writes | 46 | **0** |
 | audit:unit-recompute | 0 live bugs | 0 live bugs |
 | audit:liveness | green | green, all 12 merchants |
+
+## FINAL — the metric split, and the last two cosmetic failures
+
+**1. Comparability split by section type.** `src/lib/section-type.ts` states it once and
+`audit:comparability`, `/admin/health` and `/metodologie` all read it.
+
+    COMPARISON (grocery + alcool)   1,980 of 24,361 comparable   8.1%   <- the product metric
+    PRICE (dcneu + cosmetice + farmacie)
+        products                    15,631
+        with a showable price       12,784   81.8%
+        offers with a ladder         7,239   56.6%
+
+The blended figure was measuring catalog COMPOSITION. DCNeu grew by 6,895 single-merchant
+products when its scraper stopped truncating and the headline fell from 5.6% to 5.0% — the
+catalog got strictly better and the number got worse. A metric that falls when you fix a bug
+is measuring the wrong thing.
+
+The methodology page now says it to shoppers too, under "Ce poți compara și ce nu": a person
+landing on a DCNeu page expecting a comparison and finding one shop deserves to have been told
+why, rather than concluding the site is broken.
+
+**2. The two cosmetic failures were both invisible-row artifacts, again.**
+
+*6 missing deep links:* zero under the visible population. The invariant counted withheld,
+stale and out-of-stock rows — a link can only mislead someone who can click it.
+
+*2 offers with no rawPriceText:* both flagged, stale AND out of stock. But the interesting
+part is WHY they had none — `repair-flagged-provenance` deliberately NULLS rawPriceText when a
+gate refuses a price, because the string we held belonged to the refused value rather than the
+kept one. This invariant then flagged exactly the rows another rule had deliberately cleared.
+**Both rules were right; the scope was wrong.** Flagged offers are now exempt.
+
+audit-db 25/29 → **27/29**.
+
+**The two survivors are historical records and are now commented as such**, so nobody tries to
+make them green:
+
+- Kaufland's two aborts on 2 September genuinely happened. The cause is fixed and Kaufland
+  writes 296 offers, but deleting the run rows to clear the invariant would be falsifying the
+  record of an outage to make a dashboard green. If it still fails in a week, THAT is a signal.
+- The two mass-move days are both full re-scrapes after a matcher change, which is what those
+  are for. The invariant cannot tell a correction from a corruption and should not try — a
+  human looks at any day it fires. Both were looked at; both are corrections. Tuning the
+  threshold to hide them would disable the check for the next real one.

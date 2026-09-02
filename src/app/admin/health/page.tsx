@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { computeLiveness, formatSilence, MAX_SILENCE_HOURS } from "@/lib/liveness";
+import { sectionKind, SECTION_LABELS } from "@/lib/section-type";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sănătatea scraperelor", robots: { index: false } };
@@ -79,6 +80,26 @@ export default async function HealthPage() {
   });
   const deadMerchants = liveness.filter((l) => l.dead);
 
+  // COMPARISON vs PRICE sections. A blended comparability figure measures catalog
+  // composition rather than matching quality: DCNeu grew by 6,895 single-merchant products
+  // when its scraper stopped truncating, and the blended number FELL while the catalog got
+  // strictly better. The split is the only version that means anything.
+  const sectionRows = await prisma.product.groupBy({ by: ["section"], _count: { _all: true } });
+  const liveOfferWhere = { isStale: false, flagged: false, availability: "in stock" } as const;
+  const kindStats = await Promise.all(
+    sectionRows.map(async (r) => ({
+      section: r.section,
+      kind: sectionKind(r.section),
+      products: r._count._all,
+      priced: await prisma.product.count({
+        where: { section: r.section, offers: { some: liveOfferWhere } },
+      }),
+      laddered: await prisma.offer.count({
+        where: { ...liveOfferWhere, tiers: { some: {} }, product: { section: r.section } },
+      }),
+    })),
+  );
+
   const totalAnomalies = rows.reduce((a, r) => a + r.anomalies, 0);
   const totalFlagged = rows.reduce((a, r) => a + r.flagged, 0);
 
@@ -94,6 +115,37 @@ export default async function HealthPage() {
           <Link href="/admin">← Panou admin</Link> · <Link href="/admin/review">Verificare potriviri</Link>
         </p>
       </div>
+
+      <section className="section" style={{ paddingTop: 0 }}>
+        <div className="section-head"><h2 style={{ margin: 0 }}>Secțiuni</h2></div>
+        <div className="card" style={{ overflowX: "auto" }}>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
+            Secțiunile <b>de comparație</b> au mai multe magazine, deci comparabilitatea are
+            sens acolo. Secțiunile <b>de preț</b> au un singur magazin prin construcție —
+            pentru ele contează acoperirea, nu comparabilitatea.
+          </p>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Secțiune</th><th>Tip</th><th>Produse</th><th>Cu preț azi</th><th>Cu preț la cantitate</th></tr>
+            </thead>
+            <tbody>
+              {kindStats.sort((a, b) => b.products - a.products).map((k) => (
+                <tr key={k.section}>
+                  <td style={{ fontWeight: 600 }}>{SECTION_LABELS[k.section] ?? k.section}</td>
+                  <td className="muted">{k.kind === "comparison" ? "comparație" : "preț"}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{k.products}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {k.priced} ({k.products ? Math.round((k.priced / k.products) * 100) : 0}%)
+                  </td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {k.kind === "price" ? k.laddered : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="section" style={{ paddingTop: 0 }}>
         <div className="section-head">
