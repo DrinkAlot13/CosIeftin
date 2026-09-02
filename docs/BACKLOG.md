@@ -52,3 +52,15 @@ dose-mismatch=15 · variant-fat=2`
 `package.json` still lists `"backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts"`,
 but that script was deleted when its source column was dropped. Running it fails with a
 missing-file error. One-line removal; harmless but it is a lie in the manifest.
+
+## Check every scraper for a cap that is silently truncating
+
+DCNeu's `MAX_CATS` was 90 and DCNeu has 180 leaf categories — `.slice(0, 90)` took the first
+half in page order and the log printed "Discovered 90 leaf categories" every run, which reads
+as a fact about the shop rather than a fact about our cap. Half the shop was invisible, and
+the user's reported product sat in the missing half.
+
+Fixed for DCNeu (cap 250, and the log now says when the cap bit). **Every other scraper with
+a MAX_* constant needs the same look** — `MAX_PAGES`, `maxPages`, `take`, `slice` — because
+the failure is silent by construction: a cap that bites produces a smaller, entirely valid
+looking run.

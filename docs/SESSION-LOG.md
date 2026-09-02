@@ -969,3 +969,38 @@ for and what I did; whether it should be kept-median is your call.
 
 Worst 20 before withholding, for the record: 5.9x Măsline Kalamata · 4.6x Gelatina foi
 Dr. Oetker · 4.0x Tagliatelle Carbonara Baneasa · 3.9x Pasta de dinti Colgate Total.
+
+## PHASE 7 — the 21 smeared DCNeu ladders, and a much bigger find
+
+**Smeared ladders remaining after the fresh scrape: 0.** The check is the population one —
+an identical rung set appearing on 5+ offers that have 2+ distinct base prices — and it finds
+nothing. The 21 are gone, resolved by the re-scrape rather than by suppression.
+
+**The withheld-base rule holds exactly.** Of 3,743 offers carrying tiers, 3,596 ladders render
+and 147 are refused — and all 147 are refused *because their base is withheld, stale or out of
+stock*. Not one refusal for any other reason, which is what "a ladder on a price we do not
+believe is a made-up number wearing a percentage" looks like when it is working.
+
+### THE FLORI ARTIFICIALE QUESTION — half the shop was missing
+
+The user pointed at `FLORI ARTIFICIALE TOPORAS TEXTIL+PVC WEI A-80600` and it returned zero
+rows. The 70 products matching "FLORI" are all false positives — "flori de soc", "floarea
+soarelui", "floricele".
+
+**DCNeu publishes 180 leaf categories. We scraped 90.**
+
+`MAX_CATS` defaulted to 90 and the discovery does `.slice(0, MAX_CATS)`, which takes the first
+90 **in page order** — so it was not sampling the shop, it was truncating it, and the entire
+back half was invisible. `menaj/flori-artificiale` sits past position 90. So does
+`menaj/articole-baie`, `menaj/borcane`, `menaj/boluri` and 86 others.
+
+Every run logged `Discovered 90 leaf categories`, which reads as a fact about DCNeu rather
+than a fact about our cap. That is the whole failure: the number was true and told nobody
+anything.
+
+Cap raised to 250, and the log now says `⚠ CAPPED at MAX_CATS=N — there may be more` whenever
+it bites. **DCNeu needs a re-scrape to pick up the missing half** — not run tonight, because
+DCNeu alone takes over an hour and the remaining phases matter more.
+
+Logged to BACKLOG: every other scraper with a MAX_* constant needs the same look. The failure
+is silent by construction — a cap that bites produces a smaller, entirely valid-looking run.

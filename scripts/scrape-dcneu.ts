@@ -29,7 +29,17 @@ import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 const BASE = "https://comenzi.dcneu.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-const MAX_CATS = Number(process.env.DCNEU_MAX_CATS ?? 90);
+/**
+ * DCNeu publishes 180 leaf categories. This was capped at 90 — exactly half — and the cap was
+ * silently truncating, not sampling: `.slice(0, MAX_CATS)` takes the first 90 in page order,
+ * so the entire back half of the shop was invisible.
+ *
+ * That is why "FLORI ARTIFICIALE TOPORAS TEXTIL+PVC WEI A-80600" returned zero rows when a
+ * user pointed at it: `menaj/flori-artificiale` sits past position 90. The log said
+ * "Discovered 90 leaf categories" every run, which reads like a fact about the shop rather
+ * than a fact about our cap.
+ */
+const MAX_CATS = Number(process.env.DCNEU_MAX_CATS ?? 250);
 const DETAIL = process.env.DCNEU_DETAIL !== "0";
 const DETAIL_CONCURRENCY = Number(process.env.DCNEU_CONCURRENCY ?? 4);
 const DETAIL_MAX = Number(process.env.DCNEU_DETAIL_MAX ?? 0); // 0 = every product
@@ -253,7 +263,11 @@ async function main() {
   const cats = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
     .filter((u) => !/\.(jpg|png|gif|css|js|woff)/i.test(u))
     .slice(0, MAX_CATS);
-  console.log(`Discovered ${cats.length} leaf categories.`);
+  // Say when the cap bit. "Discovered 90" looked like a fact about DCNeu for weeks.
+  console.log(
+    `Discovered ${cats.length} leaf categories.` +
+    (cats.length >= MAX_CATS ? `  ⚠ CAPPED at MAX_CATS=${MAX_CATS} — there may be more.` : ""),
+  );
 
   const pool: DcneuProduct[] = [];
   const seen = new Set<string>();
