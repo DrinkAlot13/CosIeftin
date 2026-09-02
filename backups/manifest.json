@@ -10,16 +10,6 @@
     "gzipped": true
   },
   {
-    "file": "2026-09-01T19-02-32-796Z.db.gz",
-    "takenAt": "2026-09-01T19:02:34.803Z",
-    "bytes": 13602248,
-    "offers": 44375,
-    "priceHistory": 81006,
-    "products": 35171,
-    "integrityOk": true,
-    "gzipped": true
-  },
-  {
     "file": "2026-09-01T20-26-17-065Z.db.gz",
     "takenAt": "2026-09-01T20:26:19.270Z",
     "bytes": 13610520,
@@ -76,6 +66,16 @@
     "offers": 44608,
     "priceHistory": 82216,
     "products": 35336,
+    "integrityOk": true,
+    "gzipped": true
+  },
+  {
+    "file": "2026-09-02T00-48-37-979Z.db.gz",
+    "takenAt": "2026-09-02T00:48:40.126Z",
+    "bytes": 17927823,
+    "offers": 44690,
+    "priceHistory": 82340,
+    "products": 35418,
     "integrityOk": true,
     "gzipped": true
   }

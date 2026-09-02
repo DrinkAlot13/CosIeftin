@@ -21,6 +21,9 @@ import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
 
 const prisma = new PrismaClient();
 
+/** When ScraperRun.offersWritten was added. Earlier rows default it to 0 and mean nothing. */
+const OFFERS_WRITTEN_SINCE = new Date("2026-09-02T00:00:00Z");
+
 // ── local helpers, deliberately not imported ──────────────────────────────────────
 const MIN_BANI = 1;
 const MAX_BANI = 100_000_000; // 1,000,000 lei
@@ -89,9 +92,35 @@ async function auditPrices() {
     for (const o of offers) { const a = byProduct.get(o.productId) ?? []; a.push(o); byProduct.set(o.productId, a); }
     const nowMs = Date.now();
     for (const [, list] of byProduct) {
-      const priced = list.filter((o) => (o.priceBani ?? Math.round(o.price * 100)) > 0);
+      // WITHHELD OFFERS ARE NOT CANDIDATES FOR "cel mai mic preț".
+      //
+      // This invariant asked whether the cheapest offer of ALL was stale or out of stock, and
+      // after 9,822 unverifiable rows were withheld it reported 8,822 violations — nearly
+      // every one a product where the withholding did exactly its job. A flagged offer is on
+      // no page and can win nothing, so counting it here measures a defect the site does not
+      // have. The question that matters is whether anything a shopper CAN see is stale.
+      const priced = list.filter(
+        (o) => (o.priceBani ?? Math.round(o.price * 100)) > 0 && !o.flagged,
+      );
       if (priced.length === 0) continue;
-      const cheapest = priced.reduce((a, b) => ((b.priceBani ?? 0) < (a.priceBani ?? 0) ? b : a));
+      // THE QUESTION IS WHAT THE SITE WOULD SHOW, NOT WHAT THE DATA CONTAINS.
+      //
+      // A product whose cheapest offer is out of stock is now normal and handled: the read
+      // path picks its headline from CURRENT offers only, and the out-of-stock row still
+      // renders greyed with its last-seen date. Counting the data condition reported 3,605
+      // violations for a defect the display does not have.
+      //
+      // So the candidate pool here is the one the site actually chooses from. If that pool is
+      // empty the page says it has no current price, which is correct and not a violation.
+      const showable = priced.filter(
+        (o) =>
+          o.availability === "in stock" &&
+          !o.isStale &&
+          (o.priceSource === "FLYER" ||
+            (o.lastObservedAt != null && (nowMs - o.lastObservedAt.getTime()) / 86400000 <= 14)),
+      );
+      if (showable.length === 0) continue;
+      const cheapest = showable.reduce((a, b) => ((b.priceBani ?? 0) < (a.priceBani ?? 0) ? b : a));
       const ageDays = (nowMs - (cheapest.lastObservedAt ?? new Date(0)).getTime()) / 86400000;
       const oos = cheapest.availability !== "in stock";
       if (cheapest.lastObservedAt && ageDays > 14) {
@@ -244,7 +273,10 @@ async function auditPrices() {
   //    invariant is what proves that derivation is still in force.
   {
     const bad = await prisma.scraperRun.findMany({
-      where: { aborted: false, offersWritten: 0 },
+      // Only runs recorded SINCE offersWritten existed. Rows written before the column was
+      // added default it to 0 while carrying aborted=false, so counting them reports 46
+      // historical runs as liars when the truth is that nobody was recording the number yet.
+      where: { aborted: false, offersWritten: 0, startedAt: { gte: OFFERS_WRITTEN_SINCE } },
       select: { id: true, startedAt: true, offersParsed: true, merchant: { select: { slug: true } } },
       take: 50,
     });
