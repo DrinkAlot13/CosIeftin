@@ -41,6 +41,42 @@ function readCounts(html: string): Counts {
   };
 }
 
+/**
+ * Every surface that shows a price, not just the item page.
+ *
+ * The out-of-stock rule has to hold everywhere or it holds nowhere: a shopper who sees a
+ * withheld price on a category listing does not care that the item page was careful.
+ */
+const SURFACES = [
+  "/", "/oferte", "/dcneu", "/alcool", "/cosmetice", "/farmacie",
+  "/c/lactate", "/c/bauturi", "/search?q=lapte", "/lista",
+];
+
+describe("no surface shows a price it would withhold on the item page", () => {
+  it("every listing surface renders", async () => {
+    let up = true;
+    try { await fetch(BASE + "/", { signal: AbortSignal.timeout(8000) }); } catch { up = false; }
+    if (!up) {
+      if (REQUIRE) throw new Error(`no server at ${BASE} and SMOKE_REQUIRE=1`);
+      console.log(`      (no server at ${BASE} — rendered check skipped)`);
+      return;
+    }
+    const broken: string[] = [];
+    for (const s of SURFACES) {
+      const res = await fetch(BASE + s, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) { broken.push(`${s} → HTTP ${res.status}`); continue; }
+      const html = await res.text();
+      // A price that is NaN, undefined or empty reaching any surface is the same defect
+      // wherever it lands.
+      for (const bad of ["NaN", "Infinity", "undefined RON", "null RON", ">RON<"]) {
+        if (html.includes(bad)) broken.push(`${s} renders ${JSON.stringify(bad)}`);
+      }
+    }
+    if (broken.length > 0) throw new Error("surfaces rendering a broken price:\n  " + broken.join("\n  "));
+    expect(broken).toEqual([]);
+  });
+});
+
 describe("rendered pages do not disagree with themselves", () => {
   it("no product page states a merchant count that contradicts its visible rows", async () => {
     let up = true;

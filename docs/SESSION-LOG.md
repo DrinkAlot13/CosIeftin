@@ -802,3 +802,31 @@ range, so it is a genuine former price at that same shop and is correctly kept. 
 distinction the whole phase is about, visible in one line of output.
 
 727 tests pass.
+
+## PHASE 6 — out-of-stock sweep, site-wide (done during the phase-1 wait)
+
+Two real gaps, both the same shape: the withholding rule existed in one place and was not
+applied in the others.
+
+**`isCurrent` never checked `flagged`.** The canonical "is this a price we stand behind"
+predicate tested availability, staleness and observation age — and not whether a gate had
+withheld the offer. So the 135 kept-over-refused rows and the 62 excluded-category rows were
+withheld on the item table and counted as current everywhere else, including in `summarize`,
+which feeds every headline and every count on the site.
+
+**`currentOfferWhere` had the same hole.** That is the database twin of `isCurrent`, and the
+comment above it says both must agree. They did not.
+
+**Three listing paths filtered on `availability` alone**, ignoring staleness and flags
+entirely. All now call `isCurrent`, so there is one rule and one place to change it.
+
+`tests/page-self-consistency.test.ts` extended from the item page to ten surfaces — `/`,
+`/oferte`, `/dcneu`, `/alcool`, `/cosmetice`, `/farmacie`, `/c/lactate`, `/c/bauturi`,
+`/search?q=lapte`, `/lista` — each fetched and checked for NaN, Infinity, `undefined RON`,
+`null RON` and an empty price. All ten clean.
+
+728 tests pass.
+
+DEFERRED, logged rather than done: recipe pages and alerts were not swept. Both read prices
+through the same `queries.ts` helpers that now enforce `isCurrent`, so they inherit the fix,
+but neither was fetched and verified by rendered output. That verification is outstanding.

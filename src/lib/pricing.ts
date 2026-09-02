@@ -6,6 +6,7 @@ export type OfferLike = {
   lastObservedAt?: Date | null;
   /** "FLYER" offers expire by promoValidTo and need no observation date */
   priceSource?: string | null;
+  flagged?: boolean;
   isStale?: boolean | null;
 };
 
@@ -29,6 +30,11 @@ export const MAX_DISPLAY_AGE_DAYS = 14;
 export function isCurrent(o: OfferLike, now: Date = new Date()): boolean {
   if (o.availability !== "in stock") return false;
   if (o.isStale) return false;
+  // A FLAGGED offer is one a gate withheld. It was missing from this rule entirely, so the
+  // 135 kept-over-refused rows and the 62 excluded-category rows still counted as current
+  // prices in every summary that called this — the withholding was real on the item table
+  // and nowhere else.
+  if (o.flagged) return false;
   if (!o.lastObservedAt) {
     // A FLYER offer expires by its promo window, not by observation, so a missing date is
     // normal there. For every other source a null means we did not see it — and after a full

@@ -4,7 +4,7 @@ import { normalizeText } from "@/lib/matching";
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
 import { rankSearch } from "@/lib/search/rank";
-import { buildDailyLowSeries, dropPercent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
+import { buildDailyLowSeries, dropPercent, isCurrent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
 import { visibleTiers } from "./bulk-tiers";
 
 const activeInclude = {
@@ -31,6 +31,9 @@ export function currentOfferWhere(now: Date = new Date()) {
     merchant: { active: true },
     availability: "in stock",
     isStale: false,
+    // Must match isCurrent: a withheld offer is not a current price. Its absence here meant
+    // every listing and count treated flagged rows as live.
+    flagged: false,
     lastObservedAt: { gte: new Date(now.getTime() - MAX_DISPLAY_AGE_DAYS * 86_400_000) },
   } as const;
 }
@@ -56,7 +59,7 @@ export async function getDeals(limit = 60) {
   const rows = products
     .map((p) => {
       const summary = summarize(p.offers);
-      const inStock = p.offers.filter((o) => o.availability === "in stock");
+      const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
       const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
       const drop = dropPercent(buildDailyLowSeries(p.offers));
@@ -90,7 +93,7 @@ function decorate<T extends {
   }[];
 }>(products: T[]) {
   return products.map((p) => {
-    const inStock = p.offers.filter((o) => o.availability === "in stock");
+    const inStock = p.offers.filter((o) => isCurrent(o as never));
     const pool = inStock.length > 0 ? inStock : p.offers;
     const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
     // Best trusted ladder across this product's offers. `visibleTiers` refuses one hanging
@@ -144,7 +147,7 @@ export async function getItemPage(slug: string) {
   const offers = [...product.offers].sort((a, b) => baniOf(a) - baniOf(b));
   const summary = summarize(offers);
   const series = buildDailyLowSeries(offers);
-  const inStock = offers.filter((o) => o.availability === "in stock");
+  const inStock = offers.filter((o) => isCurrent(o as never));
   const bestOffer = inStock[0] ?? offers[0] ?? null;
 
   // "Best time to buy": compare today's lowest to its own price history.
@@ -273,7 +276,7 @@ export async function getHomeSections() {
     ...p,
     summary: summarize(p.offers),
     unitLowest: (() => {
-      const inStock = p.offers.filter((o) => o.availability === "in stock");
+      const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
       return pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
     })(),
