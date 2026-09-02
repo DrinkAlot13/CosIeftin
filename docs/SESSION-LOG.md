@@ -1084,3 +1084,32 @@ is the shape truncation leaves in the data after the fact — a run reporting su
 writing half what it used to. Currently green.
 
 DCNeu now reports `Discovered 180 leaf categories, scraping 180`. Re-scrape running.
+
+## ITEM 3 — Kaufland: the scrape was fine, the BASELINE was wrong
+
+**The actual error:** `run refused: 296 offers < 60% of last 594 live in section "grocery"`.
+Nothing else. The scrape itself was healthy — 264 of 265 prices parsed, 0.4% null, one empty
+string — and it matched 296 offers from a 264-product pool.
+
+**Why the baseline was wrong.** All 594 "live" Kaufland offers were observed on one day, and
+**303 of them carried a promo window that had already passed**. Flyer offers accumulate across
+weeks unless something expires them, so the guard was comparing one week's catalogue against
+three weeks of dead ones. 594 − 303 = 291 genuinely current offers, and 296 against 291 is a
+healthy run, not a 50% collapse.
+
+**Fixed without touching the guard, as instructed.** The drop-guard baseline now excludes
+offers whose promo window has passed. That is not an exemption and not a weakened threshold —
+the guard's rule is unchanged and still 60%. What changed is the number it reads, from "every
+row not yet marked stale" to "every row that is actually still on offer".
+
+Kaufland now writes **296 offers**. All 12 merchants succeed.
+
+**What would change if FLYER sources were exempted from the guard entirely** (the decision I
+was told not to take): Kaufland and any future flyer source would write whatever they found,
+including zero. The guard exists because a site redesign or an anti-bot block produces a
+collapsed run that looks exactly like a small week — and for Kaufland specifically, a broken
+run would silently replace 296 real prices with nothing while the merchant still looked alive
+in `audit:liveness`, because a write of zero offers still updates nothing and leaves the old
+rows in place. **The risk of exempting is that the one merchant whose data is hardest to
+sanity-check (weekly, no deep links, 100% flyer) would lose its only structural guard.** The
+baseline fix removes the need to decide: the guard now works correctly on flyer data.

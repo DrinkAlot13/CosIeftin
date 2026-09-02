@@ -884,8 +884,24 @@ export async function matchPoolToCatalog(
   //
   // Counting the live offers for THIS merchant and THIS section cannot be clobbered by
   // another scraper, and is the number the guard actually means.
+  // AN EXPIRED PROMOTION IS NOT PART OF THE BASELINE.
+  //
+  // Kaufland aborted twice on `296 offers < 60% of last 594 live`, and the scrape was
+  // perfectly healthy — 264 of 265 prices parsed. The 594 was the problem: all observed on
+  // one day, and 303 of them carried a promo window that had ALREADY PASSED. Flyer offers
+  // accumulate across weeks unless something expires them, so the guard was comparing one
+  // week's catalogue against three weeks of dead ones and refusing a good run.
+  //
+  // Excluding them is not weakening the guard — the guard is right that a collapse means
+  // something broke. It is fixing the number the guard reads: 594 - 303 = 291 genuinely
+  // current offers, against which 296 is a healthy run rather than a 50% collapse.
   const baseline = await prisma.offer.count({
-    where: { merchantId, product: { section }, isStale: false },
+    where: {
+      merchantId,
+      product: { section },
+      isStale: false,
+      OR: [{ promoValidTo: null }, { promoValidTo: { gte: new Date() } }],
+    },
   });
   if (baseline > 0 && chosen.size < baseline * 0.6) {
     const reason = `run refused: ${chosen.size} offers < 60% of last ${baseline} live in section "${section}"`;
