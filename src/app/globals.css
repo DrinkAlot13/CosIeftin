@@ -629,3 +629,15 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
 /* "încă nu" is the absence of a figure, not a good figure. The accent green on .rc-total reads
    as a value; a placeholder must not borrow that. */
 .rc-none { font-size: 21px; font-weight: 700; color: var(--muted); margin: 2px 0 4px; }
+
+/* Search: "we do not stock this". Deliberately loud and above every card — an alternative that
+   a shopper mistakes for a match is the bug this whole state exists to prevent. */
+.search-miss {
+  border: 1px solid var(--warn);
+  background: var(--stale-bg);
+  color: var(--stale-fg);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 6px 0 4px;
+}
+.search-miss-head { margin: 0; font-size: 16px; font-weight: 600; }

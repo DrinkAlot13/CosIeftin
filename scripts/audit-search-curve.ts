@@ -20,7 +20,7 @@
 // Run: npm run audit:search-curve
 
 import { PrismaClient } from "@prisma/client";
-import { rankSearch } from "../src/lib/search/rank";
+import { searchCatalog } from "../src/lib/search/search";
 import { SEARCH_CASES } from "../tests/fixtures/search/queries";
 
 const prisma = new PrismaClient();
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     let top1 = 0;
     const counts: number[] = [];
     for (const c of answerable) {
-      const rows = rankSearch(c.q, catalog).filter((r) => r.score >= th).map((r) => r.item);
+      const rows = searchCatalog(c.q, catalog).results.filter((r) => r.score >= th).map((r) => r.item);
       counts.push(rows.length);
       const want = c.topMustContain ?? c.mustFind![0];
       if (rows.some((r) => norm(`${r.brand ?? ""} ${r.name}`).includes(norm(want)))) recall++;
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   // The worst offenders at the current setting, which is what a curve alone will not show.
   console.log("  WORST TOP-1 MISSES AT THE CURRENT THRESHOLD");
   for (const c of answerable) {
-    const rows = rankSearch(c.q, catalog).map((r) => r.item);
+    const rows = searchCatalog(c.q, catalog).results.map((r) => r.item);
     const want = c.topMustContain ?? c.mustFind![0];
     if (rows.length && !norm(`${rows[0].brand ?? ""} ${rows[0].name}`).includes(norm(want))) {
       console.log(`    ${pad(c.q, 26)}${lpad(rows.length, 6)} hits · wanted "${want}" · got "${rows[0].name.slice(0, 44)}"`);

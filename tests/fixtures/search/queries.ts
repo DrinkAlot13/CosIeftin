@@ -9,6 +9,18 @@
 // exact result set: a query for milk must return milk and must not return chocolate milk drink
 // mislabelled as milk. Ranking positions are asserted separately, and only where the top hit
 // is genuinely unambiguous.
+//
+// ── THE CASE THAT CHANGED THE DESIGN ────────────────────────────────────────────────────────
+// "illy capsule" returned 208 products, none of them illy: Starbucks, Nescafé, Tassimo, L'Or.
+// We carry ZERO illy products — verified across every merchant and every state, including
+// withheld and stale. The query named a brand and we answered with the category.
+//
+// So the fixture now carries a class of case it never had: `expectBrandMiss`, a query naming
+// something we do not stock. Getting these right is not about ranking. It is about a search
+// that can say "we do not have this", which the old one structurally could not: its brand
+// filter was built from the brands the catalog HAS, so a brand we lack produced no filter at
+// all and fell through to fuzzy scoring. The one case where a shopper most needs a straight
+// answer was the one case that could not produce one.
 
 export type SearchCase = {
   q: string;
@@ -20,66 +32,99 @@ export type SearchCase = {
   mustNotFind?: string[];
   /** if set, the FIRST result's name must contain this */
   topMustContain?: string;
-  /** if set, the query must return nothing */
+  /**
+   * None of these may appear in the TOP 5. Weaker than `mustNotFind`, and the right strength
+   * for a near neighbour that legitimately belongs in the long tail: body lotion is a real
+   * answer to "lapte" for someone who wants it, but it must not lead.
+   */
+  mustNotFindInTop?: string[];
+  /** if set, the query must return nothing at all */
   expectEmpty?: boolean;
+  /**
+   * The query names a term we do not carry. Search must report THIS term as missing and
+   * present whatever it shows as clearly-labelled alternatives — never as matches.
+   */
+  expectBrandMiss?: string;
+  /** For a brand we DO carry: every result must be that brand. */
+  brandRequired?: string;
 };
 
 export const SEARCH_CASES: SearchCase[] = [
-  // ── the staples, typed plainly ───────────────────────────────────────────────
-  { q: "lapte", why: "the single most common grocery query — milk must outrank milk CHOCOLATE", mustFind: ["Lapte"], topMustContain: "Lapte" },
+  // ── 1. Brands we do NOT stock. The reported bug and its family. ──────────────
+  {
+    // FIXTURE CORRECTION, recorded rather than quietly edited: this case first asserted
+    // mustNotFind ["Starbucks","Nescafe","Tassimo"], and that assertion was wrong. Those ARE
+    // the right alternatives to offer someone who wanted illy capsules — the brief asks for
+    // exactly that ("Iată alternative din aceeași categorie"). What was wrong before was not
+    // their presence but their PRESENTATION: they were returned as if they were illy. That is
+    // what `expectBrandMiss` pins, and it is the assertion that belongs here.
+    q: "illy capsule",
+    why: "THE REPORTED BUG. Zero illy products exist in any merchant in any state; 208 coffee capsules presented as results answer a different question than the one asked",
+    expectBrandMiss: "illy",
+  },
+  { q: "illy", why: "the brand alone, with no category word to fall back on — must not silently become 'coffee'", expectBrandMiss: "illy" },
+  { q: "yakult", why: "a second brand we genuinely do not carry, so the rule is not fitted to one word", expectBrandMiss: "yakult" },
+  { q: "kelloggs corn flakes", why: "unstocked brand plus a category we DO carry — the alternatives are real, the brand claim is not", expectBrandMiss: "kelloggs" },
+  { q: "tropicana suc portocale", why: "unstocked brand with two category words; the fallback must still be labelled as alternatives", expectBrandMiss: "tropicana" },
+
+  // ── 2. Brands we DO stock — results must actually be that brand. ─────────────
+  { q: "lapte zuzu", why: "the commonest shape of query: product + brand", mustFind: ["Zuzu"], brandRequired: "zuzu" },
+  { q: "cafea lavazza", why: "the illy query with a brand we have — this is what the failing one should look like", brandRequired: "lavazza" },
+  { q: "ciocolata milka", why: "brand filter must hold on a category with hundreds of competitors", brandRequired: "milka" },
+  { q: "iaurt activia", why: "sub-brand of Danone; naming it must not widen to all Danone yoghurt", brandRequired: "activia" },
+  { q: "bere ursus", why: "alcohol brand queried from the grocery box", brandRequired: "ursus" },
+  { q: "apa dorna", why: "water brand; 'apa' alone matches hundreds of products", brandRequired: "dorna" },
+  { q: "paste barilla", why: "brand appears in the name rather than the brand column on many rows", brandRequired: "barilla" },
+  { q: "faina baneasa", why: "brand with Romanian diacritics in the catalog (Băneasa) typed without them", brandRequired: "baneasa" },
+  {
+    // FIXTURE CORRECTION: this case originally asserted that "ulei baneasa" must return Băneasa
+    // oil. It cannot — Băneasa makes flour and pasta, and none of its 75 products is an oil. The
+    // OLD search returned 75 results led by "Baneasa Malai 1 kg", which is flour: it answered
+    // with the brand and silently dropped the word "ulei". Zero results is the correct outcome,
+    // and the useful version of zero names the term that failed and offers the brand's range.
+    q: "ulei baneasa",
+    why: "brand we DO carry, product we do not — must not answer by dropping the word that failed",
+    expectBrandMiss: "ulei",
+    mustFind: ["Baneasa"],
+  },
+
+  // ── 3. The plain staples, typed plainly. ─────────────────────────────────────
+  // The BEFORE run put "Lapte de corp Lactovit, 400ml" — a BODY LOTION — at the top of the
+  // commonest query on the site, and the old assertion passed it because the name does contain
+  // "Lapte". `topMustContain` alone cannot express "milk you drink", so the case now names the
+  // specific wrong answer it saw.
+  { q: "lapte", why: "the single most common grocery query — drinking milk must outrank milk CHOCOLATE and body LOTION", mustFind: ["Lapte"], topMustContain: "Lapte", mustNotFindInTop: ["Lapte de corp", "Lapte demachiant"] },
   { q: "paine", why: "no diacritics — 'pâine' as everyone types it", mustFind: ["Paine"] },
-  { q: "oua", why: "no diacritics for 'ouă'", mustFind: ["Oua"] },
-  { q: "ulei", why: "generic category word", mustFind: ["Ulei"] },
-  { q: "zahar", why: "no diacritics for 'zahăr'", mustFind: ["Zahar"] },
-  { q: "faina", why: "no diacritics for 'făină'", mustFind: ["Faina"] },
-  { q: "orez", why: "short, unambiguous staple", mustFind: ["Orez"] },
-  { q: "unt", why: "3 letters — must not match every word containing 'unt'", mustFind: ["Unt"] },
-  { q: "cafea", why: "high-traffic category", mustFind: ["Cafea"] },
-  { q: "apa minerala", why: "two-word category", mustFind: ["Apa minerala"] },
+  { q: "oua", why: "short head noun, no diacritics", mustFind: ["Oua"] },
+  { q: "unt", why: "three letters, and a substring of 'MUNTE' — the trap that priced a spread as butter", mustFind: ["Unt"], topMustContain: "Unt" },
+  { q: "zahar", why: "staple; must not be dominated by 'zahar vanilat' or sugar-free labels", mustFind: ["Zahar"] },
+  { q: "faina", why: "staple; must not be swamped by flavoured or gluten-free flour blends", mustFind: ["Faina"] },
+  { q: "apa minerala", why: "two-word category query", mustFind: ["Apa"] },
 
-  // ── with diacritics, since some users do type them ───────────────────────────
-  { q: "pâine", why: "the same query WITH diacritics must behave identically", mustFind: ["Paine"] },
-  { q: "ouă", why: "diacritic form of a staple", mustFind: ["Oua"] },
-  { q: "brânză", why: "â and ă in one word", mustFind: ["Branza"] },
-  { q: "zahăr", why: "diacritic ă", mustFind: ["Zahar"] },
+  // ── 4. The queries named in the brief. ───────────────────────────────────────
+  { q: "lapte 3.5", why: "fat percentage as a decimal — the number is the discriminator and must not be dropped", mustFind: ["Lapte"], topMustContain: "Lapte" },
+  { q: "oua L", why: "single-letter size grade; 'L' must not be treated as noise or as a litre", mustFind: ["Oua"] },
+  { q: "hartie igienica", why: "two-word household category, no diacritics", mustFind: ["Hartie igienica"] },
+  { q: "detergent rufe", why: "two-word household category where 'detergent vase' is the near neighbour", mustFind: ["Detergent"], mustNotFind: ["Detergent de vase"] },
+  { q: "cafea boabe", why: "category plus form — must not return ground coffee or capsules first", mustFind: ["Cafea"], topMustContain: "afea" },
+  { q: "ulei floarea soarelui", why: "three words, the commonest cooking oil, and 'ulei' alone matches cosmetics", mustFind: ["Ulei"] },
+  { q: "iaurt grecesc", why: "category plus style; 'grecesc' is the discriminator against plain yoghurt", mustFind: ["Iaurt"] },
 
-  // ── product + brand, the most common real pattern ────────────────────────────
-  { q: "lapte zuzu", why: "brand narrows a category", mustFind: ["Zuzu"], mustNotFind: ["Napolact"] },
-  { q: "lapte napolact", why: "the same category, a different brand", mustFind: ["Napolact"], mustNotFind: ["Zuzu"] },
-  { q: "ulei baneasa", why: "the case the brand filter was written for", mustFind: ["Baneasa"] },
-  { q: "iaurt activia", why: "brand within a crowded category", mustFind: ["Activia"] },
-  { q: "bere ursus", why: "beer brand narrows a crowded category", mustFind: ["Ursus"], mustNotFind: ["Heineken"] },
-  { q: "apa dorna", why: "water brand", mustFind: ["Dorna"] },
+  // ── 5. Romanian diacritics, both directions and both Unicode encodings. ──────
+  { q: "sunca", why: "typed without diacritics; must find 'șuncă' (U+0219 comma-below)", mustFind: ["unca"] },
+  { q: "șuncă", why: "typed WITH correct comma-below diacritics — the index must fold them too", mustFind: ["unca"] },
+  { q: "şuncă", why: "the CEDILLA ş (U+015F), which Romanian sites emit constantly; must behave identically to U+0219", mustFind: ["unca"] },
+  { q: "branza", why: "no diacritics for 'brânză'", mustFind: ["ranza"] },
+  { q: "cârnați", why: "both â and ț, correct encodings", mustFind: ["arnat"] },
+  { q: "telina", why: "'țelină' without diacritics", mustFind: ["elina"] },
 
-  // ── brand only ───────────────────────────────────────────────────────────────
-  { q: "zuzu", why: "brand alone must still find its products", mustFind: ["Zuzu"] },
-  { q: "milka", why: "confectionery brand alone", mustFind: ["Milka"] },
-  { q: "danone", why: "dairy brand alone", mustFind: ["Danone"] },
-
-  // ── misspellings a phone keyboard produces ───────────────────────────────────
-  { q: "lpate", why: "transposition of 'lapte'", mustFind: ["Lapte"] },
+  // ── 6. Typos. A shopper on a phone mistypes constantly. ──────────────────────
+  { q: "lpate", why: "transposition of 'lapte'; plain Levenshtein ranks 'spate' (pork backs) closer", mustFind: ["Lapte"], topMustContain: "Lapte" },
   { q: "iuart", why: "transposition of 'iaurt'", mustFind: ["Iaurt"] },
-  { q: "ciocolata", why: "long word, commonly typed correctly", mustFind: ["Ciocolata"] },
-  { q: "cicolata", why: "dropped letter", mustFind: ["Ciocolata"] },
-  { q: "smantana", why: "no diacritics for 'smântână'", mustFind: ["Smantana"] },
+  { q: "cicolata", why: "dropped letter in 'ciocolata'", mustFind: ["iocolat"] },
 
-  // ── size and pack in the query ───────────────────────────────────────────────
-  { q: "lapte 1l", why: "shoppers include the size", mustFind: ["Lapte"] },
-  { q: "apa 2l", why: "size with a category", mustFind: ["Apa"] },
-  { q: "oua 10 buc", why: "count in the query", mustFind: ["Oua"] },
-
-  // ── the discrimination cases: near-misses that must NOT match ────────────────
-  { q: "lapte de cocos", why: "coconut milk is not milk — must not return dairy", mustNotFind: ["Lapte Zuzu"] },
-  { q: "bere fara alcool", why: "alcohol-free beer is its own product", mustFind: ["fara alcool"] },
-  { q: "cafea boabe", why: "whole beans, not instant", mustFind: ["boabe"] },
-
-  // ── multi-word natural language ──────────────────────────────────────────────
-  { q: "ulei de floarea soarelui", why: "the full Romanian name of the commonest oil", mustFind: ["floarea"] },
-  { q: "hartie igienica", why: "two-word household staple", mustFind: ["Hartie igienica"] },
-  { q: "detergent rufe", why: "household, two words", mustFind: ["Detergent"] },
-
-  // ── degenerate input, which must not crash or return the whole catalog ───────
-  { q: "", why: "empty query returns nothing rather than everything", expectEmpty: true },
-  { q: "   ", why: "whitespace-only is the same as empty", expectEmpty: true },
-  { q: "qwertyuiop", why: "nonsense must return nothing, not a random near-match", expectEmpty: true },
+  // ── 7. Nothing at all. ───────────────────────────────────────────────────────
+  { q: "", why: "empty query must return nothing rather than the whole catalog", expectEmpty: true },
+  { q: "   ", why: "whitespace-only query", expectEmpty: true },
+  { q: "qwertyuiop", why: "keyboard mash: must return nothing, not a page of fuzzy near-misses", expectEmpty: true },
 ];

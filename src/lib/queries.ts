@@ -3,7 +3,7 @@ import { normalizeText } from "@/lib/matching";
 
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
-import { rankSearch } from "@/lib/search/rank";
+import { searchCatalog } from "@/lib/search/search";
 import { buildDailyLowSeries, dropPercent, isCurrent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
 import { visibleTiers } from "./bulk-tiers";
 
@@ -227,24 +227,52 @@ export async function getAlternatives(productId: number, limit = 8, strictness: 
 }
 export type AltProduct = Awaited<ReturnType<typeof getAlternatives>>[number];
 
+/**
+ * Search the grocery catalog.
+ *
+ * TWO RULES ARE ENFORCED HERE RATHER THAN IN THE RANKER, because they are about what may be
+ * SHOWN and the ranker is pure:
+ *
+ *  1. ONLY SHOWABLE PRODUCTS ARE SEARCHABLE. A stale, withheld, out-of-stock or
+ *     inactive-merchant row is not a search result — the same definition of "shown" the listing
+ *     pages use. Searching used to rank the whole `grocery` section and only drop empties
+ *     afterwards, so a withheld product could occupy the top slot and then render with no price.
+ *  2. `merchantCount` is computed from those same showable offers and handed to the ranker as
+ *     the tie-break: a product priced in four shops is a more useful answer than one priced in
+ *     one, and that is the entire point of a comparison site.
+ *
+ * The outcome is structured, not an array: search must be able to say "we do not stock illy"
+ * rather than answering with the category. See lib/search/search.ts.
+ */
 export async function searchProducts(query: string) {
   const q = query.trim();
-  if (!q) return [];
-  const products = await prisma.product.findMany({
-    where: { section: "grocery" },
-    include: { offers: activeInclude, category: true },
-  });
-  // The scoring lives in lib/search/rank.ts so that search quality can be measured without a
-  // database. See tests/search-quality.test.ts (40 real queries) and `npm run audit:search`.
-  const ranked = rankSearch(q, products);
-  return decorate(ranked.map((r) => r.item)).filter((p) => p.summary.offerCount > 0);
+  const showable = { ...currentOfferWhere(), merchant: { active: true } } as const;
+  // One return path, so the result type is inferred once. An early `return []` for the empty
+  // query used to widen this to a union and every caller had to narrow it.
+  const products = q
+    ? await prisma.product.findMany({
+        where: { section: "grocery", offers: { some: showable } },
+        include: { offers: activeInclude, category: true },
+      })
+    : [];
+
+  const searchable = products.map((p) => ({
+    ...p,
+    categoryName: p.category?.name ?? null,
+    merchantCount: new Set(p.offers.filter((o) => isCurrent(o as never)).map((o) => o.merchantId)).size,
+  }));
+
+  const outcome = searchCatalog(q, searchable);
+  const decorated = decorate(outcome.results.map((r) => r.item)).filter((p) => p.summary.offerCount > 0);
+  return { kind: outcome.kind, missing: outcome.missing, corrections: outcome.corrections, products: decorated };
 }
 
-export type ProductCardData = Awaited<ReturnType<typeof searchProducts>>[number];
+export type SearchResult = Awaited<ReturnType<typeof searchProducts>>;
+export type ProductCardData = SearchResult["products"][number];
 
 export async function suggestProducts(query: string, limit = 6) {
-  const results = await searchProducts(query);
-  return results.slice(0, limit).map((p) => ({ slug: p.slug, name: p.name, brand: p.brand, lowest: p.summary.lowest }));
+  const { products } = await searchProducts(query);
+  return products.slice(0, limit).map((p) => ({ slug: p.slug, name: p.name, brand: p.brand, lowest: p.summary.lowest }));
 }
 
 /**

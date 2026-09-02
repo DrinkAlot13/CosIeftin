@@ -10,7 +10,7 @@
     "test": "tsx tests/run.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run verify:code && npm run audit:db && npm run census",
-    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover",
+    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover && npm run audit:search-quality",
     "postinstall": "prisma generate",
     "db:reset": "prisma db push --force-reset --skip-generate",
     "seed-catalog": "tsx scripts/seed-catalog.ts",
@@ -65,7 +65,6 @@
     "audit:promo": "tsx scripts/audit-promo-packs.ts",
     "backfill:unitsize": "tsx scripts/backfill-unitsize.ts",
     "gen:postgres": "tsx scripts/gen-postgres-schema.ts",
-    "audit:search": "tsx scripts/audit-search.ts",
     "audit:search-curve": "tsx scripts/audit-search-curve.ts",
     "audit:images": "tsx scripts/audit-images.ts",
     "audit:ean": "tsx scripts/audit-ean.ts",
@@ -98,7 +97,8 @@
     "audit:staleness": "tsx scripts/audit-staleness.ts",
     "backfill:pricesource": "tsx scripts/backfill-pricesource.ts",
     "backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts",
-    "audit:basket": "tsx scripts/audit-basket.ts"
+    "audit:basket": "tsx scripts/audit-basket.ts",
+    "audit:search-quality": "tsx scripts/audit-search-quality.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
