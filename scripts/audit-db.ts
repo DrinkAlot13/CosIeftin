@@ -290,7 +290,24 @@ async function auditPrices() {
         select: { aborted: true, offersWritten: true, startedAt: true, abortReason: true },
       });
       if (runs.length < ABORT_STREAK) continue;
-      const allBad = runs.every((r) => r.aborted || r.offersWritten === 0);
+      // A ZERO THAT PREDATES THE COLUMN IS NOT A FAILURE, IT IS AN ABSENCE OF DATA.
+      //
+      // `offersWritten` and the `aborted` derivation both landed in 533fae2 on 2026-09-02.
+      // Every run recorded before that carries offersWritten = 0 by column default, so reading
+      // 0 as "produced nothing" turned Penny's three perfectly good historical runs into a
+      // dead-run streak and reported a live merchant as dead. Same shape as backfill-phase1
+      // counting half a column and printing a green line: a default is not an observation.
+      //
+      // Current code CANNOT produce (aborted = false, offersWritten = 0) — recordScraperRun
+      // derives aborted from exactly that condition. So the pair is the signature of a
+      // pre-instrumentation row, and it is treated as unknown rather than as evidence.
+      // So `aborted` alone is the signal: for any run recorded since, it is already true
+      // whenever nothing was written, and for older runs it is the only field that meant
+      // anything. Rows that are neither aborted nor credited with a write are dropped as
+      // unknown rather than counted either way.
+      const known = runs.filter((r) => r.aborted || r.offersWritten > 0);
+      if (known.length < ABORT_STREAK) continue;
+      const allBad = known.every((r) => r.aborted);
       if (allBad) {
         dead.push(
           `${m.slug}: last ${ABORT_STREAK} runs produced nothing ` +
@@ -759,6 +776,44 @@ async function auditDeliveryPlatform() {
     `${total} offer(s) across ${aggregators.length} aggregator merchant(s): ${aggregators.map((a) => a.slug).join(", ")} — excluded from display by default`);
 }
 
+/**
+ * A scraper that STOPS supplying the merchant's own category must be loud.
+ *
+ * Three scrapers iterated a category list to find products and dropped the category before the
+ * write, so the catalog spent months inferring from a product name a fact the merchant had
+ * already stated. Now that they persist it, the failure mode inverts: a selector change or a
+ * refactor quietly stops setting it, coverage decays, and nothing says a word — the products
+ * still have prices and the tree still looks populated.
+ *
+ * Checked WITHOUT a hardcoded list of who ought to supply one, because such a list is exactly
+ * what nobody updates. The evidence is the merchant's own history: if its older offers carry a
+ * path and the ones written in the last day and a half carry none, the scraper regressed.
+ */
+async function auditCategoryPathRegression() {
+  const cutoff = new Date(Date.now() - 36 * 3600_000);
+  const merchants = await prisma.merchant.findMany({ where: { active: true }, select: { id: true, name: true } });
+  const regressed: string[] = [];
+  const rows: string[] = [];
+  for (const m of merchants) {
+    const [total, withPath, recent, recentWith] = await Promise.all([
+      prisma.offer.count({ where: { merchantId: m.id } }),
+      prisma.offer.count({ where: { merchantId: m.id, categoryPath: { not: null } } }),
+      prisma.offer.count({ where: { merchantId: m.id, lastObservedAt: { gte: cutoff } } }),
+      prisma.offer.count({ where: { merchantId: m.id, lastObservedAt: { gte: cutoff }, categoryPath: { not: null } } }),
+    ]);
+    if (total === 0) continue;
+    const overall = (withPath / total) * 100;
+    if (withPath > 0) rows.push(`${m.name}: ${overall.toFixed(0)}% of offers carry a merchant category`);
+    // Only a merchant that HAS supplied paths can regress; one that never did is not a failure,
+    // it is a source that publishes nothing, which is recorded elsewhere as a gap.
+    if (withPath >= 50 && recent >= 50 && recentWith === 0) {
+      regressed.push(`${m.name}: ${withPath} offers carry a category, but 0 of ${recent} written since ${cutoff.toISOString().slice(0, 16)} do`);
+    }
+  }
+  record("Categories", "no merchant silently stopped supplying its own category", regressed,
+    rows.length ? rows.join("; ") : undefined);
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("\n═══ DATABASE INVARIANT AUDIT ═══");
@@ -770,6 +825,7 @@ async function main() {
   await auditFreshness();
   await auditEquivalence();
   await auditDeliveryPlatform();
+  await auditCategoryPathRegression();
 
   let lastGroup = "";
   for (const c of checks) {

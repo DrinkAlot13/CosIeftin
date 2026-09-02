@@ -29,6 +29,16 @@ export const EXPECTED_CADENCE_HOURS = 24;
  */
 export const MAX_SILENCE_HOURS = Math.min(48, EXPECTED_CADENCE_HOURS * 2);
 
+/**
+ * Consecutive runs producing nothing before a scraper counts as broken.
+ *
+ * This fires BEFORE the silence clock and on different evidence: the silence clock waits for
+ * the data to age, while a recorded run that read nothing is a scraper reporting its own
+ * failure. Two rather than one, because a single empty run is a bad night — a site outage, a
+ * timeout — and alerting on it teaches people to ignore the banner.
+ */
+export const BROKEN_RUN_STREAK = 2;
+
 export type Liveness = {
   slug: string;
   name: string;
@@ -89,7 +99,16 @@ export async function computeLiveness(deps: LivenessDeps, now: Date = new Date()
     let deadRunStreak = 0;
     let lastAbortReason: string | null = null;
     for (const r of runs) {
-      if (!r.aborted && r.offersWritten > 0) break;
+      // ONLY `aborted` COUNTS, because only it means the same thing across the whole history.
+      //
+      // `offersWritten` was added on 2026-09-02; every run before it carries 0 by column
+      // default. Counting that 0 as "produced nothing" made Penny's three healthy historical
+      // runs look like a three-run failure streak, which — now that the banner fires on this
+      // signal — would have raised a red alert about a merchant that was writing fine.
+      // Since that same commit, recordScraperRun sets aborted whenever nothing was written,
+      // so a genuine empty run is still caught; a row that is merely uninstrumented is not
+      // evidence of anything and ends the streak rather than extending it.
+      if (!r.aborted) break;
       deadRunStreak++;
       if (lastAbortReason === null) lastAbortReason = r.abortReason ?? "0 parsed";
     }

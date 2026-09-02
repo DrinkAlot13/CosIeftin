@@ -161,3 +161,41 @@ describe("recovering a merchant path from stored data", () => {
     expect(recoverPath({ merchantSlug: "auchan", rawSourceBlob: "", productUrl: null, url: null, categoryPath: null })).toBe(null);
   });
 });
+
+describe("a merchant path is recovered from ANY merchant that supplies one", () => {
+  // The old `default: return null` meant a scraper could start persisting a perfectly good
+  // category and recovery would silently discard it, because nobody remembered to add a case.
+  // Same shape as toPriceSource returning SHELF from its default branch for 2,217 offers: a
+  // default that swallows a valid value and reports nothing.
+  const at = (merchantSlug: string, categoryPath: string | null) =>
+    recoverPath({ merchantSlug, rawSourceBlob: null, productUrl: null, url: null, categoryPath });
+
+  it("recovers a path from a merchant with no case of its own", () => {
+    const r = at("sezamo", "lactate-si-oua");
+    expect(r?.source).toBe("merchant-path");
+    expect(r?.levels.join("|")).toBe("lactate si oua");
+  });
+
+  it("splits a multi-level path deepest-last, the order the mapper reads", () => {
+    const r = at("carrefour", "bacanie-carrefour/alimente/cafea/cafea-macinata");
+    expect(r?.levels.length).toBe(4);
+    expect(r?.levels[3]).toBe("cafea macinata");
+  });
+
+  it("still returns null when the merchant supplies nothing", () => {
+    expect(at("metro", null)).toBe(null);
+    expect(at("metro", "   ")).toBe(null);
+  });
+
+  it("does not hijack a merchant that has its own richer source", () => {
+    // dcneu keeps its own case, so its label stays distinguishable in the audit.
+    expect(at("dcneu", "Scule / Bormasini")?.source).toBe("dcneu-path");
+  });
+
+  it("a recovered grocery path reaches a leaf", () => {
+    const r = at("sezamo", "lactate-si-oua");
+    const a = assignByMerchantPath(r!.levels);
+    expect(a.leafSlug !== null).toBeTruthy();
+    expect(a.band).toBe("AUTO");
+  });
+});

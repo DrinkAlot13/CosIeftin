@@ -118,8 +118,7 @@ async function main() {
           // extracted card fields are the closest honest equivalent, and something is better
           // than the zero we had. Without it `audit:unit-oracle` cannot check this merchant
           // at all, and ten of twelve were in that state.
-          rawSourceBlob: JSON.stringify(r).slice(0, 4096),
-        });
+          rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: c.path });
         pageAdded++;
         catAdded++;
       }

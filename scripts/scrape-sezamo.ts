@@ -113,7 +113,16 @@ async function main() {
     try {
       const ids = await listCategory(c.id);
       const cs = await cards(ids);
-      for (const p of cs) { const k = p.sourceId ?? p.name; if (!seen.has(k)) { seen.add(k); pool.push(p); catAdded++; } }
+      // THE CATEGORY WE ARE ITERATING IS THE MERCHANT'S OWN ANSWER. Recording it here costs
+      // nothing and beats any rule that later tries to infer it from the product name.
+      for (const p of cs) {
+        const k = p.sourceId ?? p.name;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        p.categoryPath = c.slug;
+        pool.push(p);
+        catAdded++;
+      }
       console.log(`  ${c.slug.padEnd(24)} ids ${ids.length} -> +${catAdded} (pool ${pool.length})`);
     } catch (e) {
       console.log(`  ${c.slug.padEnd(24)} eroare: ${(e as Error).message}`);

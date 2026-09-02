@@ -102,6 +102,7 @@
     "audit:recipes": "tsx scripts/audit-recipes.ts",
     "assign:categories": "tsx scripts/assign-categories.ts",
     "audit:categories": "tsx scripts/audit-categories.ts",
+    "audit:stale-categories": "tsx scripts/audit-stale-assignments.ts",
     "scrape:platform": "tsx scripts/scrape-platform.ts",
     "audit:markup": "tsx scripts/audit-platform-markup.ts"
   },

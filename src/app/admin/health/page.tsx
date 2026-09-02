@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
-import { computeLiveness, formatSilence, MAX_SILENCE_HOURS } from "@/lib/liveness";
+import { computeLiveness, formatSilence, BROKEN_RUN_STREAK, MAX_SILENCE_HOURS } from "@/lib/liveness";
 import { sectionKind, SECTION_LABELS } from "@/lib/section-type";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +78,13 @@ export default async function HealthPage() {
       select: { aborted: true, offersWritten: true, abortReason: true },
     }),
   });
-  const deadMerchants = liveness.filter((l) => l.dead);
+  // TWO WAYS TO BE BROKEN, AND THE SECOND IS KNOWN SOONER.
+  //
+  // `dead` is 48 hours of silence — the backstop, and by the time it fires the prices have
+  // been aging for two days. A scraper that has recorded consecutive runs producing nothing is
+  // provably broken NOW, and waiting out the clock to say so is choosing to find out late.
+  // Penny read 0 products on 2026-09-02 and would have sat green until the following night.
+  const deadMerchants = liveness.filter((l) => l.dead || l.deadRunStreak >= BROKEN_RUN_STREAK);
 
   // COMPARISON vs PRICE sections. A blended comparability figure measures catalog
   // composition rather than matching quality: DCNeu grew by 6,895 single-merchant products
@@ -131,11 +137,16 @@ export default async function HealthPage() {
           }}
         >
           <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.2 }}>
-            SURSĂ MOARTĂ — {deadMerchants.length} magazin(e) nu au mai scris de peste {MAX_SILENCE_HOURS} h
+            SURSĂ MOARTĂ — {deadMerchants.length} magazin(e) nu mai scriu date
           </div>
           <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
             {deadMerchants
-              .map((d) => `${d.name} (${formatSilence(d.hoursSinceWrite)}, ${d.liveOffers} oferte încă afișate)`)
+              .map((d) => {
+                const why = d.dead
+                  ? `fără scriere de ${formatSilence(d.hoursSinceWrite)}`
+                  : `${d.deadRunStreak} rulări consecutive fără rezultat${d.lastAbortReason ? ` — ${d.lastAbortReason}` : ""}`;
+                return `${d.name} (${why}, ${d.liveOffers} oferte încă afișate)`;
+              })
               .join(" · ")}
           </div>
           <div style={{ fontSize: 13, marginTop: 8, opacity: 0.92 }}>
@@ -169,7 +180,13 @@ export default async function HealthPage() {
           <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
             {deadMerchants.length > 0 ? (
               <strong style={{ color: "#c0392b" }}>
-                {deadMerchants.length} magazin(e) nu au mai scris nimic de peste {MAX_SILENCE_HOURS} h.
+                {/*
+                  Counted the same way as the banner, and worded to match. Saying "de peste 48 h"
+                  here while the banner reports a scraper that broke 28 h ago is a dashboard
+                  contradicting itself, and the reader is left to guess which number is real.
+                */}
+                {deadMerchants.length} magazin(e) nu mai scriu date — fără scriere de peste{" "}
+                {MAX_SILENCE_HOURS} h, sau {BROKEN_RUN_STREAK}+ rulări consecutive fără rezultat.
                 Ofertele lor sunt încă afișate.
               </strong>
             ) : (

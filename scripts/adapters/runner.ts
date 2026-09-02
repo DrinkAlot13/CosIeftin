@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../../src/lib/scrape-util";
+import { recordScraperRun } from "../../src/lib/scraper-run";
 import { toPriceSource } from "../../src/lib/price-source";
 import { parsePriceLei, parsePriceDetailed, baniToLei } from "../../src/lib/price/parsePrice";
 import { ParseTally } from "../../src/lib/price/parseTally";
@@ -165,6 +166,8 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
       productUrl: map.link ? abs(ad.websiteUrl, String(dig(it, map.link) ?? "")) : null,
       image: map.image ? (String(dig(it, map.image) ?? "") || null) : null,
       category: route.cat,
+      // The route IS a merchant category listing — that is how these products were found.
+      categoryPath: route.cat ?? null,
       ean: map.ean ? parseEan(String(dig(it, map.ean) ?? "")) || null : null,
       priceSource: toPriceSource(ad.priceChannel),
     };
@@ -234,6 +237,8 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       productUrl: r.link ? abs(ad.websiteUrl, r.link) : null,
       image: r.img ? abs(ad.websiteUrl, r.img) : null,
       category: route.cat,
+      // The route IS a merchant category listing — that is how these products were found.
+      categoryPath: route.cat ?? null,
       ean: parseEan(r.ean) || null,
       priceSource: toPriceSource(ad.priceChannel),
     };
@@ -256,6 +261,7 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
 // ─── the runner ───────────────────────────────────────────────────────────────────
 
 export async function runAdapter(ad: Adapter): Promise<void> {
+  const startedAt = new Date();
   const delay = ad.delayMs ?? 1200;
   const maxPages = ad.maxPages ?? 1;
   const pool: StoreProduct[] = [];
@@ -321,7 +327,24 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   tally.reportAndRaise();
   console.log(`Pooled ${pool.length} ${ad.name} products.`);
   if (pool.length === 0) {
-    console.error(`[${ad.slug}] no products — refusing to touch the database.`);
+    // REFUSING TO WRITE OFFERS IS RIGHT. REFUSING TO RECORD THE FAILURE IS NOT.
+    //
+    // Penny found 0 products on 2026-09-02 and exited here, so no ScraperRun row existed and
+    // nothing in the run ledger knew it had failed. The stored offers stayed live and correct,
+    // and the only signal left was the 48-hour silence clock — a day and a half after the
+    // scraper actually broke. That is the Metro/Mega failure exactly: correct data and a
+    // silent absence, with every correctness check still green.
+    //
+    // So the run is recorded as aborted with its reason. The offers are still untouched.
+    const dead = await prisma.merchant.findUnique({ where: { slug: ad.slug }, select: { id: true, lastOfferCount: true } });
+    if (dead) {
+      await recordScraperRun({
+        merchantId: dead.id, startedAt, aborted: true,
+        abortReason: "0 products pooled — scraper read nothing",
+        previousRunCount: dead.lastOfferCount ?? 0,
+      });
+    }
+    console.error(`[${ad.slug}] no products — refusing to touch the database (run recorded as aborted).`);
     await prisma.$disconnect();
     process.exit(1);
   }

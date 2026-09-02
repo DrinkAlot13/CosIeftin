@@ -54,6 +54,14 @@ export type StoreProduct = {
   sourceId?: string | null;
   /// optional category slug used only when creating NEW catalog products
   category?: string;
+  /// THE MERCHANT'S OWN CATEGORY for this product, as the scraper saw it — "lactate-si-oua",
+  /// "alimentare/bacanie". Distinct from `category` above, which is a slug in OUR taxonomy
+  /// used only at product creation; this is the merchant's fact, recorded whether or not it
+  /// maps onto anything of ours, and it outranks any category we infer from a name.
+  ///
+  /// Scrapers that iterate a category list to FIND products already know this and were
+  /// dropping it at the write. Set it at the read site; never guess it.
+  categoryPath?: string | null;
   /// optional EAN/GTIN (from JSON-LD / product JSON) — turns matching into a join
   ean?: string | null;
   /// "SHELF" | "ONLINE" | "DELIVERY_PLATFORM" | "FLYER" — overrides the merchant default
@@ -84,6 +92,9 @@ export type PoolCompleteness = {
   withImage: number;
   rawPriceTextPct: number;
   productUrlPct: number;
+  /** items carrying the merchant's OWN category — merchant truth, not our inference */
+  withCategoryPath: number;
+  categoryPathPct: number;
 };
 
 /** How much of a pool must carry rawPriceText before the run is allowed to write. */
@@ -101,11 +112,17 @@ export function poolCompleteness(pool: StoreProduct[]): PoolCompleteness {
   // all, because their payload was discarded here. Coverage is reported so that gap is
   // visible per run rather than discovered a month later.
   const withSourceBlob = pool.filter((p) => nonEmpty(p.rawSourceBlob)).length;
+  // REPORTED SO A SCRAPER THAT STOPS SUPPLYING IT IS LOUD RATHER THAN SILENT. Three scrapers
+  // iterated categories to find products and dropped the category before the write, and the
+  // catalog then inferred from the product name a fact the merchant had already stated. The
+  // only way that stays fixed is if the number is on screen every run.
+  const withCategoryPath = pool.filter((p) => nonEmpty(p.categoryPath)).length;
   const pct = (n: number): number => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
   return {
     total, withRawPriceText, withProductUrl, withEan, withImage, withSourceBlob,
+    withCategoryPath,
     rawPriceTextPct: pct(withRawPriceText), productUrlPct: pct(withProductUrl),
-    sourceBlobPct: pct(withSourceBlob),
+    sourceBlobPct: pct(withSourceBlob), categoryPathPct: pct(withCategoryPath),
   };
 }
 
@@ -625,7 +642,8 @@ export async function matchPoolToCatalog(
     ` · productUrl ${completeness.productUrlPct}%` +
     ` · ean ${completeness.withEan}` +
     ` · image ${completeness.withImage}` +
-    ` · sourceBlob ${completeness.sourceBlobPct}%${completeness.sourceBlobPct === 0 ? " ⚠ no independent check possible" : ""}`,
+    ` · sourceBlob ${completeness.sourceBlobPct}%${completeness.sourceBlobPct === 0 ? " ⚠ no independent check possible" : ""}` +
+    ` · merchantCategory ${completeness.categoryPathPct}%`,
   );
 
   // ── EXCLUDED CATEGORIES, refused HERE so they can never enter the catalog.
@@ -1062,6 +1080,17 @@ export async function matchPoolToCatalog(
       depositBani: sgr?.perContainerBani ?? null,
       containerCount: sgr?.containerCount ?? null,
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
+      // THE MERCHANT'S OWN CATEGORY, into the column that already exists for it.
+      //
+      // `Offer.categoryPath` was added for DCNeu's breadcrumbs and is what assign-categories
+      // already reads. Adding a second column for the same fact is how a field ends up with
+      // two spellings and no answer about which one is right — the same mistake as two size
+      // parsers disagreeing on 1.78% of the catalog.
+      //
+      // Written on every run INCLUDING when the price was refused: a refused price means we do
+      // not believe the NUMBER, which says nothing about the aisle. But only written when the
+      // scraper actually supplied one — a null here must not erase a path recovered earlier.
+      ...(o.sp.categoryPath ? { categoryPath: o.sp.categoryPath } : {}),
       // Only when the price we are writing is the price we just read.
       ...(priceWasRefused
         ? {}

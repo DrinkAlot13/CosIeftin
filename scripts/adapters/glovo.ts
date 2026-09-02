@@ -229,6 +229,8 @@ async function harvest(page: Page, category: string, cfg: StorefrontConfig): Pro
       referencePriceBani: oldBani != null && oldBani > bani ? oldBani : null,
       referencePriceKind: oldBani != null && oldBani > bani ? "STRIKETHROUGH" : null,
       category,
+      // The Glovo aisle label IS the merchant's own category ("Lactate, branzeturi si oua").
+      categoryPath: category,
     });
   }
   return products;

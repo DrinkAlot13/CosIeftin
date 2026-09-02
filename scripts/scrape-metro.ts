@@ -89,7 +89,32 @@ function firstImage(o: any): string | null {
 }
 
 /** Map each betty article's variants to { resultId -> {name, brand, image} }. */
-function indexBetty(json: any, out: Map<string, { name: string; brand: string; image: string | null }>) {
+type BettyMeta = { name: string; brand: string; image: string | null; cat: string | null };
+
+/**
+ * The merchant's own category for an article, if its payload carries one.
+ *
+ * Read defensively across the shapes Metro has used, and returns null rather than a guess when
+ * none is present — the caller then falls back to the aisle being iterated, which is a fact we
+ * observed rather than one we inferred. A wrong category is worse than no category: it looks
+ * like merchant truth and outranks every rule downstream.
+ */
+function bettyCategory(art: any, v: any): string | null {
+  const cands = [
+    v?.categoryPath, v?.categoryName, v?.category,
+    art?.categoryPath, art?.categoryName, art?.category, art?.mainCategory,
+  ];
+  for (const c of cands) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+    if (Array.isArray(c) && c.length) {
+      const parts = c.map((x) => (typeof x === "string" ? x : x?.name)).filter((x) => typeof x === "string" && x.trim());
+      if (parts.length) return parts.join("/");
+    }
+  }
+  return null;
+}
+
+function indexBetty(json: any, out: Map<string, BettyMeta>) {
   const result = json?.result;
   if (!result || typeof result !== "object") return;
   for (const art of Object.values<any>(result)) {
@@ -97,7 +122,7 @@ function indexBetty(json: any, out: Map<string, { name: string; brand: string; i
     const brand = art.brandName || "";
     for (const v of Object.values<any>(art.variants)) {
       const rid = v?.bettyVariantId?.bettyVariantId;
-      if (rid && v.description) out.set(String(rid), { name: v.description, brand, image: firstImage(v) });
+      if (rid && v.description) out.set(String(rid), { name: v.description, brand, image: firstImage(v), cat: bettyCategory(art, v) });
     }
   }
 }
@@ -140,14 +165,16 @@ async function main() {
       const batch = ids.slice(i, i + BATCH);
       const j = await apiGet(page, bettyUrl(batch));
       if (j && !j.__err) {
-        const info = new Map<string, { name: string; brand: string; image: string | null }>();
+        const info = new Map<string, BettyMeta>();
         indexBetty(j, info);
         for (const id of batch) {
           const meta = info.get(id);
           const pr = priced.get(id)!;
           if (!meta || seen.has(id)) continue;
           seen.add(id);
-          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), rawSourceBlob: JSON.stringify({ meta, pr }).slice(0, 4096), image: meta.image });
+          // MERCHANT CATEGORY: the article's own, when the payload publishes one; otherwise the
+          // aisle this loop is iterating, which we know for certain because we asked for it.
+          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), rawSourceBlob: JSON.stringify({ meta, pr }).slice(0, 4096), image: meta.image, categoryPath: meta.cat ?? cat });
           catAdded++;
         }
       }

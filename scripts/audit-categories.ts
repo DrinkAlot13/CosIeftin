@@ -57,10 +57,30 @@ async function main(): Promise<void> {
     },
   });
 
+  // "WHAT A SIDEBAR WOULD SHOW" HAS TO MEAN WHAT THE SHOPPER CAN SEE.
+  //
+  // Delivery-platform offers are excluded from every user-facing surface by default, so a
+  // product whose ONLY live offer is a Glovo one never renders. Counting those in the live
+  // figure measured a catalog nobody can browse: 1,920 platform-only products, nearly all
+  // uncategorised, dragged the number from 88.2% down to 85.3% and made the sidebar look
+  // worse than it is. The literal, spelled-out price source is used rather than an import,
+  // because this file deliberately shares nothing with the code that wrote these rows.
+  const visibleOffer = {
+    isStale: false, flagged: false, availability: "in stock",
+    merchant: { active: true }, NOT: { priceSource: "DELIVERY_PLATFORM" },
+  } as const;
+  const visible = await prisma.product.count({
+    where: { section: "grocery", offers: { some: visibleOffer } },
+  });
+  const visibleAssigned = await prisma.product.count({
+    where: { section: "grocery", categoryId: { not: null }, offers: { some: visibleOffer } },
+  });
+
   console.log(`\n════ GROCERY CATEGORY AUDIT ═════════════════════════════════════════════════`);
   console.log(`  tree: ${depts.length} departments, ${leaves.length} leaves`);
   console.log(`  ALL products : ${assigned}/${total} categorised  (${((assigned / total) * 100).toFixed(1)}%)`);
-  console.log(`  LIVE products: ${liveAssigned}/${live} categorised  (${((liveAssigned / live) * 100).toFixed(1)}%)   <- what a sidebar would show`);
+  console.log(`  LIVE products: ${liveAssigned}/${live} categorised  (${((liveAssigned / live) * 100).toFixed(1)}%)   incl. rows hidden by default`);
+  console.log(`  VISIBLE      : ${visibleAssigned}/${visible} categorised  (${((visibleAssigned / visible) * 100).toFixed(1)}%)   <- what a sidebar would show`);
 
   // ── per category: count + a sample to eyeball
   console.log(`\n\n════ WHAT IS IN EACH CATEGORY ═══════════════════════════════════════════════`);

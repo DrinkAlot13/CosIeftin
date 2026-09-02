@@ -87,11 +87,14 @@ async function main() {
         const raw = await scrapePage();
         if (raw.length === 0) break; // past the last page
         let pageAdded = 0;
+        // `cat` is a LEAF path ("bacanie-carrefour/alimente/cafea/cafea-macinata") — the
+        // merchant's own taxonomy, far better than anything a name rule could infer, and we
+        // were discarding it at the write.
         for (const r of raw) {
           const key = String(r.id ?? r.name);
           if (!r.name || seen.has(key)) continue;
           seen.add(key);
-          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null, rawSourceBlob: JSON.stringify(r).slice(0, 4096) });
+          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: cat });
           pageAdded++;
           catAdded++;
         }

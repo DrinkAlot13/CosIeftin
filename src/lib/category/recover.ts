@@ -16,9 +16,11 @@
 //   freshful    rawSourceBlob."breadcrumbs" — three levels with codes.
 //   dcneu       Offer.categoryPath — already stored, already two-level, still unused.
 //
-// Metro, Sezamo, Carrefour, Penny and Kaufland publish nothing usable: their URLs are opaque ids
-// (/shop/pv/BTY-X7915380032) and their blobs carry no category key. Those need a scraper change,
-// not a recovery, and that is recorded rather than papered over.
+// UPDATE 2026-09-02 — the scraper change happened. Metro, Sezamo and Carrefour publish nothing
+// usable in a URL or a blob, but their scrapers ITERATE a category list to find products and
+// were dropping it before the write: the DCNeu pattern one layer earlier. They now persist
+// `Offer.categoryPath` like DCNeu does, so recovery is generic rather than per-merchant, and
+// Mega Image, Le Manoir, Finestore, Carrefour-alcohol and Glovo came along with them.
 
 import { normalizeRo } from "../text/normalizeRo";
 
@@ -26,7 +28,7 @@ export type RecoveredPath = {
   /** Levels, outermost first, as the merchant words them. */
   levels: string[];
   /** Which merchant field it came from — for the audit, so a bad mapping is traceable. */
-  source: "auchan-blob" | "mega-url" | "freshful-blob" | "dcneu-path";
+  source: "auchan-blob" | "mega-url" | "freshful-blob" | "dcneu-path" | "merchant-path";
 };
 
 /** Slug segments that are not categories: the product itself, and routing noise. */
@@ -91,8 +93,24 @@ export function recoverPath(o: OfferForRecovery): RecoveredPath | null {
       return levels.length ? { levels, source: "dcneu-path" } : null;
     }
 
-    default:
-      return null;
+    // ANY MERCHANT THAT STORES ITS OWN PATH IS RECOVERABLE, WITHOUT A CASE HERE.
+    //
+    // `default: return null` was the whole trap: a scraper could start supplying a perfectly
+    // good category and this function would silently discard it because nobody remembered to
+    // add a case. That is the same shape as `toPriceSource` returning SHELF from its default
+    // branch and quietly mislabelling 2,217 offers — a default that swallows a valid value.
+    //
+    // So the fallback READS THE DATA rather than the merchant name. Slug separators become
+    // spaces so the mapper sees words ("lactate-si-oua" → "lactate si oua"); a merchant that
+    // supplies nothing still yields null, which is the honest answer.
+    default: {
+      if (!o.categoryPath) return null;
+      const levels = o.categoryPath
+        .split("/")
+        .map((s) => s.trim().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      return levels.length ? { levels, source: "merchant-path" } : null;
+    }
   }
 }
 

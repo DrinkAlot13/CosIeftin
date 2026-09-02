@@ -38,7 +38,7 @@ function normVol(name: string): string {
   return name.replace(/(\d+(?:[.,]\d+)?)\s*cl\b/gi, (_m, n) => `${Math.round(parseFloat(String(n).replace(",", ".")) * 10)} ml`);
 }
 
-function parseProducts(html: string, cat: string): StoreProduct[] {
+function parseProducts(html: string, cat: string, catPath: string): StoreProduct[] {
   const out: StoreProduct[] = [];
   const blocks = html.split(/class="[^"]*product-item-info[^"]*"/i).slice(1);
   for (const b of blocks) {
@@ -51,7 +51,7 @@ function parseProducts(html: string, cat: string): StoreProduct[] {
     const imgM = b.match(/<img[^>]+(?:data-src|src)="([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i);
     if (!name || !(price > 0)) continue;
     const abs = url.startsWith("http") ? url : `${BASE}/${url.replace(/^\//, "")}`;
-    out.push({ name: normVol(name), brand: "", price, available: true, url: abs, productUrl: abs, rawPriceText: priceM ? priceM[1] : null, image: imgM ? imgM[1] : null, category: cat, rawSourceBlob: JSON.stringify({ name, price, url: abs, raw: priceM ? priceM[0] : null }).slice(0, 4096) });
+    out.push({ name: normVol(name), brand: "", price, available: true, url: abs, productUrl: abs, rawPriceText: priceM ? priceM[1] : null, image: imgM ? imgM[1] : null, category: cat, categoryPath: catPath, rawSourceBlob: JSON.stringify({ name, price, url: abs, raw: priceM ? priceM[0] : null }).slice(0, 4096) });
   }
   return out;
 }
@@ -77,7 +77,7 @@ async function main() {
       } catch {
         break;
       }
-      const prods = parseProducts(html, c.cat);
+      const prods = parseProducts(html, c.cat, c.path);
       if (prods.length === 0) break;
       let pageAdded = 0;
       for (const pr of prods) {

@@ -76,7 +76,7 @@ async function fetchPage(page: Page, category: string, pageNumber: number): Prom
 }
 
 /** Pull products + pagination.totalPages out of a GraphQL response. */
-function extract(json: any, pool: Cand[], seen: Set<string>): { added: number; totalPages: number } {
+function extract(json: any, pool: Cand[], seen: Set<string>, categoryPath: string): { added: number; totalPages: number } {
   let added = 0;
   let totalPages = 1;
   (function walk(o: any, d: number) {
@@ -88,7 +88,7 @@ function extract(json: any, pool: Cand[], seen: Set<string>): { added: number; t
       if (!seen.has(code)) {
         seen.add(code);
         const abs = o.url ? (String(o.url).startsWith("http") ? o.url : BASE + o.url) : BASE;
-        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), rawSourceBlob: JSON.stringify(o).slice(0, 4096), image: firstImage(o.images) });
+        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), rawSourceBlob: JSON.stringify(o).slice(0, 4096), image: firstImage(o.images), categoryPath });
         added++;
       }
     }
@@ -117,7 +117,7 @@ async function main() {
     for (let pn = 0; pn < MAX_PAGES; pn++) {
       const json = await fetchPage(page, c.code, pn);
       if (!json || json.__err) { if (pn === 0) console.log(`  ${c.path.padEnd(38)} err ${json?.__err}`); break; }
-      const { added, totalPages: tp } = extract(json, pool, seen);
+      const { added, totalPages: tp } = extract(json, pool, seen, c.path);
       totalPages = tp;
       catAdded += added;
       if (pn + 1 >= totalPages) break;
