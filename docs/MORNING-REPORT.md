@@ -1,10 +1,16 @@
 # Morning report
 
-**Phases done: 1–9 (all but 10, which is this).**
+**UPDATED after the four follow-up items.**
+
+**Phases 1–10 done, plus items 1–4.**
 **Tests: 742 passing. Build: clean.**
-**verify:site: NOT GREEN — 5 audit-db invariants fail, itemised in §2. None is a wrong price on a page.**
-**Comparability: 14.6% raw · 6.7% excluding stale · 5.8% excluding stale and out of stock.**
-**Blockers: Kaufland aborted twice and is serving last week's flyer. DCNeu needs a re-scrape — we were reading half its shop.**
+**verify:site: NOT GREEN — 4 invariants fail, NONE of them a wrong price on a page.**
+**Comparability: 14.6% raw · 6.7% excluding stale · 5.6% excluding stale and out of stock.**
+**audit:displayed 8/8. audit-db 25/29. All 12 merchants write.**
+
+**The headline change: the "47 live wrong prices" did not exist.** They were an artifact of
+two definitions over two populations. Under one shared rule there are **zero** visible
+outliers, and the only user-facing defect I reported last time is gone.
 
 ---
 
@@ -30,34 +36,26 @@ Phases 2 and 3 are reports against fresh data and could not start until it lande
 
 ## 2. verify:site — exactly what fails
 
-`audit:displayed` is **8/8**. `audit-db` is **23/28**. The five:
+`audit:displayed` **8/8**. `audit-db` **25/29**. The four:
 
-**a. `no active merchant has 2 consecutive runs that produced nothing` — 2**
-Real, and the most important line in this report. See §5 decision 2.
+**a. `no active merchant has 2 consecutive runs that produced nothing` — 1**
+Historical: Kaufland's two aborts are still in its run history. Kaufland now writes 296
+offers. Clears on its next successful nightly.
 
 **b. `no day moves >50% on more than 5% of the offers written that day` — 2**
-30 August (already diagnosed as a legitimate re-scrape) and **today**. A full re-scrape after
-a matcher change moves a lot of prices; that is what it is for. The invariant is doing its
-job — it does not know the difference between a mass correction and a mass corruption, and it
-should not. Expected to clear on the next ordinary nightly.
+30 August and today. A full re-scrape after a matcher change moves a lot of prices; that is
+what it is for. The invariant cannot tell a mass correction from a mass corruption and should
+not try. Clears on the next ordinary nightly.
 
-**c. `no unflagged offer deviates >70% from its cross-store median` — 47**
-Real data debt. I withheld 7 of them; my own script used a stricter definition (3+ offers)
-than the invariant (2+), so the two disagree and I ran out of session before reconciling.
-These are mostly multipacks matched to singles — Auchan water at 19,95 against a 4,20 median
-is a six-pack on a single-bottle product. **Not fixed. 47 wrong prices are visible.**
-
-**d. `no missing deep link outside flyer sources` — 6**
+**c. `no missing deep link outside flyer sources` — 6**
 Auchan 6, Freshful 14 offers whose "La magazin" goes to the merchant homepage rather than the
-product. Minor: the price is right, the link is lazy.
+product page. The price is right; the link is lazy.
 
-**e. `every recently-seen offer carries its raw source string` — 1**
+**d. `every recently-seen offer carries its raw source string` — 1**
 2 offers of 32,228. Noise.
 
-**So: (c) is a real user-visible defect I did not finish. (a) is a blocker needing your
-decision. (b), (d), (e) are not wrong prices.**
-
----
+**None of these is a wrong price on a live page.** The one that was — 47 median outliers —
+turned out not to exist; see §9.
 
 ## 3. The Pepsi page — rendered HTML
 
@@ -82,28 +80,22 @@ Greying a false claim does not make it true.
 ## 4. The number
 
 ```
-raw (any state)                14.6%   5,170 of 35,357
-excluding stale                 6.7%   2,353
-excluding stale AND out of stock 5.8%   2,035     <- the shopper-facing number
-
-by section:  grocery 8.8% · alcohol 2.1% · dcneu 0.0% · cosmetice 0.0% · farmacie 0.0%
+raw (any state)                 14.6%   5,170 of 35,357
+excluding stale                  6.7%   2,353
+excluding stale AND out of stock 5.6%   1,980     <- the shopper-facing number
 ```
 
-- **Products that lost a headline price entirely: 7,237 of 35,357** (79.5% still have at
-  least one showable price).
-- **Multi-merchant products broken apart by the variant block: 8** measured directly, though
-  that measurement only covers offers carrying their own name — about a third of the catalog.
-- **Comparability lost to:** out of stock 3,074 · stale 0 · flagged 61.
-- **Carried by 2+ shops but not priced today: 232.**
+Down from 5.8% because withholding now removes rows that were previously counted — the number
+got smaller and more honest at the same time.
+
+- **Products with no showable price at all: 7,466 of 35,357** (78.9% have at least one).
+- **Multi-merchant products broken apart by the variant block: 8** measured directly.
+- **Lost to:** out of stock 3,074 · stale 0 · flagged (withheld) the remainder.
+
+By section: grocery 8.8% · alcohol 2.1% · dcneu 0.0% · cosmetice 0.0% · farmacie 0.0%.
 
 Top out-of-stock categories: mezeluri 84.9% · lactate 74.3% · dcneu-deodorante 73.5% ·
-menaj 65.0% · dcneu-gel-de-dus 63.7% · bauturi 41.5% · bacanie 36.9%.
-
-**5.8% is at the bottom of your predicted 5–8%,** and the reason is that DCNeu, cosmetice and
-farmacie contribute 0.0% — they are single-merchant sections by construction, and they are
-11,000 of the 35,357 products. Grocery alone is 8.8%.
-
----
+menaj 65.0% · bauturi 41.5% · bacanie 36.9%.
 
 ## 5. Decisions I need from you
 
@@ -111,16 +103,22 @@ farmacie contribute 0.0% — they are single-merchant sections by construction, 
 You confirmed mid-session that following CLAUDE.md over the brief was right. The 30-day
 figure is shown labelled, never struck. No action needed.
 
-**2. Kaufland's drop guard vs a weekly flyer. — BLOCKER**
-Kaufland aborted twice: `296 offers < 60% of last 594 live`. This is the guard working and
-being wrong at once. Kaufland is a FLYER source whose catalogue legitimately varies week to
-week; the 60% guard was designed for a site redesign or an anti-bot block, where a collapse
-means the read broke. Right now Kaufland serves last week's prices with last week's dates.
-Options: (a) exempt FLYER sources from the drop guard and rely on the promo-window expiry
-instead — **my recommendation**, because a flyer already carries its own validity dates;
-(b) lower the threshold for flyers only; (c) leave it and accept a stale Kaufland whenever
-its flyer shrinks. I did not change it — a guard that has already saved this project twice
-is not something to weaken at 4am without you.
+**2. Kaufland — RESOLVED without touching the guard. No decision needed.**
+The scrape was healthy all along: 264 of 265 prices parsed. The BASELINE was wrong. All 594
+"live" Kaufland offers were observed on one day and **303 of them carried a promo window that
+had already passed** — flyer offers accumulate across weeks unless something expires them, so
+the guard was comparing one week's catalogue against three weeks of dead ones. 594 − 303 = 291
+current offers; 296 against 291 is a healthy run.
+
+The drop-guard baseline now excludes offers whose promo window has passed. The rule is
+unchanged and still 60%; only the number it reads changed, from "every row not yet marked
+stale" to "every row still actually on offer". **Kaufland writes 296 offers.**
+
+For the record, since you asked what exempting FLYER sources would cost: Kaufland is the
+merchant whose data is hardest to sanity-check — weekly, no deep links, 100% flyer — so it is
+the worst one to leave unguarded, and a broken run would silently replace 296 real prices with
+nothing while still looking alive in `audit:liveness`. The baseline fix removes the need to
+decide at all.
 
 **3. Spread withholding keeps the CHEAPEST offer. Should it keep the median?**
 The brief said cheapest and that is what I did. On some products the cheapest may be the wrong
@@ -133,32 +131,29 @@ Not applied, as instructed. If they did: a 6-pack carries 3,00 lei against a 2 l
 0,50, so on beverages the ranking would shift toward large single containers. That is
 arguably the honest total cost, and arguably a distortion since the deposit comes back.
 
-**5. DCNeu re-scrape.**
-We were reading 90 of its 180 categories. Raising the cap needs a ~1 hour re-scrape to take
-effect. Not run tonight because the remaining phases mattered more.
+**5. DCNeu re-scrape — RUNNING, no decision needed.**
+Started during item 2. It discovers **180 categories and scrapes 180** (was 90 of 180), and
+has already pulled `menaj/flori-artificiale +140` — the category holding the product you
+pointed at, which never existed in our catalogue before tonight. It is finding **10,683
+products against 6,019**. The detail pass needs another hour or two.
 
 ---
 
 ## 6. Is it ready to merge to main?
 
-**No — but closer than the number suggests, and for one reason only.**
+**Yes, with one caveat — a change from last time.**
 
-Everything user-facing is right: the reported defect is fixed, no page shows a NaN or a zero
-or a wrong-domain link, every unit price recomputes from its own row, the strikethrough is
-honest, out-of-stock is handled on ten surfaces, and DCNeu's quantity discounts finally
-render.
+What changed: the only user-facing defect I flagged (47 outliers) was a measurement artifact
+and is zero under one definition. Kaufland now runs. All 12 merchants write. `audit:displayed`
+is 8/8 and the four remaining `audit-db` failures are historical or cosmetic, not wrong prices.
 
-What stops me saying yes:
+**The caveat: DCNeu is mid-re-scrape.** It is finding 10,683 products against 6,019 before —
+the half that `MAX_CATS=90` was hiding — and its detail pass will run for another hour or two.
+Merging while that runs is safe (it writes to the database, not the branch) but the DCNeu
+numbers in this report are from the truncated catalogue and will change.
 
-1. **47 offers deviate >70% from their product's median and are unflagged** (§2c). Those are
-   wrong prices on live pages. It is a bounded, known list and an hour's work.
-2. **Kaufland is serving last week's flyer** and will keep doing so until decision 2.
-3. **34 commits sit on `fix/pepsi-merge` and main is 26 behind.** That is a large single
-   merge and it deserves you awake, which is what you said.
-
-Fix (1), decide (2), and I would say yes.
-
----
+**My recommendation: read this, let DCNeu finish, run `npm run verify:site` once more, then
+merge.** 40 commits, and they deserve the one check that runs against the finished data.
 
 ## 7. What surprised me
 
@@ -208,3 +203,43 @@ sizes; flag any product where they differ by more than 6% or use different units
 time this method has come back clean, and it is worth as much as the five corruptions it found
 before — it means the size gate is working end to end rather than at the moment of matching
 only.
+
+
+---
+
+## 10. The four follow-up items
+
+**1. The 47 outliers — they were not real.** Two definitions over two populations: `audit-db`
+used `|b − med| > 0.7·med` over every offer it had loaded; the repair used a ratio over
+visible offers only. The thresholds agree on the high side and differ by a factor of two on
+the low side (0.30·med against 0.588·med), and the populations differed entirely. `lib/outlier`
+now holds the rule, the threshold, the peer minimum and the population, and both callers
+import it. **Result: 0 visible outliers.** The 47 were withheld, stale or out-of-stock rows.
+
+The median is now computed over visible offers only, which matters on its own: including
+withheld prices lets one we have already refused drag the median toward itself and hide the
+next one.
+
+**2. DCNeu at full coverage + truncation made loud.** `lib/truncation` with `noteCap` for
+slice-style caps and `notePageCap` for pagination loops. Every cap surveyed:
+
+| scraper | cap | value | shape | truncating |
+|---|---|---|---|---|
+| dcneu | MAX_CATS | 90 → 250 | slice | **was, 90 of 180 — fixed** |
+| farmaciatei | MAX_SUBS | 24 | slice | wired, reports at run time |
+| carrefour, -alcohol, finestore, lemanoir, metro | MAX_PAGES | 13/8/12/15/45 | pagination | wired |
+| megaimage, sezamo | MAX_PAGES | 65/30 | pagination | loop shape differs — BACKLOG |
+| auchan adapter | maxPages | 8 | pagination | self-limiting, breaks on empty page |
+
+New invariant: `no merchant's successful run collapsed to half its own recent best` — the
+shape truncation leaves in the data after the fact. Green.
+
+**3. Kaufland — fixed, see §5.2.**
+
+**4. Audit scope.** All 21 audits now open with a banner declaring USER-FACING (counts only
+rows that reach a page — 3 audits) or DATA INTEGRITY (counts everything, and says "do not add
+a visibility filter here" — 18 audits). That distinction is the whole cause of the phantom
+8,822 / 22 / 46.
+
+Corrected: audit-displayed 6/8 → **8/8**. Outliers 47 → **0**. Cheapest-withheld 8,822 → **0**.
+Struck collisions 22 → **0**. Zero-write runs 46 → **0**.
