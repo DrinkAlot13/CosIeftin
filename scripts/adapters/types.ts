@@ -16,6 +16,21 @@ import type { StoreProduct } from "../../src/lib/scrape-util";
  */
 export type PriceChannel = "shelf" | "delivery" | "aggregator";
 
+/**
+ * Resolve this adapter's routes at RUN TIME, from the site itself.
+ *
+ * For a source whose URLs carry a calendar week, a season or a campaign id, a route written
+ * into the config is a route with an expiry date nobody set a reminder for. Penny's was pinned
+ * to `oferte-site-kw35`; when week 35 ended the URL began 404ing and the scraper read nothing,
+ * every week, silently. Asking the site which page it is currently linking is the only version
+ * that keeps working, and it fails loudly when the shape changes rather than quietly returning
+ * an empty pool.
+ *
+ * Return an empty array to mean "I could not find them" — the runner treats that as a failed
+ * run and records it, rather than as a store with no products.
+ */
+export type DiscoverRoutes = () => Promise<Route[]>;
+
 /** One listing page to visit, and the catalog category its products belong to. */
 export type Route = {
   /**
@@ -65,6 +80,12 @@ export type JsonMap = {
 };
 
 export type Adapter = {
+  /**
+   * Optional: work out `routes` from the live site instead of trusting the config.
+   * When present the runner calls it and uses the result; `routes` stays as documentation
+   * of the shape and as the offline-fixture path.
+   */
+  discoverRoutes?: DiscoverRoutes;
   slug: string;
   name: string;
   websiteUrl: string;

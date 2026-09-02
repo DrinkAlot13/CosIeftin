@@ -262,6 +262,26 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
 
 export async function runAdapter(ad: Adapter): Promise<void> {
   const startedAt = new Date();
+  /** Routes that answered with an HTTP error — recorded so the abort reason names the cause. */
+  const routeErrors: string[] = [];
+
+  // ASK THE SITE WHERE ITS PRODUCTS ARE, when the adapter knows how.
+  let routes = ad.routes;
+  if (ad.discoverRoutes) {
+    try {
+      const found = await ad.discoverRoutes();
+      if (found.length === 0) {
+        routeErrors.push("route discovery found no listing page on the live site");
+        console.log(`  ${ad.slug}: route discovery found nothing — the site's shape changed.`);
+      } else {
+        routes = found;
+        console.log(`  ${ad.slug}: discovered ${found.length} route(s): ${found.map((r) => r.url.split("/").pop()).join(", ")}`);
+      }
+    } catch (e) {
+      routeErrors.push(`route discovery failed: ${(e as Error).message.slice(0, 60)}`);
+      console.log(`  ${ad.slug}: route discovery failed — ${(e as Error).message.slice(0, 60)}`);
+    }
+  }
   const delay = ad.delayMs ?? 1200;
   const maxPages = ad.maxPages ?? 1;
   const pool: StoreProduct[] = [];
@@ -279,7 +299,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
     await page.addInitScript(() => { (globalThis as unknown as { __name: (f: unknown) => unknown }).__name = (f) => f; });
   }
 
-  for (const route of ad.routes) {
+  for (const route of routes) {
     let added = 0;
     for (let pg = 1; pg <= maxPages; pg++) {
       const url = pageUrl(route.url, pg, ad.pageSize);
@@ -295,7 +315,20 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, raw);
           items = parseJsonPayload(raw, ad.json!, route, ad, tally, coverage);
         } else {
-          await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          // A 404 IS NOT AN EMPTY CATEGORY, AND IN DOM MODE IT LOOKED EXACTLY LIKE ONE.
+          //
+          // JSON mode has checked `res.ok` since it was written; DOM mode never looked at the
+          // status at all. Penny's route was pinned to a calendar week, and when the week
+          // rolled over the URL began returning a 322 KB 404 page that renders perfectly and
+          // contains no product tiles. The run reported "0 products" — true, and completely
+          // uninformative about why. Six days of that read the same as a quiet week.
+          const resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          const status = resp?.status() ?? 0;
+          if (status >= 400) {
+            console.log(`  ${url.slice(0, 60)} → HTTP ${status} (route is gone, not empty)`);
+            routeErrors.push(`${route.cat ?? route.url}: HTTP ${status}`);
+            break;
+          }
           await page!.waitForSelector(ad.dom!.card, { timeout: 15000 }).catch(() => {});
           await page!.waitForTimeout(pg === 1 ? 3500 : 2000);
           if (process.env.FIXTURE_SAVE) saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, await page!.content());
@@ -340,7 +373,9 @@ export async function runAdapter(ad: Adapter): Promise<void> {
     if (dead) {
       await recordScraperRun({
         merchantId: dead.id, startedAt, aborted: true,
-        abortReason: "0 products pooled — scraper read nothing",
+        abortReason: routeErrors.length
+          ? `0 products pooled — ${routeErrors.slice(0, 3).join("; ")}`
+          : "0 products pooled — scraper read nothing",
         previousRunCount: dead.lastOfferCount ?? 0,
       });
     }

@@ -610,8 +610,18 @@ async function auditMatching() {
   const rejected = await prisma.matchOverride.findMany({ where: { decision: "reject" }, select: { merchantId: true, productId: true, storeKey: true } });
   const violations: string[] = [];
   for (const r of rejected) {
-    const exists = await prisma.offer.findFirst({ where: { merchantId: r.merchantId, productId: r.productId }, select: { id: true } });
-    if (exists) violations.push(`offer ${exists.id} contradicts a REJECTED MatchOverride (${r.storeKey.slice(0, 40)})`);
+    // A WITHHELD OFFER DOES NOT CONTRADICT A REJECTION — it is the rejection being honoured.
+    //
+    // The house rule is "do not delete data; withhold, flag, quarantine", so acting on a bad
+    // match means flagging the row and recording a reject override, not removing it. Counting
+    // the flagged row as a violation made the only compliant way to withhold a match also the
+    // way to fail this invariant, which would have pushed the next person toward deleting.
+    // A row that is still LIVE against a rejection is the real contradiction.
+    const exists = await prisma.offer.findFirst({
+      where: { merchantId: r.merchantId, productId: r.productId, flagged: false },
+      select: { id: true },
+    });
+    if (exists) violations.push(`offer ${exists.id} is live and contradicts a REJECTED MatchOverride (${r.storeKey.slice(0, 40)})`);
   }
   record("Matching", "no offer contradicts a REJECTED MatchOverride", violations);
 }
