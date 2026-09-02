@@ -11,6 +11,15 @@ export type RunOutcome = {
   startedAt: Date;
   tally?: TallySummary;
   offersRejected?: number;
+  /**
+   * OFFER ROWS ACTUALLY WRITTEN. Counted at the write site, never reported by the scraper.
+   *
+   * `tally.parsed` counts pool items that had a readable price, which is a different thing
+   * entirely — a DCNeu run recorded 6,044 "parsed" and wrote zero offer rows, and every
+   * check that read that field called it a success. A run that writes nothing is not a
+   * successful run, whatever it says about itself.
+   */
+  offersWritten?: number;
   previousRunCount?: number;
   aborted?: boolean;
   abortReason?: string | null;
@@ -28,8 +37,12 @@ export async function recordScraperRun(o: RunOutcome): Promise<void> {
         offersParsed: o.tally?.parsed ?? 0,
         offersNull: o.tally?.nulls ?? 0,
         offersRejected: o.offersRejected ?? 0,
+        offersWritten: o.offersWritten ?? 0,
         previousRunCount: o.previousRunCount ?? 0,
-        aborted: o.aborted ?? false,
+        // A run that wrote NO offer rows is not a success, whatever it reported about
+        // itself. Deriving this here rather than trusting the caller means no scraper can
+        // mark itself green while producing nothing.
+        aborted: (o.aborted ?? false) || (o.offersWritten ?? 0) === 0,
         abortReason: o.abortReason ?? null,
         nullSamples: o.tally?.samples?.length ? JSON.stringify(o.tally.samples) : null,
         censusJson: o.censusJson ?? null,

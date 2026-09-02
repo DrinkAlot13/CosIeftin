@@ -309,3 +309,63 @@ describe("parseQuantity — bundled COUNTS add up; bundled masses do not", () =>
     expect(q.value === 340).toBeFalsy();
   });
 });
+
+// ── BONUS PACKS: a measured base plus a measured bonus of the same dimension ────────────
+//
+// Found by Kaufland's `formattedBasePrice` — a per-unit price the merchant computes from the
+// real pack size, and the only check in this project that shares no assumption with our
+// parser, our matcher or our size handling. It said 14,28 lei/kg for Edenia Amestec Mexican
+// while we said 57,55: we had read "1kg+330g" as 330 g and thrown the kilogram away. A 4x
+// error, on the shelf, invisible to every check we owned.
+//
+// The rule that separates this from the bare `N+M` which is NOT a promotion: both sides must
+// carry a unit, of the same dimension.
+describe("parseQuantity — bonus packs (base + measured bonus)", () => {
+  it("reads 1kg+330g as 1.33 kg, not 330 g", () => {
+    const q = parseQuantity("Edenia Amestec Mexican 1kg+330g")!;
+    expect(q.value).toBe(1330);
+    expect(q.unit).toBe("G");
+  });
+
+  it("marks it promotional, so a shrinkflation detector ignores the reversion", () => {
+    // The pack goes back to 1 kg when the promo ends. That is not shrinkflation.
+    expect(parseQuantity("1kg+330g")!.isPromoPack).toBe(true);
+    // ...but nothing is FREE by the item, so the counts stay honest.
+    expect(parseQuantity("1kg+330g")!.freeCount).toBe(0);
+    expect(parseQuantity("1kg+330g")!.packCount).toBe(1);
+  });
+
+  it("handles the spaced and gratis-suffixed forms", () => {
+    expect(parseQuantity("500 g + 150 g gratis")!.value).toBe(650);
+    expect(parseQuantity("2 l+0,5 l")!.value).toBe(2500);
+    expect(parseQuantity("2 l+0,5 l")!.unit).toBe("ML");
+  });
+
+  it("REFUSES mixed dimensions — that is a bundle, not a bigger pack", () => {
+    // "1 kg + 500 ml" is two different products sold together. Summing them would invent a
+    // quantity that does not exist.
+    const q = parseQuantity("1 kg + 500 ml")!;
+    expect(q.value === 1500 && q.unit === "G").toBe(false);
+  });
+
+  it("still refuses the bare N+M shapes that are not promotions at all", () => {
+    // CLAUDE.md: inventing a promotion out of these corrupts a real quantity, which is worse
+    // than missing a label. Neither side carries a unit, so the bonus rule cannot fire.
+    expect(parseQuantity("Omega 3+6+9")).toBe(null);
+    expect(parseQuantity("3+ ani")).toBe(null);
+    expect(parseQuantity("90 Gr+")!.value).toBe(90);
+    expect(parseQuantity("90 Gr+")!.isPromoPack).toBe(false);
+  });
+
+  it("leaves every existing promo shape untouched", () => {
+    const a = parseQuantity("(7+1) x 125 g")!;
+    expect(a.value).toBe(1000);
+    expect(a.paidCount).toBe(7);
+    expect(a.freeCount).toBe(1);
+    const b = parseQuantity("2+1 gratis")!;
+    expect(b.packCount).toBe(3);
+    const c = parseQuantity("6x1.5L")!;
+    expect(c.value).toBe(9000);
+    expect(c.isPromoPack).toBe(false);
+  });
+});

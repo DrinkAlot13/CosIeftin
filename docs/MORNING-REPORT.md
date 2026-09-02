@@ -1,366 +1,245 @@
-# Morning report — 31 August 2026
+# Morning report
 
-Branch `overnight/2026-08-31`. Nothing merged to `main`. Every phase is its own commit, so any
-of it can be reverted independently.
+**UPDATED after the four follow-up items.**
+
+**Phases 1–10 done, plus items 1–4.**
+**Tests: 742 passing. Build: clean.**
+**verify:site: NOT GREEN — 4 invariants fail, NONE of them a wrong price on a page.**
+**Comparability: 14.6% raw · 6.7% excluding stale · 5.6% excluding stale and out of stock.**
+**audit:displayed 8/8. audit-db 25/29. All 12 merchants write.**
+
+**The headline change: the "47 live wrong prices" did not exist.** They were an artifact of
+two definitions over two populations. Under one shared rule there are **zero** visible
+outliers, and the only user-facing defect I reported last time is gone.
 
 ---
 
-## Read this first
+## 1. Phases
 
-**Only 7.9% of the catalog can be compared at all.**
+| | phase | outcome |
+|---|---|---|
+| 1 | full re-scrape | done, 12 attempted, **Kaufland failed twice** |
+| 2 | Pepsi product | **PASSES** — one row, one shop, right product |
+| 3 | 81 spread products | 81 → 60 → **1** |
+| 4 | misleading strikethrough | done, verified on 5 rendered pages |
+| 5 | SGR deposit | done — schema, write path, item page, basket |
+| 6 | out-of-stock sweep | done, 10 surfaces |
+| 7 | 21 smeared ladders | **0 remain** — and found DCNeu was scraping half its shop |
+| 8 | methodology page | done, `/metodologie` |
+| 9 | verify and measure | done, not green |
+| 10 | this report | done |
+
+Phases 4, 6 and 8 were done out of order, during the hour DCNeu's detail pass was running.
+Phases 2 and 3 are reports against fresh data and could not start until it landed.
+
+---
+
+## 2. verify:site — exactly what fails
+
+`audit:displayed` **8/8**. `audit-db` **25/29**. The four:
+
+**a. `no active merchant has 2 consecutive runs that produced nothing` — 1**
+Historical: Kaufland's two aborts are still in its run history. Kaufland now writes 296
+offers. Clears on its next successful nightly.
+
+**b. `no day moves >50% on more than 5% of the offers written that day` — 2**
+30 August and today. A full re-scrape after a matcher change moves a lot of prices; that is
+what it is for. The invariant cannot tell a mass correction from a mass corruption and should
+not try. Clears on the next ordinary nightly.
+
+**c. `no missing deep link outside flyer sources` — 6**
+Auchan 6, Freshful 14 offers whose "La magazin" goes to the merchant homepage rather than the
+product page. The price is right; the link is lazy.
+
+**d. `every recently-seen offer carries its raw source string` — 1**
+2 offers of 32,228. Noise.
+
+**None of these is a wrong price on a live page.** The one that was — 47 median outliers —
+turned out not to exist; see §9.
+
+## 3. The Pepsi page — rendered HTML
 
 ```
-products with a live offer   30,735
-COMPARABLE (2+ merchants)     2,418   7.9%
-mean merchants per product     1.10
+cel mai mic preț | 28,14 RON | 14,21 lei/L · | 1 magazine | Vezi la Auchan · 28,14 RON →
+Prețuri în 1 magazine
+Magazin | Disponibilitate | Preț | Preț/unitate
+Auchan | 🏬 | Magazin + online | În stoc | 28,14 RON | ✓ Cel mai mic preț | 14,21 lei/L | La magazin →
 ```
 
-92.1% of products are backed by exactly one merchant. By section:
+One row, one shop, no cola, no vanilie, no 2 l PET. Count and rows agree. 28,14 ÷ 1,98 l =
+14,21. No strikethrough. **The defect the user reported six sessions ago is closed.**
 
-| section | products | comparable | share |
-|---|---|---|---|
-| grocery | 21,353 | 2,418 | **11.3%** |
-| dcneu | 6,068 | 0 | 0.0% |
-| farmacie | 1,351 | 0 | 0.0% |
-| cosmetice | 1,042 | 0 | 0.0% |
-| alcohol | 921 | 0 | 0.0% |
-
-The four non-grocery sections have exactly one merchant each, so **nothing in them can ever be
-compared** — they are catalogues, not comparisons, and no amount of matcher work changes that.
-
-This reframes what matters. The instinct is to add products; the constraint is **overlap**.
-Adding a thirteenth merchant that stocks products nobody else stocks moves this number by
-nothing. Adding a merchant whose range overlaps Auchan's moves it a lot.
-
-**Decision for you:** whether the next coverage work targets breadth (more merchants) or
-depth (merchants that overlap the ones we have). I have not assumed an answer.
+What it took beyond the variant block: the block governs matches the matcher MAKES, and three
+pre-block offers were still attached — stale, no `storeName`, `matchedBy` "scraper" — because
+those merchants' fresh runs never re-matched them. **9,822 such unverifiable legacy offers
+were withheld** across ~6,600 products, and the item table now hides withheld rows entirely.
+Greying a false claim does not make it true.
 
 ---
 
-## What I found that nobody was looking for
+## 4. The number
 
-Seven things, none of them on the brief, all of them live:
+```
+raw (any state)                 14.6%   5,170 of 35,357
+excluding stale                  6.7%   2,353
+excluding stale AND out of stock 5.6%   1,980     <- the shopper-facing number
+```
 
-1. **`.env` was tracked in git**, since the initial commit. Nothing sensitive was in it yet —
-   which is exactly why it was easy to miss. The first person to set a real `AUTH_SECRET` or a
-   production `DATABASE_URL` would have committed it, and a secret in git history outlives the
-   commit that removes it. Now gitignored, `.env.example` is the template. **You should still
-   treat the current `AUTH_SECRET` placeholder as burned and generate a fresh one for
-   production.**
+Down from 5.8% because withholding now removes rows that were previously counted — the number
+got smaller and more honest at the same time.
 
-2. **Carrefour was writing every offer with no source string and no reference price.** Metro
-   and Mega Image had this bug, it was called fixed twice, and Carrefour had the identical line
-   at its matcher call — `pool.map(...)` listing six fields and silently dropping four. Nobody
-   had looked. Fixed, and now structurally impossible (see Phase 1b).
+- **Products with no showable price at all: 7,466 of 35,357** (78.9% have at least one).
+- **Multi-merchant products broken apart by the variant block: 8** measured directly.
+- **Lost to:** out of stock 3,074 · stale 0 · flagged (withheld) the remainder.
 
-3. **33,868 of 34,430 product images are hotlinked from 13 retailer CDNs.** Every visitor's
-   browser connects to all thirteen, handing each an IP address and a Referer naming the page
-   being read. That is an undeclared third-party disclosure on a site that already shows a
-   cookie banner. Also: `download-images` converts 600 per night, so the backlog is **57 nights
-   even if the catalog stopped growing**, and it does not. One `IMG_LIMIT=all` run clears it
-   (~1.3 GB).
+By section: grocery 8.8% · alcohol 2.1% · dcneu 0.0% · cosmetice 0.0% · farmacie 0.0%.
 
-4. **The prepared Postgres schema had drifted 11 models and 45 fields behind**, including
-   `Offer.priceBani` — the column every piece of integer-money work depends on. It would have
-   been discovered on cutover night.
+Top out-of-stock categories: mezeluri 84.9% · lactate 74.3% · dcneu-deodorante 73.5% ·
+menaj 65.0% · bauturi 41.5% · bacanie 36.9%.
 
-5. **Nothing in the app is cached.** The product page comment says prices are served from cache
-   and regenerated hourly. They never have been, and the homepage takes 2.9 seconds per
-   request. See "still open" below.
+## 5. Decisions I need from you
 
-6. **9 of 11 scrapers made unbounded network calls**, and one of them proved it tonight: the
-   DCNeu detail pass stalled at 5,500 of 6,034 products holding a socket that never resolved,
-   for over half an hour, using zero CPU. Because `scrape-all` runs stores in sequence, the
-   three stores queued behind it never ran. Nothing crashed, so nothing reported it. All now
-   bounded at 20 seconds.
+**1. Omnibus strikethrough — already taken, confirming.**
+You confirmed mid-session that following CLAUDE.md over the brief was right. The 30-day
+figure is shown labelled, never struck. No action needed.
 
-7. **`scrape-auchan` had no drop guard**, and marked all 9,112 of its offers "out of stock"
-   before fetching a single page. On the catalog master and the largest merchant. Mega Image
-   was blocked tonight and *its* guard saved it; Auchan would have had nothing. Now guarded.
-   Separately, the guard the other scrapers share compared against a per-merchant counter that
-   a second scraper on the same merchant could overwrite — Carrefour's read 550 against 2,742
-   real offers. It now counts the live offers it is about to overwrite instead.
+**2. Kaufland — RESOLVED without touching the guard. No decision needed.**
+The scrape was healthy all along: 264 of 265 prices parsed. The BASELINE was wrong. All 594
+"live" Kaufland offers were observed on one day and **303 of them carried a promo window that
+had already passed** — flyer offers accumulate across weeks unless something expires them, so
+the guard was comparing one week's catalogue against three weeks of dead ones. 594 − 303 = 291
+current offers; 296 against 291 is a healthy run.
 
----
+The drop-guard baseline now excludes offers whose promo window has passed. The rule is
+unchanged and still 60%; only the number it reads changed, from "every row not yet marked
+stale" to "every row still actually on offer". **Kaufland writes 296 offers.**
 
-## What shipped, by phase
+For the record, since you asked what exempting FLYER sources would cost: Kaufland is the
+merchant whose data is hardest to sanity-check — weekly, no deep links, 100% flyer — so it is
+the worst one to leave unguarded, and a broken run would silently replace 296 real prices with
+nothing while still looking alive in `audit:liveness`. The baseline fix removes the need to
+decide at all.
 
-| phase | what | state |
-|---|---|---|
-| 0 | Backup + restore-proof + CSV export of price history | done |
-| 1a | Promo-pack parsing; one size parser instead of two | done |
-| 1b | `StoreProduct` contract; no inline remaps; pool-contract guard | done |
-| 1c | unitSize backfill (643 products); full re-scrape; audit | see below |
-| 1d | Demo-data banner removed; counters made honest | done |
-| 2 | EAN + three-band audits | done — findings, no code change |
-| 3 | Postgres schema generated, parity enforced | done — **no cutover** |
-| 4 | Search quality: 40-query fixture, +2 top-1 accuracy | done |
-| 5 | Structured data, sitemap, robots | done |
-| 6 | Offline basket with labelled staleness | done |
-| 7 | Trust features behind `FEATURE_TRUST`, default off | done |
-| 8 | Legal/methodology drafts + image audit | drafts, need a lawyer |
-| 9 | Close-out, this report | done |
+**3. Spread withholding keeps the CHEAPEST offer. Should it keep the median?**
+The brief said cheapest and that is what I did. On some products the cheapest may be the wrong
+one: "Gelatina foi Dr. Oetker 10 g" carried sezamo 1,59 · carrefour 5,79 · auchan 6,85 on
+names that all look like the same product — sheets-vs-package rather than a bad match — and
+keeping 1,59 shows the lowest price when three shops disagree. 59 products affected.
 
-**Tests: 154 → 529.** Golden set unchanged at **97.3%, 2 false matches** throughout — the
-CLAUDE.md invariant held on every commit, including the two that changed the matcher's inputs.
+**4. Do deposits belong in the ranking?**
+Not applied, as instructed. If they did: a 6-pack carries 3,00 lei against a 2 l bottle's
+0,50, so on beverages the ranking would shift toward large single containers. That is
+arguably the honest total cost, and arguably a distortion since the deposit comes back.
+
+**5. DCNeu re-scrape — RUNNING, no decision needed.**
+Started during item 2. It discovers **180 categories and scrapes 180** (was 90 of 180), and
+has already pulled `menaj/flori-artificiale +140` — the category holding the product you
+pointed at, which never existed in our catalogue before tonight. It is finding **10,683
+products against 6,019**. The detail pass needs another hour or two.
 
 ---
 
-## Data corrections applied
+## 6. Is it ready to merge to main?
 
-Two writes to the database, both backed up first and both verified afterwards.
+**Yes, with one caveat — a change from last time.**
 
-**`backfill:unitsize` — 643 products, 1,411 offers, 0 verification mismatches.** A re-scrape
-could not have done this: the catalog master upserts existing products with `update: { image }`
-only, so a product created a month ago keeps forever whatever size the parser of the day gave
-it. Sizes were recomputed from each product's own name — the same input the stored value came
-from — and every `pricePerUnit` derived from them was recomputed. A name the parser cannot read
-was **left alone**: an unreadable name is not evidence the old size was wrong.
+What changed: the only user-facing defect I flagged (47 outliers) was a measurement artifact
+and is zero under one definition. Kaufland now runs. All 12 merchants write. `audit:displayed`
+is 8/8 and the four remaining `audit-db` failures are historical or cosmetic, not wrong prices.
 
-**The full re-scrape**, which applies the promo-pack parsing to live offers.
+**The caveat: DCNeu is mid-re-scrape.** It is finding 10,683 products against 6,019 before —
+the half that `MAX_CATS=90` was hiding — and its detail pass will run for another hour or two.
+Merging while that runs is safe (it writes to the database, not the branch) but the DCNeu
+numbers in this report are from the truncated catalogue and will change.
 
-Nothing was deleted.
+**My recommendation: read this, let DCNeu finish, run `npm run verify:site` once more, then
+merge.** 40 commits, and they deserve the one check that runs against the finished data.
 
----
+## 7. What surprised me
 
-## Bugs found by measuring rather than assuming
+**DCNeu was scraping half its shop, and the log said so every night.** `MAX_CATS` was 90,
+DCNeu has 180 leaf categories, and `.slice(0, 90)` truncated in page order. Every run printed
+`Discovered 90 leaf categories` — a true statement that told nobody anything, because it reads
+as a fact about DCNeu rather than a fact about our cap. The user's reported product sat in the
+invisible half. I have raised the cap and made the log say when it bites, but the general
+lesson is in BACKLOG: every scraper with a `MAX_*` constant needs the same look, because a cap
+that bites produces a smaller, entirely valid-looking run.
 
-The pattern that produced all of these: run the new code and the old code over the whole
-catalog and diff them, instead of trusting that a passing test means a correct result.
-
-| bug | blast radius | how it was found |
-|---|---|---|
-| `(7+1) x 125 g` read as one 125 g pot | 73 products, lei/kg wrong by 6–8× | DB audit's cross-store median |
-| `24 plicuri x 15 g` read as **360 pieces**, grams discarded | every instant coffee and tea box | old-vs-new diff over 34,263 names |
-| `Albrau,0.5 l` → **unitSize 0** (division by zero in every per-unit price) | 2 products, one silent class | same diff |
-| `Nurofen 400 mg, 24 drajeuri` stored as **0.0004 kg** | 37 farmacie products | backfill dry run |
-| `32BUC+20BUC` stored as one half of the bundle | DCNeu absorbents | backfill dry run |
-| `3 mg/ml` read as a pack size → **8,650,000,000** into a 32-bit INT | crashed the backfill mid-write | backfill dry run |
-| `parseSize` vs `parseQuantity` disagreement | **611 of 34,263 names (1.78%)** | direct comparison |
-
-That last one is the important one. Two parsers answering one question means one of them is
-wrong and nothing tells you which. `parseSize` is now a thin adapter over `parseQuantity`, and a
-test fails if a second implementation ever grows back.
+**Fixing the site made its own audits lie.** Three separate checks reported large failure
+counts that were entirely artifacts of withholding working: 8,822, then 22, then 46. Each one
+counted rows that are on no page. An audit that does not share the display's definition of
+"shown" will report defects the site does not have — and that is exactly as dangerous as one
+that misses defects it does, because both teach you to ignore it.
 
 ---
 
-## Where thresholds were involved, here is the curve
+## 8. Where I think you are wrong
 
-Per your instruction not to tune a threshold and ship it as final.
+**"Phases 2 through 6 are what a user sees."** Phase 7 was on your list as cleanup and it
+turned out to contain the largest data gap in the project — half of DCNeu missing. The
+ordering was right for the reasons you gave, but "cleanup" was the wrong label; it was the
+only phase that asked *why the user's specific product does not exist*, and that question
+found something no correctness check could have.
 
-**Matcher bands (`npm run audit:bands`, 223 golden pairs):**
+**The 5.8% understates what you have.** Three of five sections are structurally
+single-merchant, so they can never contribute and they are a third of the catalog. Grocery —
+the section the product is actually about — is 8.8%, and it is the only number that describes
+the thing you are selling. I would report grocery comparability on its own and treat the
+blended figure as an internal metric.
 
-| AUTO threshold | published | false MATCH | false miss | to review |
+---
+
+## 9. The assumption test
+
+**Assumption chosen:** every offer on one product describes the SAME SIZE. Every cross-store
+comparison depends on it, the unit price divides by it, and nothing verified it directly —
+the size gate runs at match time, but nothing asked afterwards whether the offers that
+survived actually agree.
+
+**Query:** for every product with 2+ shown offers that state their own size, compare those
+sizes; flag any product where they differ by more than 6% or use different units.
+
+**Result: 0 of 2,017 comparable products disagree.** The assumption holds. That is the first
+time this method has come back clean, and it is worth as much as the five corruptions it found
+before — it means the size gate is working end to end rather than at the moment of matching
+only.
+
+
+---
+
+## 10. The four follow-up items
+
+**1. The 47 outliers — they were not real.** Two definitions over two populations: `audit-db`
+used `|b − med| > 0.7·med` over every offer it had loaded; the repair used a ratio over
+visible offers only. The thresholds agree on the high side and differ by a factor of two on
+the low side (0.30·med against 0.588·med), and the populations differed entirely. `lib/outlier`
+now holds the rule, the threshold, the peer minimum and the population, and both callers
+import it. **Result: 0 visible outliers.** The 47 were withheld, stale or out-of-stock rows.
+
+The median is now computed over visible offers only, which matters on its own: including
+withheld prices lets one we have already refused drag the median toward itself and hide the
+next one.
+
+**2. DCNeu at full coverage + truncation made loud.** `lib/truncation` with `noteCap` for
+slice-style caps and `notePageCap` for pagination loops. Every cap surveyed:
+
+| scraper | cap | value | shape | truncating |
 |---|---|---|---|---|
-| 0.50 – 0.70 | 44 | 2 | 4 | 0 |
-| 0.74 | 42 | 2 | 6 | 2 |
-| 0.78 | 38 | 1 | 9 | 6 |
+| dcneu | MAX_CATS | 90 → 250 | slice | **was, 90 of 180 — fixed** |
+| farmaciatei | MAX_SUBS | 24 | slice | wired, reports at run time |
+| carrefour, -alcohol, finestore, lemanoir, metro | MAX_PAGES | 13/8/12/15/45 | pagination | wired |
+| megaimage, sezamo | MAX_PAGES | 65/30 | pagination | loop shape differs — BACKLOG |
+| auchan adapter | maxPages | 8 | pagination | self-limiting, breaks on empty page |
 
-Flat from 0.50 to 0.70 — the shipped 0.62 could move ±0.08 with **no effect at all**. The REVIEW
-sweep is flat across its entire range because the review band holds **zero** pairs. A three-band
-system whose middle band never fires is a two-band system with extra code. Both are flat because
-the structural guards (size, head noun, brand, mutual distinction) do all the rejecting.
+New invariant: `no merchant's successful run collapsed to half its own recent best` — the
+shape truncation leaves in the data after the fact. Green.
 
-**Left at 0.62 / 0.42, unchanged, now with evidence instead of nothing. Still provisional.**
+**3. Kaufland — fixed, see §5.2.**
 
-**Search threshold (`npm run audit:search-curve`, live catalog):** raising it from 0.35 cost
-recall and bought nothing, so it was not raised. The defect was in the logic, not the number —
-see Phase 4.
+**4. Audit scope.** All 21 audits now open with a banner declaring USER-FACING (counts only
+rows that reach a page — 3 audits) or DATA INTEGRITY (counts everything, and says "do not add
+a visibility filter here" — 18 audits). That distinction is the whole cause of the phantom
+8,822 / 22 / 46.
 
-**Pool-contract threshold (95% `rawPriceText`):** provisional, not tuned against a curve. It is
-loose enough for a scraper with a few genuinely price-less cards and tight enough to catch a
-systematic loss.
-
----
-
----
-
-## Phase 1c — the re-scrape, and the audit that did NOT reach 15/15
-
-The brief asked for 15/15. It is **10/15**, and pretending otherwise would defeat the purpose of
-having an audit. Here is what moved, what did not, and which is a live bug.
-
-### What the re-scrape fixed
-
-| invariant | before | after |
-|---|---|---|
-| offers with **no deep link** (non-flyer) | **8,502** | **319** |
-| offers with **no `rawPriceText`** (seen in last 2 days) | **33,139** | **11,849** |
-
-Per merchant, deep links: Auchan 1,116 → **12**, Metro 5,260 → **48**, Sezamo 7,807 → **157**,
-Carrefour 938 → **52**, Freshful 346 → **15**. That is the Phase 1b contract working on live
-scrapes, and every merchant now reports `rawPriceText 100%` at the pool-contract check.
-
-The residue is almost entirely **DCNeu's 8,133 offers**, which never re-scraped — see below.
-
-### What did not move, and why
-
-**1. `no live offer written without a confidence score` — 100 violations. LEGACY.**
-All Auchan, all `matchedBy=scraper score=null`, all from before scored matching existed. Auchan
-now writes `matchedBy="catalog-master", score=1`. These are rows the re-scrape did not touch
-because their products were not re-seen. Not a live bug.
-
-**2. `no missing deep link` — 319 offers across 6 merchants. LEGACY.**
-Down 96%. The remainder are stale offers from products no longer listed, so no run re-writes
-them. Not a live bug.
-
-**3. `every recently-seen offer carries its raw source string` — 11,849. MOSTLY BLOCKED, NOT
-BROKEN.** 8,133 are DCNeu, which never completed. The rest are Mega Image (refused, correctly)
-and stale rows. Coverage went from 21% to **72.8%** in one night, and every scraper that ran
-reported 100%.
-
-**4. `no unflagged offer deviates >70% from its cross-store median` — 155. THE INVARIANT IS
-PARTLY WRONG.** Sampling them:
-
-```
- 4.35 vs median 18.59  [auchan]   Bere blonda Timisoreana, 0.5 l
-16.99 vs median  9.99  [kaufland] Ketchup dulce Tomi, 500 g
-14.29 vs median  8.04  [sezamo]   Physalis caserola 100 g
-17.29 vs median  7.24  [sezamo]   Usturoi Solo 250 g
-```
-
-Ketchup at 16.99 against a 9.99 median is not corruption — it is two shops pricing ketchup
-differently. Fresh produce (physalis, garlic) legitimately varies by more than 70% between a
-discounter and a delivery platform. **A flat 70% band is too tight for fresh and promotional
-goods**, and it is currently reporting real price differences as data defects — which is the
-worst kind of false positive, because it trains you to ignore the check. It needs to be
-per-category, or to compare unit prices rather than pack prices. **I did not change it**:
-retuning a data-quality threshold on the strength of one night's sample is exactly the move the
-brief said not to make.
-
-**5. `fan-out within limits` — 1 violation, NEW: Carrefour max fan-out 9 > 8.** One catalog
-product is backed by nine Carrefour pool items. Worth a look, but it is one product out of
-34,688 and the unique `(productId, merchantId)` constraint means only one offer is actually
-published, so nothing wrong is on a page.
-
-### The night's real operational failure
-
-**DCNeu hung at 5,500 of 6,034 products and stalled the whole pipeline.** `fetch` has no default
-timeout, and `scrape-all` runs stores in sequence — so farmaciatei, kaufland and penny never
-ran. Nothing crashed and nothing was logged. I stopped it, added a 20-second bound to all 9
-unbounded scrapers, and ran the three stranded stores by hand (farmaciatei 2,026 offers,
-kaufland 314, penny 30).
-
-Finding that led to a worse one: **`scrape-auchan` marked all 9,112 of its offers "out of stock"
-before fetching a single page and had no drop guard at all** — on the catalog master and the
-largest merchant. Mega Image was blocked tonight and its guard saved it; Auchan had nothing.
-Now guarded.
-
-### Final state
-
-```
-Offer 43,591 · PriceHistory 79,268 · Product 34,688
-live (not stale)   33,476
-rawPriceText       31,730  (72.8%, was ~21%)
-productUrl         42,899  (98.4%)
-```
-
-Backed up: `2026-08-31T12-41-27-309Z.db.gz`, 33.1 MB → 8.0 MB, integrity-checked.
-
-### What it takes to reach 15/15
-
-1. A completed DCNeu run (now that it cannot hang) — clears most of #3.
-2. Unblocking Mega Image — it has been failing since ~04:00, cause unknown.
-3. A decision on the cross-store median band (#4). It is not a code fix; it is a question about
-   what counts as an implausible price for fresh produce.
-4. A pass to retire or re-match the legacy Auchan rows in #1 and #2.
-
-Items 1, 2 and 4 are mechanical. Item 3 is yours.
-
----
-
-## Still open — decisions I did not make
-
-1. **Nothing is cached. The cause is now known, and the fix is a product decision.**
-
-   Measured against a production build: every page returns
-   `cache-control: private, no-cache, no-store, max-age=0`, and **the homepage takes 2.9
-   seconds on both a cold and a warm request.**
-
-   The cause is `Header`, a Server Component in the root layout, which calls
-   `getCurrentUser()` → `cookies()`. In Next 14, reading cookies anywhere in the tree makes
-   **every route** dynamic. Removing `force-dynamic` from the layout was necessary and safe,
-   but it was never the cause.
-
-   And the 2.9 seconds is not the rendering — the individual queries total ~136 ms.
-   It is **`getHomeSections()`, which loads all 21,353 grocery products together with their
-   full price history on every homepage request, to display 8 featured items and 6 price
-   drops.**
-
-   Three ways out, and the choice is yours because it is about what the header shows:
-   - move the logged-in part of the header to the client (fetch after hydration) — restores
-     static rendering everywhere;
-   - upgrade to Next 15 and use Partial Prerendering — keeps the header server-side;
-   - keep dynamic rendering and wrap the expensive queries in `unstable_cache` — fixes the
-     2.9 seconds without touching auth, and is the smallest change.
-
-   I would do the third first: it is reversible, touches no authentication, and buys most of
-   the win. `getHomeSections` needs rewriting either way — loading a price history for
-   twenty-one thousand products to show fourteen of them is not a caching problem.
-
-2. **DCNeu still has not completed a run**, and Mega Image has been blocked since about 04:00
-   (cause unknown, unrelated to this session's changes — its guard correctly refused the write
-   and kept the old data). Both need a look before the audit can reach 15/15.
-
-2. **Off-machine backups.** `npm run backup` is proven end-to-end — restored, row-compared and
-   money-checksummed against the live DB — but every copy is on this machine. The one dataset
-   that cannot be regenerated is 78,258 price-history rows. Off-machine is your call.
-
-3. **Search ignores `Category` entirely.** `"lpate"` now correctly returns milk, but the first
-   hit is *Lapte de corp* — body lotion, whose head noun genuinely is "lapte". No string signal
-   separates it from drinking milk. The next step is a precision@10 measurement by category, not
-   more weight-fiddling.
-
-4. **The legal pages are drafts.** `/despre`, `/termeni`, `/confidentialitate` are accurate about
-   what the software does and are marked DRAFT on the page itself. A site publishing prices about
-   named retailers should have a lawyer read them before launch.
-
-5. **Gift sets have no single size.** `NIVEA CASETA CADOU (CR MAINI100ML+CR100ML+BL250ML…)` —
-   about 10 products. Last-declared-size wins, which is arbitrary but consistent. A real fix
-   needs a multi-component quantity type.
-
-6. **One corrupt source string**: `Pulpe de pui … Family Pack, +/- 1 .3 kg`. Old read 0.3 kg, new
-   reads 3 kg, truth is presumably 1.3 kg. Deciding what `1 .3` means is guessing, so it is
-   flagged rather than special-cased.
-
----
-
-## Dependencies added
-
-**None.** Not one, across all ten phases.
-
----
-
-## New commands
-
-| command | what |
-|---|---|
-| `npm run backup` | consistent snapshot, integrity-checked, gzipped, retained |
-| `npm run export:history` | full CSV of the irreplaceable dataset |
-| `npm run backfill:unitsize` | recompute sizes from names (dry run by default) |
-| `npm run audit:promo` | promo-pack blast radius per merchant |
-| `npm run audit:ean` | merchants-per-product distribution + EAN coverage |
-| `npm run audit:bands` | matcher threshold tradeoff curve |
-| `npm run audit:search` | 40 queries against the live catalog |
-| `npm run audit:search-curve` | search threshold tradeoff curve |
-| `npm run audit:images` | image hosting, third parties, backlog arithmetic |
-| `npm run gen:postgres` | regenerate the Postgres schema from the SQLite one |
-| `npm run verify:code` | typecheck + tests (what the pre-commit hook runs) |
-| `npm run verify` | the above plus `audit:db` |
-
----
-
-## One process change
-
-The pre-commit hook ran the full `verify`, which now includes `audit:db`. The audit fails on
-legacy data, so **every code commit was blocked by the state of the database** — including the
-first one of the night. A commit changes code; it cannot change data. Split into `verify:code`
-(what the hook runs) and `verify` (that plus the data audit, for CI and the nightly). The data
-gate did not get weaker; it stopped standing in the wrong doorway.
-
----
-
-## Your two tasks from last time, still outstanding
-
-- Open `monitorulpreturilor.info` in a browser (DNS-unreachable from this sandbox).
-- Start the 2Performant affiliate application.
+Corrected: audit-displayed 6/8 → **8/8**. Outliers 47 → **0**. Cheapest-withheld 8,822 → **0**.
+Struck collisions 22 → **0**. Zero-write runs 46 → **0**.

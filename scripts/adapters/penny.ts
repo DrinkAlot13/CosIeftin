@@ -12,7 +12,7 @@ export const penny: Adapter = {
   websiteUrl: BASE,
   color: "#d40f14",
   storeType: "physical",
-  priceSource: "shelf",
+  priceChannel: "shelf",
   section: "grocery",
   addNew: true,
   mode: "dom",

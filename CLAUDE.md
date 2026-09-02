@@ -29,6 +29,24 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 - A price that deviates >70% from the same product's cross-store median, or
   >50% from its own last recorded price, is NOT written. It is flagged into
   a `PriceAnomaly` table for review.
+- **A GATE DEFERS; IT NEVER DISCARDS.** A gate anchored on stored history can only ever be
+  as right as the data it compares against, and it is most likely to fire at exactly the
+  moment a wrong value is being corrected. Auchan offer 1905 held 28,14 from 6 August, moved
+  to 12,00 on 30 August — a 57% drop, past the gate — and re-scraped independently today
+  reads 11,69. **28,14 was the anomaly; 12,00 was the correction.** A discarding gate would
+  have thrown away the right answer and kept the wrong one, silently. So every refusal is
+  recorded with the refused value, the value kept instead, `rawPriceText` and the reason.
+- **`src/lib/record-refusal.ts` is the ONLY writer of `PriceAnomaly`**, and it is called from
+  inside `matchPoolToCatalog`, so no merchant path can skip it. This rule was in this file
+  from session one and held for one merchant of twelve, because a rule enforced only by
+  documentation is enforced by nothing. It is now guarded by `tests/gates-defer.test.ts`.
+- **Availability is read BEFORE the price.** A store that marks an item unavailable
+  legitimately carries no price — VTEX writes `Price: 0`, which is 16.4% of Auchan's catalog,
+  and across 304 sampled products `Price===0` and `IsAvailable===false` agreed with no
+  exceptions either way. Parsing first turns every one of those into a "null price" and trips
+  the 5% tripwire on a healthy run. Exempting them without a bound would disable the tripwire
+  instead, so unavailable items are counted separately AND capped at 60%: "everything is
+  unavailable" is what a broken availability read looks like too.
 
 ### Scraping
 - **Persist `rawPriceText` on every write.** Without the exact source string, no parser
@@ -87,8 +105,8 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 - Human decisions in `MatchOverride` (CONFIRMED / REJECTED) always win and must
   survive a full catalog rebuild.
 - Any change to the matcher must pass `tests/golden/matching.test.ts` before merge, and
-  must not lower the pass rate recorded in `tests/golden/BASELINE.md` (currently **97.3%**,
-  2 false matches). A false MATCH publishes one product's price on another; a false miss
+  must not lower the pass rate recorded in `tests/golden/BASELINE.md` (currently **97.8%**,
+  1 false match). A false MATCH publishes one product's price on another; a false miss
   only costs a comparison. They are not equally bad.
 
 ## Units
@@ -114,6 +132,52 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
 - Money math never uses floats.
 - User-facing strings are Romanian. Code, comments and identifiers are English.
 - Do not add dependencies without asking.
+
+## Migrations and backfills
+
+- **A migration or backfill script may not verify its own work.** Verification lives in
+  `scripts/audit-db.ts`, which imports only `PrismaClient`, and any new backfill must ship with
+  an invariant there. A script that reports its own success is reporting that it agrees with
+  itself.
+
+  This has now happened four times. Most recently `backfill-phase1` counted only the uppercase
+  half of a two-vocabulary column, printed a green line, and under-reported by 19,000 offers.
+
+- **Add and backfill in one migration; drop in the next.** A rename is a destructive migration
+  wearing a harmless name. The sequence is add → backfill → verify → switch reads → drop, and
+  collapsing any two of those steps is how `lastObservedAt` lost 43,765 observation dates in a
+  single `db push`.
+
+- **Never write a parent's value onto its children.** `backfill-phase1` stamped
+  `merchant.lastScrapeAt` onto every offer of that merchant, turning "the run happened" into
+  "this row was observed" and corrupting 10,388 rows with a plausible value for weeks. If a
+  child's real value is unknown, leave it null: a null is a question, an invented value is an
+  answer nobody checked.
+
+- **One vocabulary per column, defined in TypeScript.** `Offer.priceSource` held five spellings
+  of a four-value field because two writers disagreed on case, and two live read sites compared
+  against a string literal. Give an enum-valued column a module (see `lib/price-source.ts`) with
+  the union type, the mapper, and a translation function at any boundary where a different
+  vocabulary meets it. SQLite cannot express enums, so the type system and `audit-db` are the
+  enforcement.
+
+## Writing code through a shell
+
+Do NOT write regex-bearing or escape-bearing code through a heredoc, `node -e` or `python -c`.
+One layer of backslashes is eaten on the way through, and the result is frequently VALID CODE
+THAT COMPILES AND IS WRONG. Use the Write/Edit tools for anything containing an escape.
+
+This rule was in this file for several sessions and was broken four times in one day, so it
+is now enforced by `npm run check:hygiene`, which is part of `verify:code` and therefore of
+the pre-commit hook. It fails on a literal backspace, vertical tab, form feed, NUL or ESC
+anywhere in source, and on a meaningless escape in a regex context.
+
+It found a live bug on its first run. `doseTokens()` in `scrape-util.ts` carries the regex
+that compares garment and egg sizes — the very thing this file demands be compared explicitly
+("mărimea L vs M"). Its whitespace class had become a literal letter and its word boundary an
+actual 0x08 backspace, making the pattern unsatisfiable. It had never matched anything, and
+the cost was sitting in the golden set the whole time as a false match on eggs. Repairing it
+took the golden set from 97.3% to 97.8% and false matches from 2 to 1.
 
 ## Workflow
 - Small commits. Run `npm run test` before finishing any task.

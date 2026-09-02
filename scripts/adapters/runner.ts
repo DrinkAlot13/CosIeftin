@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../../src/lib/scrape-util";
+import { toPriceSource } from "../../src/lib/price-source";
 import { parsePriceLei, parsePriceDetailed, baniToLei } from "../../src/lib/price/parsePrice";
 import { ParseTally } from "../../src/lib/price/parseTally";
 import { parseEan } from "../../src/lib/product/ean";
@@ -31,6 +32,26 @@ function saveFixture(slug: string, key: string, body: string) {
 }
 
 /** Read a dot path ("results.0.hits") out of an object. */
+/** Does this route template ask to be walked more than once? */
+const PAGED = /\{page\}|\{from\}|\{to\}/;
+
+/**
+ * Substitute the pagination tokens for the pg-th request (pg is 1-based).
+ *
+ * {page} is the page number. {from}/{to} are INCLUSIVE row offsets, which is what VTEX's
+ * catalog_system search takes — page 1 is _from=0&_to=49. Auchan is VTEX, and so are several
+ * other Romanian retailers, so this belongs in the runner rather than in one adapter.
+ */
+export function pageUrl(template: string, pg: number, pageSize?: number): string {
+  let u = template.replace(/\{page\}/g, String(pg));
+  if (/\{from\}|\{to\}/.test(template)) {
+    if (!pageSize || pageSize < 1) throw new Error("a route using {from}/{to} needs adapter.pageSize");
+    const from = (pg - 1) * pageSize;
+    u = u.replace(/\{from\}/g, String(from)).replace(/\{to\}/g, String(from + pageSize - 1));
+  }
+  return u;
+}
+
 export function dig(obj: unknown, path: string): unknown {
   if (!path) return obj;
   return path.split(".").reduce<unknown>((acc, k) => {
@@ -48,8 +69,49 @@ function abs(base: string, u: string): string {
 
 // ─── pure parse stages (unit-testable against fixtures, no network) ────────────────
 
+/**
+ * How often each mapped FIELD actually yielded a value across a run.
+ *
+ * A selector or JSON path that matches nothing looks EXACTLY like a field the page does not
+ * have. That confusion is expensive: `doseTokens()` carried a regex that could never match,
+ * and the only reason anyone found it was a hygiene check looking for a stray control
+ * character. A field map deserves the same treatment — measure it, do not assume it.
+ *
+ * Zero is not automatically a bug (Kaufland genuinely publishes no EAN), but zero is the only
+ * state worth looking at, and nothing was reporting it.
+ */
+export class FieldCoverage {
+  private readonly hits = new Map<string, number>();
+  private items = 0;
+
+  note(field: string, got: boolean): void {
+    if (!this.hits.has(field)) this.hits.set(field, 0);
+    if (got) this.hits.set(field, (this.hits.get(field) ?? 0) + 1);
+  }
+
+  countItem(): void {
+    this.items++;
+  }
+
+  report(label: string): void {
+    if (this.items === 0) return;
+    const rows = [...this.hits.entries()].sort((a, b) => b[1] - a[1]);
+    const line = rows
+      .map(([f, n]) => `${f}=${((n / this.items) * 100).toFixed(0)}%${n === 0 ? " ⚠" : ""}`)
+      .join("  ");
+    console.log(`  field coverage (${label}, ${this.items} items): ${line}`);
+    const dead = rows.filter(([, n]) => n === 0).map(([f]) => f);
+    if (dead.length > 0) {
+      console.log(
+        `    ⚠ extracted NOTHING all run: ${dead.join(", ")} — a dead selector and an absent ` +
+        `field look identical, so check the map before assuming the page lacks it.`,
+      );
+    }
+  }
+}
+
 /** Turn a JSON payload into normalized store products. */
-export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Adapter, tally?: ParseTally): StoreProduct[] {
+export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): StoreProduct[] {
   let data: unknown;
   try { data = JSON.parse(raw); } catch { return []; }
   const arr = dig(data, map.items);
@@ -58,21 +120,42 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
   for (const it of arr) {
     const name = String(dig(it, map.name) ?? "").replace(/\s+/g, " ").trim();
     if (!name) continue;
-    // null = ambiguous → skip the item rather than publish a wrong price
-    const rawPrice = String(dig(it, map.price) ?? "");
-    const det = parsePriceDetailed(rawPrice);
-    const price = tally ? tally.record(rawPrice, det.priceBani) : det.priceBani;
-    if (price == null) continue;
+
+    // AVAILABILITY IS READ BEFORE THE PRICE, and the order is the point.
+    //
+    // VTEX writes Price: 0 for anything not currently sellable — 17.3% of Auchan's catalog,
+    // and across 304 sampled products Price===0 and IsAvailable===false agreed every single
+    // time, with no exceptions in either direction. Parsing first made every one of those a
+    // "null price" and tripped the 5% tripwire on a perfectly healthy run.
+    //
+    // An item its own store says is unavailable is a legitimate skip, so it is counted as
+    // one — but counted, and bounded by its own threshold, because "everything is
+    // unavailable" is what a broken availability read also looks like.
     let available = true;
     if (map.available) {
       const v = dig(it, map.available);
       const bad = map.unavailableWhen ?? [false, 0, "false", "out of stock", "OUT_OF_STOCK", "unavailable"];
       available = !bad.includes(v as string | number | boolean);
     }
+
+    // null = ambiguous → skip the item rather than publish a wrong price
+    const rawPrice = String(dig(it, map.price) ?? "");
+    const det = parsePriceDetailed(rawPrice);
+    if (det.priceBani == null && !available) {
+      tally?.recordUnavailable();
+      continue;
+    }
+    const price = tally ? tally.record(rawPrice, det.priceBani) : det.priceBani;
+    // NOT a `continue`. An unparseable price is a REFUSAL, and refusals are recorded rather
+    // than dropped — the item goes into the pool carrying price 0, and matchPoolToCatalog
+    // records it as a pre-offer refusal with its rawPriceText intact. It still never becomes
+    // an offer, and the 5% tripwire above still counts it, so nothing is weakened; what
+    // changes is that the exact string that could not be read survives the run instead of
+    // vanishing beyond ParseTally's 20 samples.
     const p: StoreProduct = {
       name,
       brand: map.brand ? String(dig(it, map.brand) ?? "") : "",
-      price: baniToLei(price),
+      price: price == null ? 0 : baniToLei(price),
       rawPriceText: rawPrice,
       rawSourceBlob: JSON.stringify(it).slice(0, 4096),
       referencePriceBani: det.referencePriceBani ?? null,
@@ -83,15 +166,27 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
       image: map.image ? (String(dig(it, map.image) ?? "") || null) : null,
       category: route.cat,
       ean: map.ean ? parseEan(String(dig(it, map.ean) ?? "")) || null : null,
-      priceSource: ad.priceSource,
+      priceSource: toPriceSource(ad.priceChannel),
     };
+    if (cov) {
+      cov.countItem();
+      cov.note("name", p.name.length > 0);
+      cov.note("price", p.price > 0);
+      cov.note("rawPriceText", (p.rawPriceText ?? "").length > 0);
+      cov.note("url", p.url.length > 0);
+      if (map.image) cov.note("image", (p.image ?? "").length > 0);
+      if (map.link) cov.note("productUrl", (p.productUrl ?? "").length > 0);
+      if (map.brand) cov.note("brand", p.brand.length > 0);
+      if (map.ean) cov.note("ean", (p.ean ?? "").length > 0);
+      if (map.available) cov.note("available-read", true);
+    }
     out.push(ad.refine ? ad.refine(p) : p);
   }
   return out;
 }
 
 /** Extract cards from a live page using a DOM map. Runs in the browser context. */
-async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally): Promise<StoreProduct[]> {
+async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): Promise<StoreProduct[]> {
   const rows = await page.$$eval(map.card, (els, m) => {
     const pick = (el: Element, sels: string[] | undefined): string => {
       if (!sels) return "";
@@ -125,12 +220,12 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
     const name = String(r.name || "").trim();
     if (!name) continue;
     const det = parsePriceDetailed(r.priceText);
+    // Same rule as the JSON path: an unparseable price is refused and RECORDED, not dropped.
     const price = tally ? tally.record(r.priceText, det.priceBani) : det.priceBani;
-    if (price == null) continue;
     const p: StoreProduct = {
       name,
       brand: r.brand || "",
-      price: baniToLei(price),
+      price: price == null ? 0 : baniToLei(price),
       rawPriceText: r.priceText,
       referencePriceBani: det.referencePriceBani ?? null,
       referencePriceKind: det.referencePriceKind ?? null,
@@ -140,8 +235,19 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       image: r.img ? abs(ad.websiteUrl, r.img) : null,
       category: route.cat,
       ean: parseEan(r.ean) || null,
-      priceSource: ad.priceSource,
+      priceSource: toPriceSource(ad.priceChannel),
     };
+    if (cov) {
+      cov.countItem();
+      cov.note("name", p.name.length > 0);
+      cov.note("price", p.price > 0);
+      cov.note("rawPriceText", (p.rawPriceText ?? "").length > 0);
+      if (map.image) cov.note("image", (p.image ?? "").length > 0);
+      if (map.link) cov.note("productUrl", (p.productUrl ?? "").length > 0);
+      if (map.brand) cov.note("brand", p.brand.length > 0);
+      if (map.ean) cov.note("ean", (p.ean ?? "").length > 0);
+      if (map.unavailable) cov.note("unavailable-read", true);
+    }
     out.push(ad.refine ? ad.refine(p) : p);
   }
   return out;
@@ -155,6 +261,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   const pool: StoreProduct[] = [];
   const seen = new Set<string>();
   const tally = new ParseTally(ad.name);
+  const coverage = new FieldCoverage();
   let browser: Browser | null = null;
   let page: Page | null = null;
 
@@ -169,8 +276,8 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   for (const route of ad.routes) {
     let added = 0;
     for (let pg = 1; pg <= maxPages; pg++) {
-      const url = route.url.includes("{page}") ? route.url.replace("{page}", String(pg)) : route.url;
-      if (pg > 1 && !route.url.includes("{page}")) break;
+      const url = pageUrl(route.url, pg, ad.pageSize);
+      if (pg > 1 && !PAGED.test(route.url)) break;
       let items: StoreProduct[] = [];
       try {
         if (ad.mode === "json") {
@@ -180,13 +287,13 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           if (!res.ok) { if (pg === 1) console.log(`  ${url.slice(0, 60)} → HTTP ${res.status}`); break; }
           const raw = await res.text();
           saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, raw);
-          items = parseJsonPayload(raw, ad.json!, route, ad, tally);
+          items = parseJsonPayload(raw, ad.json!, route, ad, tally, coverage);
         } else {
           await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
           await page!.waitForSelector(ad.dom!.card, { timeout: 15000 }).catch(() => {});
           await page!.waitForTimeout(pg === 1 ? 3500 : 2000);
           if (process.env.FIXTURE_SAVE) saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, await page!.content());
-          items = await parseDom(page!, ad.dom!, route, ad, tally);
+          items = await parseDom(page!, ad.dom!, route, ad, tally, coverage);
         }
       } catch (e) {
         console.log(`  ${url.slice(0, 55)} error: ${(e as Error).message.slice(0, 50)}`);
@@ -210,6 +317,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
 
   // A run that could not READ most of its prices is not a run with fewer products —
   // it is a broken selector. Raise rather than write thin data.
+  coverage.report(ad.slug);
   tally.reportAndRaise();
   console.log(`Pooled ${pool.length} ${ad.name} products.`);
   if (pool.length === 0) {
@@ -220,8 +328,8 @@ export async function runAdapter(ad: Adapter): Promise<void> {
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: ad.slug },
-    update: { active: true, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceSource: ad.priceSource ?? "shelf" },
-    create: { slug: ad.slug, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceSource: ad.priceSource ?? "shelf" },
+    update: { active: true, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceChannel: ad.priceChannel ?? "shelf" },
+    create: { slug: ad.slug, name: ad.name, websiteUrl: ad.websiteUrl, color: ad.color, storeType: ad.storeType ?? "online", priceChannel: ad.priceChannel ?? "shelf" },
   });
   const r = await matchPoolToCatalog(merchant.id, pool, { section: ad.section, addNew: ad.addNew ?? true, label: ad.slug ?? ad.section });
   if (r.aborted) console.error(`\n${ad.name}: ABORTED — ${r.reason}`);

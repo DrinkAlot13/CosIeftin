@@ -13,6 +13,7 @@
 import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { notePageCap } from "../src/lib/truncation";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -36,17 +37,31 @@ type Cand = StoreProduct;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** In-page fetch (inherits session cookies + referer so the API accepts it). */
+/**
+ * In-page fetch (inherits session cookies + referer so the API accepts it).
+ *
+ * THE TIMEOUT IS PASSED IN, NOT CLOSED OVER. `page.evaluate` serializes this function and
+ * runs it in the BROWSER, where Node module scope does not exist — so a bare reference to
+ * `REQUEST_TIMEOUT_MS` throws ReferenceError inside the page, the catch turns it into
+ * `{ __err }`, and the caller breaks out of pagination after page 1.
+ *
+ * That is exactly what happened. Commit 568d283 — "A stalled socket can silently cost the
+ * whole night, and it just did" — added the timeout to this line while hardening every
+ * fetch in the project, and thereby cost Metro every night from 31 August on: 0 products,
+ * 5,296 live offers frozen. The drop guard did its job and refused each empty run rather
+ * than wiping the data, which is the only reason this was recoverable — but nothing said
+ * "this merchant has produced nothing for two days", so nobody looked.
+ */
 async function apiGet(page: Page, url: string): Promise<any> {
-  return page.evaluate(async (u) => {
+  return page.evaluate(async ({ u, timeoutMs }) => {
     try {
-      const r = await fetch(u, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      const r = await fetch(u, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(timeoutMs) });
       const t = await r.text();
       return t ? JSON.parse(t) : { __err: r.status };
     } catch (e) {
       return { __err: String(e) };
     }
-  }, url);
+  }, { u: url, timeoutMs: REQUEST_TIMEOUT_MS });
 }
 
 function searchUrl(category: string, page: number): string {
@@ -105,6 +120,7 @@ async function main() {
     const priced = new Map<string, { price: number; available: boolean }>();
     let totalPages = 1;
     for (let p = 1; p <= MAX_PAGES; p++) {
+      if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
       const j = await apiGet(page, searchUrl(cat, p));
       if (!j || j.__err) break;
       totalPages = j.totalPages ?? 1;
@@ -131,7 +147,7 @@ async function main() {
           const pr = priced.get(id)!;
           if (!meta || seen.has(id)) continue;
           seen.add(id);
-          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), image: meta.image });
+          pool.push({ name: meta.name, brand: meta.brand, sourceId: id, price: pr.price, available: pr.available, url: `${BASE}/shop/pv/${id}`, productUrl: `${BASE}/shop/pv/${id}`, rawPriceText: String(pr.price), rawSourceBlob: JSON.stringify({ meta, pr }).slice(0, 4096), image: meta.image });
           catAdded++;
         }
       }

@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { prisma } from "../src/lib/db";
 import { parsePriceLei, parsePriceDetailed } from "../src/lib/price/parsePrice";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { notePageCap } from "../src/lib/truncation";
 
 const BASE = "https://carrefour.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -79,6 +80,7 @@ async function main() {
     let catAdded = 0;
     let lastPage = 0;
     for (let p = 1; p <= MAX_PAGES; p++) {
+      if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
       try {
         await page.goto(`${BASE}/${cat}${p > 1 ? `?p=${p}` : ""}`, { waitUntil: "domcontentloaded", timeout: 45000 });
         await page.waitForTimeout(p === 1 ? 6000 : 3500);
@@ -89,7 +91,7 @@ async function main() {
           const key = String(r.id ?? r.name);
           if (!r.name || seen.has(key)) continue;
           seen.add(key);
-          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null });
+          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null, rawSourceBlob: JSON.stringify(r).slice(0, 4096) });
           pageAdded++;
           catAdded++;
         }

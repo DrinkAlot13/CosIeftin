@@ -8,6 +8,7 @@
 import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { notePageCap } from "../src/lib/truncation";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -50,7 +51,7 @@ function parseProducts(html: string, cat: string): StoreProduct[] {
     const imgM = b.match(/<img[^>]+(?:data-src|src)="([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i);
     if (!name || !(price > 0)) continue;
     const abs = url.startsWith("http") ? url : `${BASE}/${url.replace(/^\//, "")}`;
-    out.push({ name: normVol(name), brand: "", price, available: true, url: abs, productUrl: abs, rawPriceText: priceM ? priceM[1] : null, image: imgM ? imgM[1] : null, category: cat });
+    out.push({ name: normVol(name), brand: "", price, available: true, url: abs, productUrl: abs, rawPriceText: priceM ? priceM[1] : null, image: imgM ? imgM[1] : null, category: cat, rawSourceBlob: JSON.stringify({ name, price, url: abs, raw: priceM ? priceM[0] : null }).slice(0, 4096) });
   }
   return out;
 }
@@ -67,6 +68,7 @@ async function main() {
   for (const c of CATS) {
     let catAdded = 0;
     for (let p = 1; p <= MAX_PAGES; p++) {
+      if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
       let html: string;
       try {
         const res = await fetch(`${BASE}/${c.path}${p > 1 ? `?p=${p}` : ""}`, { headers: { "user-agent": UA, "accept-language": "ro-RO" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });

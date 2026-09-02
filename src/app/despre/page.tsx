@@ -24,11 +24,11 @@ export default async function DesprePage() {
     }),
     prisma.product.count({ where: { offers: { some: { isStale: false } } } }),
     prisma.offer.count({ where: { isStale: false } }),
-    prisma.offer.findFirst({ orderBy: { lastSeen: "desc" }, select: { lastSeen: true } }),
+    prisma.offer.findFirst({ orderBy: { lastObservedAt: "desc" }, select: { lastObservedAt: true } }),
   ]);
 
-  const updated = newest?.lastSeen
-    ? new Intl.DateTimeFormat("ro-RO", { dateStyle: "long", timeStyle: "short" }).format(newest.lastSeen)
+  const updated = newest?.lastObservedAt
+    ? new Intl.DateTimeFormat("ro-RO", { dateStyle: "long", timeStyle: "short" }).format(newest.lastObservedAt)
     : "—";
 
   return (

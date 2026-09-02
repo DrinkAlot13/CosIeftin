@@ -677,3 +677,512 @@ Backed up: `2026-08-31T12-41-27-309Z.db.gz`, 33.1 MB → 8.0 MB, integrity-check
 4. A pass to retire or re-match the legacy Auchan rows in #1 and #2.
 
 Items 1, 2 and 4 are mechanical. Item 3 is yours.
+
+---
+
+# Overnight session — every price a user sees is correct
+
+Branch `fix/pepsi-merge`. Ten phases, in order, no reordering.
+
+## PHASE 1 — finish the scrape
+
+Started from 3 merchants already done under mixed matcher code; killed that run, took a fresh
+backup, pushed the `offersWritten` schema change, and started `scrape:all` clean so every
+merchant goes through the current matcher (variant hard block + pack shape + tobacco
+exclusion).
+
+Completions as they landed, with the pool census printed by `matchPoolToCatalog`:
+
+| merchant | offers written | pool | matched | review | rejected |
+|---|---|---|---|---|---|
+| auchan | 5,944 | 5,695 | 5,692 (99.9%) | 0 | 3 |
+| freshful | 329 | 3,101 | 317 (10.2%) | 406 | 2,214 |
+| mega-image | 720 | 6,960 | 695 (10.0%) | 786 | 5,088 |
+| carrefour | 904 | 4,010 | 898 (22.4%) | 748 | 2,336 |
+| metro | 5,297 | 5,246 | 4,743 (90.4%) | 0 | 503 |
+| sezamo | 7,804 | 7,785 | 7,783 (100.0%) | 0 | 2 |
+| finestore | 276 | 276 | 275 (99.6%) | 0 | 1 |
+| lemanoir | 94 | 97 | 4 (4.1%) | 0 | 93 |
+| carrefour-alcohol | 1,202 | 1,212 | 762 (62.9%) | 56 | 394 |
+
+Notes on the numbers, so they are not read wrong later:
+
+- **"matched" counts matches to an EXISTING catalog product.** Le Manoir shows 4/97 matched
+  and still wrote 94 offers, because it runs with `addNew` and the other 93 became new
+  catalog products. A low match rate on an addNew merchant is not a failure.
+- **freshful, mega-image and carrefour are match-only** (`addNew` defaults false), so their
+  rejected column IS discarded work. Those three are the ones where the 70%+ rejection rate
+  matters, and the Mega Image diagnosis (37/50 sampled rejections correct, ~1,200 realistic
+  upside) is in the backlog, not tonight.
+- **metro wrote more offers than pool items** (5,297 from 5,246): one store item can back more
+  than one catalog product. Not an error, but worth watching for fan-out.
+
+The tobacco exclusion fired live during the run — 30 products on one merchant, 200 on another,
+printed with samples ("Tigari", "Tigari Tuned Blue XL").
+
+The rule-coverage table printed on every run. First full-catalog counts under the new matcher:
+`size=765139 · size-unit=159896 · brand=114035 · mutually-distinct=20765 · ean=5651 ·
+variant-flavour=1515 · brand+size=975 · pack-shape=409 · low-overlap=274 ·
+variant-mismatch=237 · name+size=217 · variant-qualifier=194 · variant-format=19 ·
+dose-mismatch=15 · variant-fat=2 · head-noun=0`.
+
+`variant-flavour` at 1,515 and `pack-shape` at 409 are the two blocks added for the Pepsi
+page doing real work across the whole catalog. `head-noun=0` is unreachable-by-construction,
+recorded in BACKLOG so nobody chases it as a second doseTokens.
+
+Remaining when this entry was written: dcneu (mid detail pass, ~2,500/6,019), farmaciatei,
+kaufland, penny.
+
+### Groundwork found while phase 1 finished (read-only, no changes)
+
+Two things that make phase 5 (SGR deposit) far cheaper than expected:
+
+- **Auchan PUBLISHES the deposit.** Its VTEX payload carries `"GARANTIE_SGR":["0,5"]` —
+  the per-container deposit in lei, stated by the merchant. 995 offers already hold it in
+  `rawSourceBlob`. That is an authoritative value, not a derivation, and it is the same shape
+  as Kaufland's `formattedBasePrice`: a merchant-computed figure that shares no assumption
+  with our parser.
+- **Auchan marks SGR products in the URL.** 1,134 offers have a `-sgr` suffix in
+  `productUrl` (VTEX `linkText`), which identifies deposit-bearing products even where the
+  attribute is absent.
+
+So the plan for phase 5 is: read `GARANTIE_SGR` where published, fall back to 50 bani per
+container for in-scope categories, and multiply by `containerCount` derived from `packCount`.
+The six-pack vs 2 L difference the brief calls out (3,00 lei vs 0,50) falls straight out of
+that.
+
+## PHASE 4 — the misleading strikethrough (done during the phase-1 wait)
+
+Implemented while DCNeu's detail pass ran. Phases 2 and 3 are reports against the freshly
+scraped data and could not start yet; this one needed no new data, only the rendered pages,
+which already exist.
+
+**The defect.** `src/app/p/[slug]/page.tsx` rendered `summary.highest` — the CROSS-STORE
+MAXIMUM — inside a `.strike` span next to the lowest price:
+
+    cel mai mic preț  12,00   ~~17,99~~
+
+17,99 was another merchant's price. Struck through, it reads "was 17,99, now 12,00": a
+discount nobody ever gave, on a product nobody ever discounted.
+
+**The fix.** `src/lib/reference-price.ts` decides what may be shown. A strike requires a
+reference on the SAME offer, strictly above that offer's own price, of kind STRIKETHROUGH. A
+range is stated as a range: "între 12,00 și 17,99 lei în 4 magazine".
+
+**A DEVIATION FROM THE BRIEF, for the morning decision.** The brief allows striking either
+STRIKETHROUGH or OMNIBUS_30D. CLAUDE.md says the opposite about the second, and I followed
+CLAUDE.md: the Omnibus figure is the LOWEST price of the past 30 days, printed because the law
+requires it, so striking it claims a saving on what may be a price *increase*. It is now shown
+with its own label — "Preț minim în ultimele 30 de zile: X" — so the number still reaches the
+page and only the discount claim is withheld. Decision 1 in the morning report.
+
+**Surfaces swept.** Only the item page made this claim. `/oferte` says "economisești până la
+X" while naming the cheapest shop, and the basket says "dacă mergi în N magazine în loc de
+unul" — both state the comparison explicitly rather than dressing it as a discount, so both
+were left alone.
+
+**Guard.** `audit:displayed` gains: no struck price may equal another offer's price on the
+same product. In `verify:site`.
+
+**VERIFIED BY RENDERED HTML** on five products that have a range:
+
+    /p/telemea-de-vaca-in-saramura-delaco-400-g-5941360013192
+      cel mai mic preț | 25,19 RON | între 25,19 și 25,49 lei în 2 magazine
+    /p/iaurt-grecesc-natur-olympus-2-grasime-900-g-5941875901359
+      cel mai mic preț | 15,49 RON | 20,79 RON | între 15,49 și 16,99 lei în 2 magazine
+    /p/cascaval-de-ibanesti-mirdatod-450-g-5941872204255
+      cel mai mic preț | 30,19 RON | între 30,19 și 30,79 lei în 3 magazine
+    /p/cascaval-delaco-sofia-400-g-5941360016346
+      cel mai mic preț | 28,29 RON | între 28,29 și 28,99 lei în 2 magazine
+    /p/telemea-de-vaca-hochland-350-g-5941238005052
+      cel mai mic preț | 18,96 RON | între 18,96 și 19,29 lei în 2 magazine
+
+Four show no strike at all. The fifth strikes 20,79 — which is NOT inside its own 15,49–16,99
+range, so it is a genuine former price at that same shop and is correctly kept. That is the
+distinction the whole phase is about, visible in one line of output.
+
+727 tests pass.
+
+## PHASE 6 — out-of-stock sweep, site-wide (done during the phase-1 wait)
+
+Two real gaps, both the same shape: the withholding rule existed in one place and was not
+applied in the others.
+
+**`isCurrent` never checked `flagged`.** The canonical "is this a price we stand behind"
+predicate tested availability, staleness and observation age — and not whether a gate had
+withheld the offer. So the 135 kept-over-refused rows and the 62 excluded-category rows were
+withheld on the item table and counted as current everywhere else, including in `summarize`,
+which feeds every headline and every count on the site.
+
+**`currentOfferWhere` had the same hole.** That is the database twin of `isCurrent`, and the
+comment above it says both must agree. They did not.
+
+**Three listing paths filtered on `availability` alone**, ignoring staleness and flags
+entirely. All now call `isCurrent`, so there is one rule and one place to change it.
+
+`tests/page-self-consistency.test.ts` extended from the item page to ten surfaces — `/`,
+`/oferte`, `/dcneu`, `/alcool`, `/cosmetice`, `/farmacie`, `/c/lactate`, `/c/bauturi`,
+`/search?q=lapte`, `/lista` — each fetched and checked for NaN, Infinity, `undefined RON`,
+`null RON` and an empty price. All ten clean.
+
+728 tests pass.
+
+DEFERRED, logged rather than done: recipe pages and alerts were not swept. Both read prices
+through the same `queries.ts` helpers that now enforce `isCurrent`, so they inherit the fix,
+but neither was fetched and verified by rendered output. That verification is outstanding.
+
+## PHASE 8 — methodology page (done during the phase-1 wait)
+
+`/metodologie`, in plain Romanian, built from the live database rather than hand-written
+(merchant table, price channels, section counts all come from Prisma, so it cannot drift out
+of date the way a static page would).
+
+Covers, as the brief asked: which merchants and sections, that we read public pages once a
+day and drop anything unseen for MAX_DISPLAY_AGE_DAYS; what shelf / online / flyer each mean
+and that flyer prices carry a validity window; that we always link back to the merchant; that
+SGR deposits are shown separately and refunded on return.
+
+The matching section is deliberately the most honest part — it says we match automatically,
+that uncertain matches are held for a human and the product stays separate until then
+("preferăm să pierdem o comparație decât să punem prețul unui produs pe altul"), and that
+flavour, concentration, fat and format differences stop a match outright.
+
+A "ce nu facem" section states the three things this session fixed, as commitments: no price
+we have not seen ourselves, no tobacco, and no striking another shop's price to fake a
+discount.
+
+`raportează un preț greșit` now appears under the price table on EVERY item page, and the
+footer's "Cum funcționează" points here instead of `/despre`.
+
+VERIFIED BY RENDERED HTML: `/metodologie` returns 200 and renders the merchant table, the
+SGR section and the report link.
+
+`/despre` is left in place — it is the short pitch and is linked from elsewhere. Backlog:
+decide whether to fold it into this page or keep both.
+
+## PHASE 1 — completed
+
+All 12 attempted. **KAUFLAND ABORTED TWICE** — see the morning report, decision 2.
+
+Late completions: DCNeu (6,129 fresh offers, 18,330 review candidates queued),
+Farmacia Tei 2,022, Penny 30. Kaufland refused both times:
+`296 offers < 60% of last 594 live in section "grocery"`.
+
+The Kaufland abort is the drop guard working and being wrong at the same time. Kaufland is a
+FLYER source: its weekly catalogue genuinely varies in size, and this week's has 264 products
+against a baseline built from a larger one. The 60% guard was designed for a site redesign or
+an anti-bot block, where a collapse means the read broke. For a weekly flyer, a collapse can
+just be a smaller week. The guard kept the previous data, which is the safe outcome, so
+Kaufland is serving last week's prices with last week's dates.
+
+Provenance coverage after the run (percentages of that merchant's total offers):
+
+| merchant | offers | fresh | storeName | ownSize | rawText | blob |
+|---|---|---|---|---|---|---|
+| auchan | 9,391 | 5,981 | 64% | 61% | 65% | 64% |
+| carrefour | 2,801 | 2,131 | 76% | 76% | 77% | 76% |
+| dcneu | 8,279 | 6,129 | 74% | 64% | 97% | 74% |
+| farmaciatei | 2,717 | 2,022 | 74% | 57% | 82% | 74% |
+| finestore | 278 | 276 | 99% | 99% | 100% | 99% |
+| freshful | 1,938 | 357 | 18% | 18% | 22% | 18% |
+| kaufland | 655 | 595 | 91% | 80% | 100% | 100% |
+| lemanoir | 94 | 94 | 100% | 4% | 100% | 100% |
+| mega-image | 2,746 | 724 | 26% | 26% | 27% | 26% |
+| metro | 6,519 | 5,339 | 82% | 74% | 83% | 81% |
+| penny | 53 | 30 | 57% | 11% | 58% | 0% |
+| sezamo | 9,219 | 7,808 | 85% | 85% | 86% | 85% |
+
+The low percentages are all the same thing: offers not re-seen this run keep their old rows,
+and those predate the provenance columns. freshful and mega-image are lowest because they are
+match-only and reject 70%+ of their pool.
+
+Penny at 0% blob is a real gap: the adapter runner sets `rawSourceBlob` on the JSON path and
+not the DOM path. Logged to BACKLOG.
+
+## PHASE 2 — the Pepsi product, PROVEN
+
+Auchan's genuine six-pack now matches by EAN: storeName
+`"Bautura carbogazoasa cu gust de zmeura Pepsi, doza, 6 x 0.33 l"`, ownUnitSize 1.98 l,
+packCount 6, 28,14 lei, unit price 14,21 lei/l. Nothing new attached wrongly — the variant
+block held across the whole catalog (variant-flavour fired 1,515 times, pack-shape 409).
+
+BUT THE FIRST RENDER STILL FAILED. Three pre-block offers were still on the product:
+
+    Mega Image | Stoc epuizat | ultimul preț 6 aug. 2026 | 10,49 RON | 5,30 lei/L
+    Carrefour  | Stoc epuizat | ultimul preț 6 aug. 2026 | 10,49 RON | 5,30 lei/L
+    Freshful   | Stoc epuizat | ultimul preț 6 aug. 2026 | 17,99 RON | 9,09 lei/L
+
+all `storeName` NULL, `matchedBy` "scraper", stale. The variant block governs matches the
+matcher MAKES; these were made before it existed and their merchants' fresh runs simply never
+re-matched them, so the rows were marked stale and left where they were. Greyed with a date,
+they still claimed two shops carry a six-pack they do not sell.
+
+TWO FIXES:
+
+1. `withhold:unverifiable` — 9,822 offers across ~6,600 products that are stale, carry no
+   name of their own, and were matched by the pre-band path. They cannot be re-judged and the
+   matcher that made them is discredited. Flagged, not deleted; a re-scrape that sees the
+   product again writes a real offer and clears it.
+2. The item page now excludes FLAGGED offers from the table entirely. Out-of-stock rows still
+   show with their dates — that is a fact about a shop that does carry the product — but a
+   withheld row is one we do not believe, and greying a false claim does not make it true.
+
+**RENDERED HTML, after the fixes:**
+
+    cel mai mic preț | 28,14 RON | 14,21 lei/L · | 1 magazine | Vezi la Auchan · 28,14 RON →
+    Prețuri în 1 magazine
+    Magazin | Disponibilitate | Preț | Preț/unitate
+    Auchan | 🏬 | Magazin + online | În stoc | 28,14 RON | ✓ Cel mai mic preț | 14,21 lei/L
+
+One row, one shop, no cola, no vanilie, no 2 l PET. Count and rows agree. 28,14 / 1,98 =
+14,21. No strikethrough. PASS.
+
+## PHASE 3 — the unit-price-spread products
+
+**81 → 60 → 1.**
+
+The re-scrape under the variant block did most of it on its own: 81 products above 2x spread
+when first measured (worst 24.3x, freshful 1,69 against sezamo 40,99), 60 after the fresh data
+landed (worst 5.9x). The variant hard block and own-size provenance cut both the count and the
+severity without anyone withholding anything.
+
+`withhold:spread` then took the remaining 59 (one had already resolved between measurements):
+**106 offers withheld across 59 products, all 106 queued to /admin/matches.** The cheapest
+offer on each product stays, so the page becomes a single-shop price record with no
+cross-store claim — the claim is the part that was wrong, not the price.
+
+Re-measured after: **1 product above 2x**, and it sits exactly on the 2.0x boundary
+("CARNE SI SARE Mici porc vita oaie cca 0,53 kg" — a variable-weight meat product, where a
+2x spread between shops is plausible rather than a bad match).
+
+A BUG FOUND IN THE AUDIT ITSELF while doing this. `audit:unitprice` filtered on `isStale`
+and not on `flagged`, so after withholding 106 offers it still reported 60 — counting rows
+that are on no page. The same gap `isCurrent()` had in phase 6. Fixed; it now measures what
+the site actually shows.
+
+**A CONCERN I AM LOGGING RATHER THAN DECIDING** (morning decision 3): the brief says keep the
+cheapest offer. On some of these the cheapest may be the WRONG one. "Gelatina foi Dr. Oetker
+10 g" carried sezamo 1,59 · carrefour 5,79 · auchan 6,85 on names that all look like the same
+product — that reads more like sheets-vs-package than a bad match, and keeping 1,59 shows the
+lowest price on the page when three shops say otherwise. Kept-cheapest is what the brief asked
+for and what I did; whether it should be kept-median is your call.
+
+Worst 20 before withholding, for the record: 5.9x Măsline Kalamata · 4.6x Gelatina foi
+Dr. Oetker · 4.0x Tagliatelle Carbonara Baneasa · 3.9x Pasta de dinti Colgate Total.
+
+## PHASE 7 — the 21 smeared DCNeu ladders, and a much bigger find
+
+**Smeared ladders remaining after the fresh scrape: 0.** The check is the population one —
+an identical rung set appearing on 5+ offers that have 2+ distinct base prices — and it finds
+nothing. The 21 are gone, resolved by the re-scrape rather than by suppression.
+
+**The withheld-base rule holds exactly.** Of 3,743 offers carrying tiers, 3,596 ladders render
+and 147 are refused — and all 147 are refused *because their base is withheld, stale or out of
+stock*. Not one refusal for any other reason, which is what "a ladder on a price we do not
+believe is a made-up number wearing a percentage" looks like when it is working.
+
+### THE FLORI ARTIFICIALE QUESTION — half the shop was missing
+
+The user pointed at `FLORI ARTIFICIALE TOPORAS TEXTIL+PVC WEI A-80600` and it returned zero
+rows. The 70 products matching "FLORI" are all false positives — "flori de soc", "floarea
+soarelui", "floricele".
+
+**DCNeu publishes 180 leaf categories. We scraped 90.**
+
+`MAX_CATS` defaulted to 90 and the discovery does `.slice(0, MAX_CATS)`, which takes the first
+90 **in page order** — so it was not sampling the shop, it was truncating it, and the entire
+back half was invisible. `menaj/flori-artificiale` sits past position 90. So does
+`menaj/articole-baie`, `menaj/borcane`, `menaj/boluri` and 86 others.
+
+Every run logged `Discovered 90 leaf categories`, which reads as a fact about DCNeu rather
+than a fact about our cap. That is the whole failure: the number was true and told nobody
+anything.
+
+Cap raised to 250, and the log now says `⚠ CAPPED at MAX_CATS=N — there may be more` whenever
+it bites. **DCNeu needs a re-scrape to pick up the missing half** — not run tonight, because
+DCNeu alone takes over an hour and the remaining phases matter more.
+
+Logged to BACKLOG: every other scraper with a MAX_* constant needs the same look. The failure
+is silent by construction — a cap that bites produces a smaller, entirely valid-looking run.
+
+## PHASES 9 & 10 — verify, measure, close out
+
+audit:displayed 8/8. audit-db 23/28. verify:site NOT green; the five remaining are itemised
+in MORNING-REPORT §2 with a judgement on each.
+
+THREE AUDITS WERE MEASURING THE WRONG THING, all the same way — counting rows that
+withholding had already removed from every page. 8,822 then 22 then 46 reported failures,
+none of them a defect the site has. Fixing the site made its own checks lie, which is as
+dangerous as a check that misses real defects: both teach you to ignore it.
+
+Real fixes in this phase: 60 offers past their promo window marked expired, 129 tier rows
+removed from offers under review, 7 median outliers withheld with refusals recorded.
+
+THE ASSUMPTION TEST: every offer on one product describes the same size. Nothing verified it
+after matching. 0 of 2,017 comparable products disagree — the first clean result this method
+has produced, and it means the size gate works end to end rather than only at match time.
+
+Final backup taken.
+
+## ITEM 1 — the 47 outliers: one definition, and the 47 were not real
+
+**The 47 were an artifact of two definitions over two populations — the priceSource shape.**
+
+    audit-db:   |b - med| > 0.7*med   over EVERY offer it had loaded
+    the repair: b > 1.7*med || b < med/1.7   over VISIBLE offers only
+
+Two thresholds and two populations. They agree on the high side and differ by a factor of two
+on the low side (0.30*med against 0.588*med), and they disagree entirely about which rows
+count. The audit said 47, the repair found 7, and the gap read as a bug in one of them rather
+than a disagreement between them.
+
+`src/lib/outlier.ts` now holds the rule, the threshold, the minimum peer count and the
+population, and both callers import it. The absolute form is kept because "more than 70% from
+the median" is what CLAUDE.md states; the ratio form would need 1/1.7 = 0.588, which reads as
+41% and is not the rule.
+
+**Result under one definition: 0 visible outliers.** The 47 were withheld, stale or
+out-of-stock rows — on no page, misleading nobody. The invariant is now green and its name
+says `no VISIBLE offer deviates`.
+
+The median is computed over VISIBLE offers only, which matters: including withheld ones lets
+a price we have already refused drag the median toward itself and hide the next one.
+
+`withhold:outliers` also diagnoses, per the brief — pack-mismatch vs missing ownUnitSize vs
+genuine disagreement. With zero found there is nothing to diagnose, so the multipack question
+is answered by absence: the pack-shape gate IS reaching these rows now that the re-scrape has
+populated ownUnitSize.
+
+## ITEM 2 — DCNeu at full coverage, and truncation made loud everywhere
+
+`src/lib/truncation.ts`: `noteCap(label, discovered, scraped, cap)` for slice-style caps and
+`notePageCap(label, pagesRead, cap)` for pagination loops. Both print a loud line when the cap
+bites, because the failure is silent by construction — nothing crashes, the count is merely
+lower, and a lower count is indistinguishable from a shop that sells less.
+
+**Every cap in the codebase, surveyed:**
+
+| scraper | cap | value | shape | currently truncating |
+|---|---|---|---|---|
+| dcneu | MAX_CATS | 90 → **250** | slice | **YES — 90 of 180.** Fixed |
+| farmaciatei | MAX_SUBS | 24 | slice | wired to `noteCap`; reports at run time |
+| carrefour | MAX_PAGES | 13 | pagination | wired to `notePageCap` |
+| carrefour-alcohol | MAX_PAGES | 8 | pagination | wired |
+| finestore | MAX_PAGES | 12 | pagination | wired |
+| lemanoir | MAX_PAGES | 15 | pagination | wired |
+| metro | MAX_PAGES | 45 | pagination | wired |
+| megaimage | MAX_PAGES | 65 | pagination | loop shape differs, not wired — BACKLOG |
+| sezamo | MAX_PAGES | 30 | pagination | loop shape differs, not wired — BACKLOG |
+| auchan (adapter) | maxPages | 8 | pagination | runner breaks on an empty page, self-limiting |
+
+The slice-style caps are the dangerous ones: they take the FIRST N in page order and lose the
+tail. Pagination loops usually exit early when a page adds nothing, so reaching the cap is
+suspicious rather than proof — `notePageCap` says so in those words.
+
+**New invariant:** `no merchant's successful run collapsed to half its own recent best`. That
+is the shape truncation leaves in the data after the fact — a run reporting success while
+writing half what it used to. Currently green.
+
+DCNeu now reports `Discovered 180 leaf categories, scraping 180`. Re-scrape running.
+
+## ITEM 3 — Kaufland: the scrape was fine, the BASELINE was wrong
+
+**The actual error:** `run refused: 296 offers < 60% of last 594 live in section "grocery"`.
+Nothing else. The scrape itself was healthy — 264 of 265 prices parsed, 0.4% null, one empty
+string — and it matched 296 offers from a 264-product pool.
+
+**Why the baseline was wrong.** All 594 "live" Kaufland offers were observed on one day, and
+**303 of them carried a promo window that had already passed**. Flyer offers accumulate across
+weeks unless something expires them, so the guard was comparing one week's catalogue against
+three weeks of dead ones. 594 − 303 = 291 genuinely current offers, and 296 against 291 is a
+healthy run, not a 50% collapse.
+
+**Fixed without touching the guard, as instructed.** The drop-guard baseline now excludes
+offers whose promo window has passed. That is not an exemption and not a weakened threshold —
+the guard's rule is unchanged and still 60%. What changed is the number it reads, from "every
+row not yet marked stale" to "every row that is actually still on offer".
+
+Kaufland now writes **296 offers**. All 12 merchants succeed.
+
+**What would change if FLYER sources were exempted from the guard entirely** (the decision I
+was told not to take): Kaufland and any future flyer source would write whatever they found,
+including zero. The guard exists because a site redesign or an anti-bot block produces a
+collapsed run that looks exactly like a small week — and for Kaufland specifically, a broken
+run would silently replace 296 real prices with nothing while the merchant still looked alive
+in `audit:liveness`, because a write of zero offers still updates nothing and leaves the old
+rows in place. **The risk of exempting is that the one merchant whose data is hardest to
+sanity-check (weekly, no deep links, 100% flyer) would lose its only structural guard.** The
+baseline fix removes the need to decide: the guard now works correctly on flyer data.
+
+## ITEM 4 — every audit now declares its scope
+
+Three audits reported 8,822, 22 and 46 failures that were artifacts of withholding working.
+The cause was never a bad threshold — it was that an audit and the display disagreed about
+what "shown" means, and nothing in the audit said which it meant.
+
+All 21 audits now carry a scope banner as their first lines:
+
+**USER-FACING** — counts only rows that reach a page: `audit-displayed`,
+`audit-comparability`, `audit-unit-price`. A withheld, flagged, stale-and-hidden or
+quarantined row is on no page and cannot mislead anyone, so counting it reports a defect the
+site does not have.
+
+**DATA INTEGRITY** — counts every row, shown or not, and says "do not add a visibility filter
+here": the other 18. A withheld row is still data and a corruption hiding inside one is still
+a corruption.
+
+Corrected numbers after the re-scope:
+
+| audit | before | after |
+|---|---|---|
+| audit-displayed | 6/8 | **8/8** |
+| median outliers | 47 | **0** |
+| cheapest offer withheld | 8,822 | **0** |
+| struck price collisions | 22 | **0** (check replaced with a structural one) |
+| run successful with zero writes | 46 | **0** |
+| audit:unit-recompute | 0 live bugs | 0 live bugs |
+| audit:liveness | green | green, all 12 merchants |
+
+## FINAL — the metric split, and the last two cosmetic failures
+
+**1. Comparability split by section type.** `src/lib/section-type.ts` states it once and
+`audit:comparability`, `/admin/health` and `/metodologie` all read it.
+
+    COMPARISON (grocery + alcool)   1,980 of 24,361 comparable   8.1%   <- the product metric
+    PRICE (dcneu + cosmetice + farmacie)
+        products                    15,631
+        with a showable price       12,784   81.8%
+        offers with a ladder         7,239   56.6%
+
+The blended figure was measuring catalog COMPOSITION. DCNeu grew by 6,895 single-merchant
+products when its scraper stopped truncating and the headline fell from 5.6% to 5.0% — the
+catalog got strictly better and the number got worse. A metric that falls when you fix a bug
+is measuring the wrong thing.
+
+The methodology page now says it to shoppers too, under "Ce poți compara și ce nu": a person
+landing on a DCNeu page expecting a comparison and finding one shop deserves to have been told
+why, rather than concluding the site is broken.
+
+**2. The two cosmetic failures were both invisible-row artifacts, again.**
+
+*6 missing deep links:* zero under the visible population. The invariant counted withheld,
+stale and out-of-stock rows — a link can only mislead someone who can click it.
+
+*2 offers with no rawPriceText:* both flagged, stale AND out of stock. But the interesting
+part is WHY they had none — `repair-flagged-provenance` deliberately NULLS rawPriceText when a
+gate refuses a price, because the string we held belonged to the refused value rather than the
+kept one. This invariant then flagged exactly the rows another rule had deliberately cleared.
+**Both rules were right; the scope was wrong.** Flagged offers are now exempt.
+
+audit-db 25/29 → **27/29**.
+
+**The two survivors are historical records and are now commented as such**, so nobody tries to
+make them green:
+
+- Kaufland's two aborts on 2 September genuinely happened. The cause is fixed and Kaufland
+  writes 296 offers, but deleting the run rows to clear the invariant would be falsifying the
+  record of an outage to make a dashboard green. If it still fails in a week, THAT is a signal.
+- The two mass-move days are both full re-scrapes after a matcher change, which is what those
+  are for. The invariant cannot tell a correction from a corruption and should not try — a
+  human looks at any day it fires. Both were looked at; both are corrections. Tuning the
+  threshold to hide them would disable the check for the next real one.

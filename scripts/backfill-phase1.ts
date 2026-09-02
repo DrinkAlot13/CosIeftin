@@ -19,13 +19,24 @@ function priceSourceFor(slug: string, storeType: string): string {
 async function main() {
   const merchants = await prisma.merchant.findMany({ select: { id: true, slug: true, name: true, storeType: true, lastScrapeAt: true } });
 
-  console.log("=== priceSource + lastSeenAt ===");
+  // ── priceSource only. lastSeenAt is NOT backfilled here, and must never be again.
+  //
+  // This used to also write `lastSeenAt: m.lastScrapeAt` for EVERY offer of the merchant —
+  // including the ones that scrape never saw. That makes the field mean "the merchant ran"
+  // rather than "this offer was observed", which is the opposite of what a staleness check
+  // needs, and every staleness check reads it. 10,388 offers ended up stamped forward, and
+  // three offers last actually seen on 6 August were shown as current prices 26 days later,
+  // one of them badged "cel mai mic preț".
+  //
+  // There is no correct value to backfill here. An offer we did not observe has no observation
+  // date, and inventing one is exactly the harm. lastSeenAt is written by the scrape, on the
+  // rows the scrape actually saw, and nowhere else.
+  console.log("=== priceSource ===");
   for (const m of merchants) {
     const src = priceSourceFor(m.slug, m.storeType);
-    const seen = m.lastScrapeAt ?? new Date();
     const r = await prisma.offer.updateMany({
       where: { merchantId: m.id },
-      data: { priceSource: src, lastSeenAt: seen },
+      data: { priceSource: src },
     });
     if (r.count) console.log(`  ${m.name.padEnd(16)} ${src.padEnd(18)} ${r.count} offers`);
   }
@@ -94,7 +105,7 @@ async function main() {
   const rows = [
     ["offers total", total],
     ["with priceSource set", await prisma.offer.count({ where: { priceSource: { in: ["SHELF", "ONLINE", "DELIVERY_PLATFORM", "FLYER"] } } })],
-    ["with lastSeenAt", await prisma.offer.count({ where: { lastSeenAt: { not: null } } })],
+    ["with lastObservedAt", await prisma.offer.count({ where: { lastObservedAt: { not: null } } })],
     ["with referencePriceBani", await prisma.offer.count({ where: { referencePriceBani: { not: null } } })],
     ["with promo window", await prisma.offer.count({ where: { promoValidTo: { not: null } } })],
     ["with productUrl (deep link)", await prisma.offer.count({ where: { productUrl: { not: null } } })],

@@ -21,14 +21,26 @@
 
 import { chromium, type Browser, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
+import { recordRefusal } from "../src/lib/record-refusal";
 import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { deriveVatRateBp } from "../src/lib/price/vat";
 import { validateTiers, findSmearedLadders, type RawTier } from "../src/lib/price/bulkTiers";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { noteCap } from "../src/lib/truncation";
 
 const BASE = "https://comenzi.dcneu.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-const MAX_CATS = Number(process.env.DCNEU_MAX_CATS ?? 90);
+/**
+ * DCNeu publishes 180 leaf categories. This was capped at 90 — exactly half — and the cap was
+ * silently truncating, not sampling: `.slice(0, MAX_CATS)` takes the first 90 in page order,
+ * so the entire back half of the shop was invisible.
+ *
+ * That is why "FLORI ARTIFICIALE TOPORAS TEXTIL+PVC WEI A-80600" returned zero rows when a
+ * user pointed at it: `menaj/flori-artificiale` sits past position 90. The log said
+ * "Discovered 90 leaf categories" every run, which reads like a fact about the shop rather
+ * than a fact about our cap.
+ */
+const MAX_CATS = Number(process.env.DCNEU_MAX_CATS ?? 250);
 const DETAIL = process.env.DCNEU_DETAIL !== "0";
 const DETAIL_CONCURRENCY = Number(process.env.DCNEU_CONCURRENCY ?? 4);
 const DETAIL_MAX = Number(process.env.DCNEU_DETAIL_MAX ?? 0); // 0 = every product
@@ -130,6 +142,16 @@ export function parseCard(card: string): { product: DcneuProduct | null; reason?
       url,
       productUrl: url,
       rawPriceText,
+      // KEEP THE SOURCE PAYLOAD. DCNeu is an HTML source, so there is no JSON record to
+      // store — the card's own HTML fragment is the honest equivalent, bounded so a 6,000
+      // product run does not carry megabytes of markup into the database.
+      //
+      // Ten of twelve merchants kept nothing here, which is why `audit:unit-oracle` — the
+      // only check in this project that does not share an assumption with the thing it
+      // checks — could be run against exactly one of them. DCNeu is also the merchant whose
+      // fabricated-price era produced the 106 rows still being unwound today; it is the last
+      // one that should be un-auditable.
+      rawSourceBlob: card.slice(0, 3000),
       referencePriceBani: oldLei != null && oldLei > withVatLei ? Math.round(oldLei * 100) : null,
       referencePriceKind: oldLei != null && oldLei > withVatLei ? "STRIKETHROUGH" : null,
       image: img,
@@ -239,10 +261,11 @@ async function readTiers(page: Page, basePriceBani: number): Promise<RawTier[]> 
 async function main() {
   const startedAt = new Date();
   const home = (await getHtml(`${BASE}/`)) ?? "";
-  const cats = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
-    .filter((u) => !/\.(jpg|png|gif|css|js|woff)/i.test(u))
-    .slice(0, MAX_CATS);
-  console.log(`Discovered ${cats.length} leaf categories.`);
+  const allCats = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
+    .filter((u) => !/\.(jpg|png|gif|css|js|woff)/i.test(u));
+  const cats = allCats.slice(0, MAX_CATS);
+  noteCap("dcneu categories", allCats.length, cats.length, MAX_CATS);
+  console.log(`Discovered ${allCats.length} leaf categories, scraping ${cats.length}.`);
 
   const pool: DcneuProduct[] = [];
   const seen = new Set<string>();
@@ -356,9 +379,17 @@ async function main() {
     if (!v.ok) {
       tierRejects++;
       // A ladder that cannot be true is a parse error worth reviewing, not silent data.
-      await prisma.priceAnomaly.create({
-        data: { offerId: offer.id, rejectedPriceBani: p.tiers?.[0]?.unitPriceBani ?? 0, reason: `bulk tier: ${v.reason}` },
-      }).catch(() => {});
+      // Routed through recordRefusal so it carries the same context as every other refusal:
+      // which merchant, which item, what was kept instead, and the source string.
+      await recordRefusal({
+        offerId: offer.id,
+        merchantId: merchant.id,
+        storeName: p.name,
+        rejectedPriceBani: p.tiers?.[0]?.unitPriceBani ?? 0,
+        acceptedPriceBani: storedBaseBani,
+        rawPriceText: p.rawPriceText ?? null,
+        reason: `bulk tier: ${v.reason}`,
+      });
       continue;
     }
     if (v.tiers.length) {

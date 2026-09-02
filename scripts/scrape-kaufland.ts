@@ -200,8 +200,8 @@ async function main() {
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: "kaufland" },
-    update: { active: true, name: "Kaufland", websiteUrl: BASE, color: "#e10915", storeType: "physical", priceSource: "shelf" },
-    create: { slug: "kaufland", name: "Kaufland", websiteUrl: BASE, color: "#e10915", storeType: "physical", priceSource: "shelf" },
+    update: { active: true, name: "Kaufland", websiteUrl: BASE, color: "#e10915", storeType: "physical", priceChannel: "shelf" },
+    create: { slug: "kaufland", name: "Kaufland", websiteUrl: BASE, color: "#e10915", storeType: "physical", priceChannel: "shelf" },
   });
 
   const r = await matchPoolToCatalog(merchant.id, pool, { section: "grocery", addNew: true, label: "kaufland" });

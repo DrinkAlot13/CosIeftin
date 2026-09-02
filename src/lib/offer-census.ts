@@ -43,8 +43,8 @@ export type CensusRow = {
   isExpired: boolean;
   promoValidTo: Date | null;
   isStale: boolean;
-  lastSeenAt: Date | null;
-  lastSeen: Date;
+  lastObservedAt: Date | null;
+  priceSource?: string | null;
   availability: string;
   stockStatus: string;
   vatBasis: string;
@@ -57,7 +57,8 @@ export function classifyOffer(r: CensusRow, now: Date): Bucket {
   if (r.flagged) return "flagged by a sanity gate";
   if (r.isExpired || (r.promoValidTo && r.promoValidTo < now)) return "expired (past promoValidTo)";
 
-  const seen = r.lastSeenAt ?? r.lastSeen;
+  const seen = r.lastObservedAt;
+  if (!seen) return (r.priceSource ?? "") === "FLYER" ? "live" : "stale (not seen in a feed)";
   const staleByAge = now.getTime() - seen.getTime() > STALE_AFTER_DAYS * 86_400_000;
   if (r.isStale || staleByAge) return "stale (not seen in a feed)";
 

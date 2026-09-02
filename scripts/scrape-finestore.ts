@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { notePageCap } from "../src/lib/truncation";
 
 const BASE = "https://www.finestore.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -58,6 +59,7 @@ async function main() {
   for (const c of CATS) {
     let catAdded = 0;
     for (let p = 1; p <= MAX_PAGES; p++) {
+      if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
       let raw: { priceText: string; sku: string; name: string; href: string; img: string }[] = [];
       const grab = () =>
         page.$$eval(".fshr_inner", (nodes) =>
@@ -112,6 +114,11 @@ async function main() {
           url: r.href ? (r.href.startsWith("http") ? r.href : `${BASE}/${r.href.replace(/^\//, "")}`) : BASE,
           image: r.img ? (r.img.startsWith("http") ? r.img : `${BASE}/${r.img.replace(/^\//, "")}`) : null,
           category: c.cat,
+          // KEEP THE SOURCE PAYLOAD. This is a DOM source, so there is no JSON record — the
+          // extracted card fields are the closest honest equivalent, and something is better
+          // than the zero we had. Without it `audit:unit-oracle` cannot check this merchant
+          // at all, and ten of twelve were in that state.
+          rawSourceBlob: JSON.stringify(r).slice(0, 4096),
         });
         pageAdded++;
         catAdded++;

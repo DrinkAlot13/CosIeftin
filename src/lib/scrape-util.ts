@@ -6,17 +6,28 @@
 //   • EAN is a JOIN, not a guess — an exact GTIN match always wins.
 //   • Human MatchOverride decisions survive a rebuild and beat the heuristic.
 //   • Every match carries a confidence score + reason; low ones are flagged for review.
-//   • Prices pass a sanity gate (vs the offer's own history + the cross-store median);
-//     an implausible value is flagged and the old price is kept rather than written.
+//   • Prices pass a sanity gate (vs the offer's own history + the cross-store median) —
+//     which FLAGS and records, and never substitutes the stored price for the fresh one.
+//     History-anchoring defends stale data against fresh data, and the four cases examined
+//     by hand all went the same way: the refused value was the correct one.
 //   • A run that collapses to <60% of the store's last offer count is REFUSED (site
 //     redesign / block) instead of wiping good data.
 //   • Price history is append-on-change only.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { prisma } from "./db";
 import { parseSize } from "./ingest-core";
 import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
 import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "./price/parsePrice";
 import { tally as tallyCensus } from "./offer-census";
+import { ensureBackup } from "./ensure-backup";
+import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
+import { toPriceSource } from "./price-source";
+import { variantConflict } from "./variant-classes";
+import { depositFor, readPublishedDepositBani } from "./deposit";
+import { parseQuantity } from "./units/parseQuantity";
+import { exclusionReason } from "./excluded-categories";
 import { recordScraperRun } from "./scraper-run";
 
 /**
@@ -63,6 +74,9 @@ export type StoreProduct = {
 
 /** What a pool carries, as a fraction of its rows. Reported per run and gated on. */
 export type PoolCompleteness = {
+  /** items carrying the merchant's own payload — the only basis for an independent check */
+  withSourceBlob: number;
+  sourceBlobPct: number;
   total: number;
   withRawPriceText: number;
   withProductUrl: number;
@@ -82,10 +96,16 @@ export function poolCompleteness(pool: StoreProduct[]): PoolCompleteness {
   const withProductUrl = pool.filter((p) => nonEmpty(p.productUrl)).length;
   const withEan = pool.filter((p) => nonEmpty(p.ean)).length;
   const withImage = pool.filter((p) => nonEmpty(p.image)).length;
+  // The source payload is what makes an INDEPENDENT check possible. Kaufland's own
+  // per-unit price found 25 real size bugs; ten of twelve merchants could not be checked at
+  // all, because their payload was discarded here. Coverage is reported so that gap is
+  // visible per run rather than discovered a month later.
+  const withSourceBlob = pool.filter((p) => nonEmpty(p.rawSourceBlob)).length;
   const pct = (n: number): number => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
   return {
-    total, withRawPriceText, withProductUrl, withEan, withImage,
+    total, withRawPriceText, withProductUrl, withEan, withImage, withSourceBlob,
     rawPriceTextPct: pct(withRawPriceText), productUrlPct: pct(withProductUrl),
+    sourceBlobPct: pct(withSourceBlob),
   };
 }
 
@@ -126,7 +146,7 @@ async function censusForMerchant(merchantId: number): Promise<string> {
     where: { merchantId },
     select: {
       isStale: true, isExpired: true, availability: true, stockStatus: true, flagged: true,
-      vatBasis: true, promoValidTo: true, lastSeenAt: true, lastSeen: true,
+      vatBasis: true, promoValidTo: true, lastObservedAt: true, priceSource: true,
       merchant: { select: { active: true } },
       anomalies: { where: { resolved: false }, select: { id: true } },
     },
@@ -141,8 +161,8 @@ async function censusForMerchant(merchantId: number): Promise<string> {
       isExpired: o.isExpired,
       promoValidTo: o.promoValidTo,
       isStale: o.isStale,
-      lastSeenAt: o.lastSeenAt,
-      lastSeen: o.lastSeen,
+      lastObservedAt: o.lastObservedAt,
+      priceSource: o.priceSource,
       availability: o.availability,
       stockStatus: o.stockStatus,
       vatBasis: o.vatBasis,
@@ -296,7 +316,16 @@ export function doseTokens(nname: string): string {
   }
   // Garment/egg size codes: "marimea L" vs "marimea M" is a different product, but the
   // letter is a single character that the overlap tokens drop as unit noise.
-  for (const m of nname.matchAll(/m[aă]rim[ea]*s*:?s*(xs|s|m|l|xl|xxl)/gi)) {
+  //
+  // THIS REGEX HAD NEVER MATCHED ANYTHING. It was written through a shell heredoc that ate a
+  // layer of backslashes, so `\s*` became `s*` (a literal letter s) and the trailing `\b`
+  // became an actual BACKSPACE character, 0x08 — which no product name contains, so the whole
+  // pattern was unsatisfiable. It compiled, it ran, it returned nothing, for as long as it has
+  // existed. Found by `npm run check:hygiene` on its first run.
+  //
+  // The cost was visible the whole time and attributed elsewhere: the golden set's standing
+  // false match is "Oua de gaina marimea L, 10 bucati" against "…marimea M, 10 bucati".
+  for (const m of nname.matchAll(/m[aă]rim[ea]*\s*:?\s*(xs|s|m|l|xl|xxl)(?![a-z])/gi)) {
     out.push(`size:${m[1].toLowerCase()}`);
   }
   // percentages: fat content, alcohol, concentration
@@ -345,8 +374,8 @@ export const AUTO_MATCH_THRESHOLD = 0.62;
 /** Score at or above this (but below AUTO) is persisted PENDING and reviewed, not shown. */
 export const REVIEW_THRESHOLD = 0.42;
 
-type PrepItem = { nname: string; raw: string; nbrand: string; tokens: Set<string>; over: Set<string>; ean: string };
-function prep(name: string, brand: string | null | undefined, ean: string | null | undefined): PrepItem {
+export type PrepItem = { nname: string; raw: string; nbrand: string; tokens: Set<string>; over: Set<string>; ean: string };
+export function prep(name: string, brand: string | null | undefined, ean: string | null | undefined): PrepItem {
   const nname = normalizeText(name);
   // keep the raw name too: normalizeText strips % and unit letters, which is exactly
   // where dosage lives ("1,5% grasime", "500 mg")
@@ -354,10 +383,77 @@ function prep(name: string, brand: string | null | undefined, ean: string | null
 }
 
 /** Core rule: does store item `st` correspond to catalog item `cat` in this section? */
-function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: PrepItem, stSize: { unit: string; unitSize: number } | null, section: string): Decision {
+/**
+ * How far two sizes may differ and still be the same product. Also the tolerance used to decide
+ * that an offer's own size DISAGREES with the catalog product it was matched to.
+ */
+export const SIZE_TOLERANCE = 0.06;
+
+/**
+ * EVERY verdict `decide()` can return. Enumerated so that coverage can be MEASURED.
+ *
+ * `doseTokens()` carried a regex that had never matched anything: present, referenced, and
+ * unsatisfiable because a shell had eaten a backslash. Nothing distinguished "this rule is
+ * wrong" from "this rule never runs", and the cost showed up in the golden set as a false
+ * match on eggs, attributed to matcher tuning for weeks.
+ *
+ * So every run counts how often each rule fired, and a rule at ZERO is reported. Zero is not
+ * proof of a bug — `ean` legitimately never fires on a merchant that publishes no GTIN — but
+ * it is the only signal that separates a dead rule from a quiet one, and it costs nothing.
+ *
+ * `tests/decision-coverage.test.ts` asserts this list still matches the literals in
+ * `decide()`, so a new rule cannot be added without appearing here.
+ */
+export const DECISION_REASONS = [
+  // accept
+  "ean", "brand+size", "name+size",
+  // reject / review
+  "size-unit", "size", "head-noun", "brand",
+  // hard blocks: a disagreement inside a variant class, or a different pack shape
+  "variant-flavour", "variant-qualifier", "variant-fat", "variant-format", "pack-shape",
+  "mutually-distinct", "variant-mismatch", "dose-mismatch", "low-overlap",
+] as const;
+export type DecisionReason = (typeof DECISION_REASONS)[number];
+
+/** Counts how often each rule in `decide()` fired across one run. */
+export class DecisionCoverage {
+  private readonly counts = new Map<string, number>();
+  private readonly banded = new Map<string, number>();
+
+  record(d: Decision): void {
+    this.counts.set(d.reason, (this.counts.get(d.reason) ?? 0) + 1);
+    const k = `${d.reason}|${d.band}`;
+    this.banded.set(k, (this.banded.get(k) ?? 0) + 1);
+  }
+
+  /** Rules that never fired. A corrupted pattern lands here; so does a legitimately quiet one. */
+  get silent(): string[] {
+    return DECISION_REASONS.filter((r) => !this.counts.has(r));
+  }
+
+  report(label: string): void {
+    const total = [...this.counts.values()].reduce((a, b) => a + b, 0);
+    if (total === 0) return;
+    console.log(`  rule coverage (${label}): ${total} decisions`);
+    const rows = DECISION_REASONS.map((r) => ({ r, n: this.counts.get(r) ?? 0 }))
+      .sort((a, b) => b.n - a.n);
+    const line = rows
+      .map(({ r, n }) => `${r}=${n}${n === 0 ? " ⚠" : ""}`)
+      .join("  ");
+    console.log(`    ${line}`);
+    if (this.silent.length > 0) {
+      console.log(
+        `    ⚠ ${this.silent.length} rule(s) never fired: ${this.silent.join(", ")} — ` +
+        `either legitimately quiet, or a pattern that cannot match (see doseTokens).`,
+      );
+    }
+  }
+}
+
+export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: PrepItem, stSize: { unit: string; unitSize: number } | null, section: string): Decision {
   if (cat.ean && st.ean && cat.ean === st.ean) return { ok: true, band: "AUTO_MATCH", score: 1, reason: "ean" };
   if (!stSize || stSize.unit !== catSize.unit) return { ok: false, band: "REJECT", score: 0, reason: "size-unit" };
-  if (Math.abs(stSize.unitSize - catSize.unitSize) > catSize.unitSize * 0.06 + 1e-9) return { ok: false, band: "REJECT", score: 0, reason: "size" };
+  if (Math.abs(stSize.unitSize - catSize.unitSize) > catSize.unitSize * SIZE_TOLERANCE + 1e-9) return { ok: false, band: "REJECT", score: 0, reason: "size" };
   const chead = headNoun(cat.nname);
   if (chead && !st.tokens.has(chead) && !st.nname.includes(chead)) return { ok: false, band: "REJECT", score: 0, reason: "head-noun" };
   const branded = cat.nbrand.length > 0;
@@ -372,6 +468,38 @@ function decide(cat: PrepItem, catSize: { unit: string; unitSize: number }, st: 
   // products at three merchants and Chio chips fanned out 15×: brand + head-noun + size
   // is not a product, it is a product FAMILY.
   const jac = fuzzyJaccard(cat.over, st.over);
+
+  // ── VARIANT CLASS CONFLICT — A HARD BLOCK, CHECKED BEFORE ANYTHING SCORED ─────────
+  //
+  // If the two names disagree about flavour, formulation, fat content or container, they are
+  // different products and no amount of name overlap changes that.
+  //
+  // This runs BEFORE mutual distinction on purpose. Mutual distinction fires on the Pepsi
+  // case but returns REVIEW rather than REJECT whenever the Jaccard score clears the review
+  // threshold — and "Bautura carbogazoasa … Pepsi …" against "Bautura carbogazoasa … Pepsi …"
+  // clears it comfortably. A REVIEW verdict still keeps the pair out of the catalog, but the
+  // score decided the outcome, and for a flavour difference the score should not get a vote.
+  //
+  // The size gate could not catch it either: 6 × 0.33 = 1.98 L against a 2 L bottle is a 1%
+  // difference and the tolerance is 6%. Two unrelated products agreed on volume by accident.
+  const vc = variantConflict(cat.raw, st.raw);
+  if (vc) {
+    return {
+      ok: false, band: "REJECT", score: jac,
+      reason: `variant-${vc.klass}`,
+    };
+  }
+
+  // ── PACK SHAPE — a 6-pack and a single bottle are different products ──────────────
+  //
+  // The totals can agree to within a percent while the products could not be less alike.
+  // Only blocks when both sides state a shape and at least one is a genuine multipack, so a
+  // plain "2 l" against a plain "2 l" (both packCount 1 by default) is untouched.
+  const catPack = parseQuantity(cat.raw)?.packCount ?? 1;
+  const stPack = parseQuantity(st.raw)?.packCount ?? 1;
+  if (catPack !== stPack && Math.max(catPack, stPack) > 1) {
+    return { ok: false, band: "REJECT", score: jac, reason: "pack-shape" };
+  }
 
   // ── MUTUAL DISTINCTION ────────────────────────────────────────────────────────────
   // The decisive rule, and it is structural rather than a vocabulary list — enumerating
@@ -465,16 +593,51 @@ export async function matchPoolToCatalog(
   const addNew = opts.addNew ?? false;
   const startedAt = new Date();
 
+  // A snapshot before anything writes. Short-circuits if one is under an hour old, so twelve
+  // scrapers in one session produce one snapshot, not twelve.
+  ensureBackup(`${opts.label ?? "merchant " + merchantId} scrape`);
+
   // Check provenance BEFORE any database work: a mangled pool must not write at all.
   const completeness = assertPoolContract(pool, opts.label ?? `merchant ${merchantId}`);
   console.log(
     `  pool contract: ${completeness.total} products · rawPriceText ${completeness.rawPriceTextPct}%` +
     ` · productUrl ${completeness.productUrlPct}%` +
     ` · ean ${completeness.withEan}` +
-    ` · image ${completeness.withImage}`,
+    ` · image ${completeness.withImage}` +
+    ` · sourceBlob ${completeness.sourceBlobPct}%${completeness.sourceBlobPct === 0 ? " ⚠ no independent check possible" : ""}`,
   );
 
-  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceSource: true } });
+  // ── EXCLUDED CATEGORIES, refused HERE so they can never enter the catalog.
+  //
+  // Tobacco and nicotine. Legea 349/2002 prohibits advertising and promotion of tobacco
+  // products and Legea 201/2016 extends the regime to electronic cigarettes and refills; a
+  // public price-comparison page is not an obvious fit for the narrow exceptions, and a
+  // grocery basket optimiser has no reason to carry it at all.
+  //
+  // The exclusion happens BEFORE matching, not at display time, because a row that exists in
+  // the database is a worse place to discover a legal question from than a row that was never
+  // written. It also puts it out of reach of `addNew`, which would otherwise CREATE the
+  // catalog entry — Mega Image's pool alone carries 126 tobacco head nouns.
+  const kept: StoreProduct[] = [];
+  const excludedByReason = new Map<string, number>();
+  const excludedSamples: string[] = [];
+  for (const sp of pool) {
+    const reason = exclusionReason(sp.name, sp.brand);
+    if (reason === null) { kept.push(sp); continue; }
+    excludedByReason.set(reason, (excludedByReason.get(reason) ?? 0) + 1);
+    if (excludedSamples.length < 8) excludedSamples.push(sp.name.slice(0, 60));
+  }
+  if (excludedByReason.size > 0) {
+    console.log(
+      `  excluded ${pool.length - kept.length} product(s) we do not carry: ` +
+      `${[...excludedByReason.entries()].map(([k, v]) => `${k}=${v}`).join("  ")}`,
+    );
+    for (const x of excludedSamples) console.log(`      ${x}`);
+  }
+  pool = kept;
+
+  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { slug: true, lastOfferCount: true, priceChannel: true } });
+  const merchantSlugForDeposit = merchant?.slug ?? "";
   const rows = await prisma.product.findMany({ where: { section }, select: { id: true, name: true, brand: true, ean: true, unit: true, unitSize: true, image: true } });
   const catMap = new Map((await prisma.category.findMany({ select: { slug: true, id: true } })).map((c) => [c.slug, c.id]));
   const overrides = new Map((await prisma.matchOverride.findMany({ where: { merchantId }, select: { storeKey: true, productId: true, decision: true } })).map((o) => [o.storeKey, o]));
@@ -495,8 +658,24 @@ export async function matchPoolToCatalog(
   // Prepare + index the store pool by each significant name token.
   const prepared: Prepared[] = [];
   const storeByToken = new Map<string, Prepared[]>();
+  // A POOL ITEM WITH NO USABLE PRICE IS A REFUSAL, NOT A NON-EVENT.
+  //
+  // This line used to be a bare `continue`: silent, uncounted, and unrecoverable. An item
+  // whose price could not be read simply did not exist, which is indistinguishable from the
+  // store not selling it. Now it is recorded like any other refusal — with no offerId,
+  // because it never got that far, which is exactly why it needed recording.
+  const preOfferRefusals: { storeName: string; rawPriceText: string | null; reason: string }[] = [];
   for (const sp of pool) {
-    if (!(sp.price > 0) || !sp.name) continue;
+    if (!(sp.price > 0) || !sp.name) {
+      if (sp.name) {
+        preOfferRefusals.push({
+          storeName: sp.name,
+          rawPriceText: sp.rawPriceText ?? null,
+          reason: `no usable price in the pool (price=${sp.price})`,
+        });
+      }
+      continue;
+    }
     const item = prep(sp.name, sp.brand, sp.ean);
     const pr: Prepared = { sp, item, size: parseSize(sp.name), storeKey: slugify(sp.name) || sp.url };
     prepared.push(pr);
@@ -505,6 +684,21 @@ export async function matchPoolToCatalog(
       if (!b) { b = []; storeByToken.set(t, b); }
       b.push(pr);
     }
+  }
+  // Flush the pre-offer refusals. Capped: a wholly broken run would otherwise write one row
+  // per product, and the run-level tripwires already say "this run is broken" far louder.
+  for (const r of preOfferRefusals.slice(0, MAX_PRE_OFFER_REFUSALS)) {
+    await recordRefusal({
+      offerId: null, merchantId, storeName: r.storeName,
+      rejectedPriceBani: 0, acceptedPriceBani: null,
+      rawPriceText: r.rawPriceText, reason: r.reason,
+    });
+  }
+  if (preOfferRefusals.length > 0) {
+    console.log(
+      `  ${preOfferRefusals.length} pool item(s) had no usable price` +
+      `${preOfferRefusals.length > MAX_PRE_OFFER_REFUSALS ? ` (first ${MAX_PRE_OFFER_REFUSALS} recorded)` : " (recorded)"}`,
+    );
   }
 
   // FABRICATION GUARD (pool level, BEFORE matching): distinct store products sharing one
@@ -536,16 +730,19 @@ export async function matchPoolToCatalog(
     }
   }
 
-  const chosen = new Map<number, { unitSize: number; price: number; available: boolean; url: string; image: string | null; fillImage: boolean; category?: string; score: number; reason: string; source: string; sp: StoreProduct }>();
+  const chosen = new Map<number, { unitSize: number; ownSize: { unit: string; unitSize: number } | null; price: number; available: boolean; url: string; image: string | null; fillImage: boolean; category?: string; score: number; reason: string; source: string; sp: StoreProduct }>();
   const consider = (productId: number, unitSize: number, catImage: string | null, c: Prepared, score: number, reason: string) => {
     const prev = chosen.get(productId);
     const better = !prev || (c.sp.available && !prev.available) || (c.sp.available === prev.available && c.sp.price < prev.price);
-    if (better) chosen.set(productId, { unitSize, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: c.sp.priceSource ?? merchant?.priceSource ?? "SHELF", sp: c.sp });
+    // ownSize is the size parsed from THIS offer's own name. It is what the unit price must be
+    // computed from; the catalog product's size is a different product's size.
+    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: toPriceSource(c.sp.priceSource ?? merchant?.priceChannel), sp: c.sp });
   };
   // productId a store item is forbidden from (reject override), keyed by storeKey.
   const rejects = new Set<string>();
   for (const [k, o] of overrides) if (o.decision === "reject") rejects.add(`${k}:${o.productId}`);
   const rowById = new Map(rows.map((r) => [r.id, r]));
+  const catUnitById = new Map(rows.map((r) => [r.id, r.unit]));
 
   const explained = new Set<Prepared>();
 
@@ -580,6 +777,14 @@ export async function matchPoolToCatalog(
 
   // PHASE 1 — catalog coverage: each catalog product takes the cheapest store product that
   // shares its head-noun and clears decide() (size ±6% + brand + section-aware overlap).
+  // POOL CENSUS. Where every pool item ends up, counted rather than inferred.
+  //
+  // Mega Image pools 7,160 products and writes 724 offers, and until now NOTHING said where
+  // the other 6,436 went. The three possible answers are completely different problems: the
+  // matcher rejected them, the matcher was unsure and queued them, or the matcher never saw
+  // them at all — and only the last is a pipeline bug. Guessing between those cost a session.
+  const consideredPool = new Set<Prepared>();
+  const coverage = new DecisionCoverage();
   for (const cp of rows) {
     const cItem = prep(cp.name, cp.brand, cp.ean);
     const chead = headNoun(cItem.nname);
@@ -589,7 +794,9 @@ export async function matchPoolToCatalog(
     const cSize = { unit: cp.unit, unitSize: cp.unitSize };
     for (const c of cands) {
       if (rejects.has(`${c.storeKey}:${cp.id}`)) continue;
+      consideredPool.add(c);
       const d = decide(cItem, cSize, c.item, c.size, section);
+      coverage.record(d);
       if (!d.ok) { noteReview(cp.id, c, d); continue; }
       explained.add(c);
       consider(cp.id, cp.unitSize, cp.image, c, d.score, d.reason);
@@ -618,6 +825,52 @@ export async function matchPoolToCatalog(
     }
   }
 
+  // ── Report the census. A match-only merchant (addNew false) DISCARDS everything it does
+  //    not match, and that is a deliberate design — Auchan is the catalog master and the
+  //    others attach prices to products it already carries. Deliberate is not the same as
+  //    measured: nothing had ever printed how much a match-only run throws away.
+  {
+    const reviewKeys = new Set([...review.values()].map((r) => r.c.storeKey));
+    const matched = prepared.filter((c) => explained.has(c)).length;
+    const seen = prepared.filter((c) => consideredPool.has(c)).length;
+    const inReview = prepared.filter((c) => !explained.has(c) && reviewKeys.has(c.storeKey)).length;
+    const rejected = seen - matched - inReview;
+    const neverSeen = prepared.length - seen;
+    const pct = (n: number): string => (prepared.length ? ((n / prepared.length) * 100).toFixed(1) : "0.0") + "%";
+    console.log(
+      `  pool census: ${prepared.length} items · matched ${matched} (${pct(matched)}) · ` +
+      `review ${inReview} (${pct(inReview)}) · rejected ${rejected} (${pct(rejected)}) · ` +
+      `never considered ${neverSeen} (${pct(neverSeen)})` +
+      `${addNew ? "" : " · addNew OFF, so everything unmatched is discarded"}`,
+    );
+    if (!addNew && neverSeen > prepared.length * 0.5) {
+      console.log(
+        `  ⚠ over half this pool shares no head-noun with ANY catalog product. That is a` +
+        ` catalog coverage gap, not a matcher decision.`,
+      );
+    }
+    // POOL_DUMP=1 writes the pool with each item's outcome, so the REJECTED population can
+    // be sampled offline. Rejections are not persisted anywhere — only the REVIEW band is —
+    // so without this the largest bucket in the census is the one nobody can look at.
+    coverage.report(opts.label ?? section);
+    if (process.env.POOL_DUMP) {
+      const dir = join(process.cwd(), "tmp-pools");
+      mkdirSync(dir, { recursive: true });
+      const dump = prepared.map((c) => ({
+        name: c.sp.name,
+        brand: c.sp.brand ?? null,
+        price: c.sp.price,
+        unit: c.size?.unit ?? null,
+        unitSize: c.size?.unitSize ?? null,
+        outcome: explained.has(c) ? "matched" : reviewKeys.has(c.storeKey) ? "review"
+          : consideredPool.has(c) ? "rejected" : "never-considered",
+      }));
+      const file = join(dir, `${opts.label ?? section}-pool.json`);
+      writeFileSync(file, JSON.stringify(dump), "utf8");
+      console.log(`  [POOL_DUMP] wrote ${dump.length} items to ${file}`);
+    }
+  }
+
   // DROP-GUARD — refuse a run that collapsed (site redesign / anti-bot block) rather than
   // marking everything out-of-stock and wiping good data.
   //
@@ -631,8 +884,24 @@ export async function matchPoolToCatalog(
   //
   // Counting the live offers for THIS merchant and THIS section cannot be clobbered by
   // another scraper, and is the number the guard actually means.
+  // AN EXPIRED PROMOTION IS NOT PART OF THE BASELINE.
+  //
+  // Kaufland aborted twice on `296 offers < 60% of last 594 live`, and the scrape was
+  // perfectly healthy — 264 of 265 prices parsed. The 594 was the problem: all observed on
+  // one day, and 303 of them carried a promo window that had ALREADY PASSED. Flyer offers
+  // accumulate across weeks unless something expires them, so the guard was comparing one
+  // week's catalogue against three weeks of dead ones and refusing a good run.
+  //
+  // Excluding them is not weakening the guard — the guard is right that a collapse means
+  // something broke. It is fixing the number the guard reads: 594 - 303 = 291 genuinely
+  // current offers, against which 296 is a healthy run rather than a 50% collapse.
   const baseline = await prisma.offer.count({
-    where: { merchantId, product: { section }, isStale: false },
+    where: {
+      merchantId,
+      product: { section },
+      isStale: false,
+      OR: [{ promoValidTo: null }, { promoValidTo: { gte: new Date() } }],
+    },
   });
   if (baseline > 0 && chosen.size < baseline * 0.6) {
     const reason = `run refused: ${chosen.size} offers < 60% of last ${baseline} live in section "${section}"`;
@@ -659,13 +928,62 @@ export async function matchPoolToCatalog(
     const jump = prev && prev > 0 && (o.price > prev * 4 || o.price < prev * 0.25);
     const outlier = med > 0 && others.length >= 2 && (o.price > med * 6 || o.price < med / 6);
     const lowConf = o.score < 0.35;
-    let writePrice = o.price;
+
+    // Does this offer's OWN size agree with the catalog product it was matched to?
+    //
+    // When it does not, the match is wrong — that is what a size disagreement MEANS. The old
+    // code computed the unit price from the catalog size, which made a mismatched offer look
+    // plausible instead of absurd and hid the disagreement completely. Now the disagreement is
+    // the flag, and a flagged offer is withheld from display rather than shown with a
+    // believable-looking number.
+    const ownSize = o.ownSize;
+    // `rows` is the catalog snapshot taken BEFORE this run created anything, so a product
+    // created during this run has no entry here and `catUnit` is undefined.
+    //
+    // SILENCE IS NOT DISAGREEMENT — the same rule the matcher already applies to dosage.
+    // `ownSize.unit !== undefined` is true for every unit there is, so comparing against a
+    // missing value flagged every newly-created product as a size conflict: 71 of the 74
+    // flags on Auchan's first gated run said "offer is 0.5 kg, catalog product is 0.5
+    // undefined" — the numbers agreeing and the unit simply absent. A gate that fires on
+    // missing data instead of on a contradiction teaches everyone to ignore it.
+    const catUnit = catUnitById.get(productId);
+    const unitContradicts = catUnit != null && ownSize != null && ownSize.unit !== catUnit;
+    const sizeDisagrees =
+      ownSize != null && o.unitSize > 0 &&
+      (unitContradicts ||
+       Math.abs(ownSize.unitSize - o.unitSize) > o.unitSize * SIZE_TOLERANCE + 1e-9);
+
+    // ── THE HISTORY GATE FLAGS. IT DOES NOT SUBSTITUTE. ──────────────────────────────────
+    //
+    // `writePrice = prev` used to sit here: on a large move we kept the STORED price and
+    // discarded the fresh observation. That is backwards, and four cases examined by hand
+    // proved it — Auchan 12,00 (independently re-scraped at 11,69), Kaufland 6,89 (the
+    // merchant's own JSON says 6,89), a Mega Image 5+1 six-pack holding 5,29 against a real
+    // 23,95, and the whole 30 August correction wave.
+    //
+    // The reason generalizes. A gate anchored on stored history assumes history is more
+    // trustworthy than the new observation, and that assumption is exactly inverted while
+    // parsers are being corrected — which has been every day of this project. History
+    // anchoring defends stale data against fresh data. 135 stored prices in this catalog were
+    // kept over a refused one; 106 of them are DCNeu rows from the fabricated-price era
+    // holding values four to six times too low, defended against their own correction.
+    //
+    // It is not uniformly wrong — Glenfiddich 21 kept 899,99 over a mis-parsed 152,42, and
+    // there the gate was right. It simply cannot tell a correction from a parse error, so it
+    // must not be the thing that decides. It flags; a flagged offer is withheld from display
+    // and queued for review; and what decides is an oracle where one exists (a merchant's own
+    // published per-unit price) or unit-price plausibility where one does not.
+    const writePrice = o.price;
     let flagged = false;
     let flagReason: string | null = null;
     if (jump || outlier) {
       flagged = true;
-      flagReason = jump ? `price jump ${prev}→${o.price}` : `outlier vs median ${med.toFixed(2)}`;
-      if (prev && prev > 0) writePrice = prev; // keep the trusted price; don't write garbage
+      flagReason = jump ? `price moved ${prev}→${o.price}` : `outlier vs cross-store median ${med.toFixed(2)}`;
+    } else if (sizeDisagrees && ownSize) {
+      flagged = true;
+      flagReason =
+        `size disagreement: offer is ${ownSize.unitSize} ${ownSize.unit}, ` +
+        `catalog product is ${o.unitSize} ${catUnit ?? "(unit unknown)"} — the match is wrong`;
     } else if (lowConf) {
       flagged = true;
       flagReason = `low match confidence ${o.score.toFixed(2)} (${o.reason})`;
@@ -674,17 +992,64 @@ export async function matchPoolToCatalog(
 
     // Provenance travels with every write: the raw string that produced this price, the
     // deep link (null when the source has none), and any advertised reference price.
+    // PROVENANCE MUST DESCRIBE THE PRICE WE ACTUALLY WROTE.
+    //
+    // When a gate refuses a price we keep the previously trusted one — and this block used to
+    // overwrite `rawPriceText` with the REFUSED string anyway. The row then claimed a source
+    // it did not come from, and the one column that exists so a price can be checked against
+    // its source was corrupted for precisely the rows most in need of checking.
+    //
+    // Measured before the fix: 129 offers in the catalog did not reproduce from their own
+    // rawPriceText, and ALL 129 were flagged — 129 of the 130 flagged offers in the database.
+    // Not an edge case: a defect on the shared write path that hit every refusal.
+    //
+    // On a refusal the price-describing fields are simply omitted from the update, so Prisma
+    // leaves the previous values in place. Nothing is lost: the refused string, the refused
+    // value and the kept value all go to PriceAnomaly. The item-describing fields (name, own
+    // size, deep link) and `lastObservedAt` still update — we DID see the product, we just
+    // did not believe its price.
+    // Always false now that the gate never substitutes. Kept as an explicit guard so that
+    // if any future gate DOES substitute, it cannot silently corrupt provenance again.
+    // The deposit is computed from the offer's OWN size and pack shape, never the catalog
+    // product's — the same rule as the unit price, for the same reason: a 6-pack matched onto
+    // a 2 l entry would otherwise inherit the wrong container count.
+    const ownPack = parseQuantity(o.sp.name)?.packCount ?? 1;
+    const sgr = depositFor({
+      unit: ownSize?.unit ?? null,
+      unitSize: ownSize?.unitSize ?? null,
+      packCount: ownPack,
+      categorySlug: o.sp.category ?? null,
+      publishedPerContainerBani: readPublishedDepositBani(merchantSlugForDeposit, o.sp.rawSourceBlob ?? null),
+    });
+
+    const priceWasRefused = Math.abs(writePrice - o.price) > 1e-9;
     const provenance = {
-      rawPriceText: o.sp.rawPriceText ?? null,
-      rawSourceBlob: o.sp.rawSourceBlob ? o.sp.rawSourceBlob.slice(0, 4096) : null,
+      // The offer's OWN identity, so the unit price can be re-derived and checked without a
+      // re-scrape. Its absence is why the catalog-size bug was unverifiable from stored data.
+      storeName: o.sp.name,
+      ownUnit: ownSize?.unit ?? null,
+      ownUnitSize: ownSize?.unitSize ?? null,
       productUrl: o.sp.productUrl ?? null,
-      referencePriceBani: o.sp.referencePriceBani ?? null,
-      referencePriceKind: o.sp.referencePriceKind ?? null,
       promoValidFrom: o.sp.promoValidFrom ?? null,
       promoValidTo: o.sp.promoValidTo ?? null,
-      lastSeenAt: new Date(),
+      lastObservedAt: new Date(),
       isStale: false,
+      // SGR container deposit. Read from the merchant's own published figure where it has one
+      // (Auchan prints GARANTIE_SGR), derived from pack shape and category otherwise, and
+      // NULL when the product is not in the scheme — "no deposit" and "a deposit of zero" are
+      // different claims and only one of them is supportable.
+      depositBani: sgr?.perContainerBani ?? null,
+      containerCount: sgr?.containerCount ?? null,
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
+      // Only when the price we are writing is the price we just read.
+      ...(priceWasRefused
+        ? {}
+        : {
+            rawPriceText: o.sp.rawPriceText ?? null,
+            rawSourceBlob: o.sp.rawSourceBlob ? o.sp.rawSourceBlob.slice(0, 4096) : null,
+            referencePriceBani: o.sp.referencePriceBani ?? null,
+            referencePriceKind: o.sp.referencePriceKind ?? null,
+          }),
     };
     // BANI IS THE VALUE WE WRITE; the float is derived from it, never the reverse.
     //
@@ -697,20 +1062,53 @@ export async function matchPoolToCatalog(
     // the integer column was validated by nothing at all.
     const priceBani = leiToBaniExact(writePrice);
     const writeFloat = baniToLei(priceBani);
-    const ppu = o.unitSize > 0 ? writeFloat / o.unitSize : writeFloat;
+    // ── UNIT PRICE COMES FROM THE OFFER'S OWN SIZE. ALWAYS.
+    //
+    // This used to divide by the CATALOG product's unitSize, which is the single most damaging
+    // bug this codebase has had, because it CONCEALS every matching error instead of exposing
+    // one. A 2 L Pepsi Cola wrongly matched to a "6 x 0.33 l zmeura" catalog entry was shown at
+    // 10.49 / 1.98 = 5.30 lei/L — a completely plausible number. Divided by its OWN 2 L it is
+    // 5.25, and the two sizes disagreeing is the signal that the match is wrong. Using the
+    // catalog size threw that signal away and printed a believable price on a wrong product.
+    //
+    // If the offer's own size cannot be parsed there is no honest unit price, so none is stored.
+    // A fallback to the catalog size would reintroduce exactly this bug.
+    const ppu = ownSize && ownSize.unitSize > 0 ? writeFloat / ownSize.unitSize : 0;
     // Null rather than a crash or a lie: a mis-parsed pack size ("3 mg/ml" read as the pack)
     // can push this past what an INT column holds, and the column is nullable for exactly
     // that reason. See perUnitBaniOrNull.
-    const ppuBani = perUnitBaniOrNull(writeFloat, o.unitSize);
+    const ppuBani = ownSize && ownSize.unitSize > 0 ? perUnitBaniOrNull(writeFloat, ownSize.unitSize) : null;
     const avail = o.available ? "in stock" : "out of stock";
     const offer = await prisma.offer.upsert({
       where: { productId_merchantId: { productId, merchantId } },
-      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, lastSeen: new Date(), ...provenance },
+      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
       create: { productId, merchantId, price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
     });
     // append a history point only when the price actually changed (20–50× fewer rows)
     if (prev === undefined || Math.abs(prev - writePrice) > 1e-9) {
       await prisma.priceHistory.create({ data: { offerId: offer.id, price: writeFloat, priceBani, referencePriceBani: o.sp.referencePriceBani ?? null } });
+    }
+    // THE REJECTED PRICE IS THE EVIDENCE, so it is recorded rather than discarded.
+    //
+    // CLAUDE.md has always said a price failing the sanity gate "is flagged into a
+    // PriceAnomaly table for review". Only `scrape-dcneu` ever wrote one, so the rule held
+    // for one merchant out of twelve; on this path the rejected number was replaced by the
+    // previous price in memory and then lost. That is what made the Auchan 28,14 -> 12,00
+    // question take a scrape to answer: nothing had kept what was refused, or why.
+    if (jump || outlier) {
+      // rejectedPriceBani is 0 because NOTHING WAS REFUSED any more — the fresh value is what
+      // we wrote. The record exists so a human can review a large move, and the previous
+      // value is carried in the reason. `audit:kept-over-refused` keys on a non-zero rejected
+      // value, so it correctly reports nothing new from here on.
+      await recordRefusal({
+        offerId: offer.id,
+        merchantId,
+        storeName: o.sp.name,
+        rejectedPriceBani: 0,
+        acceptedPriceBani: priceBani,
+        rawPriceText: o.sp.rawPriceText ?? null,
+        reason: `${flagReason ?? "large move"} — written and flagged for review, not refused`,
+      });
     }
   }
 
@@ -723,8 +1121,9 @@ export async function matchPoolToCatalog(
   const censusJson = await censusForMerchant(merchantId).catch(() => null);
   await recordScraperRun({
     merchantId, startedAt,
-    tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false },
+    tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false, unavailable: 0, unavailableRate: 0, unavailableExceedsThreshold: false },
     offersRejected: flaggedCount,
+    offersWritten: chosen.size,
     previousRunCount: merchant?.lastOfferCount ?? 0,
     censusJson,
   });

@@ -7,6 +7,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
+import { computeLiveness, formatSilence, MAX_SILENCE_HOURS } from "@/lib/liveness";
+import { sectionKind, SECTION_LABELS } from "@/lib/section-type";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sănătatea scraperelor", robots: { index: false } };
@@ -30,7 +32,7 @@ export default async function HealthPage() {
   const staleCutoff = new Date(Date.now() - STALE_AFTER_DAYS * 864e5);
   const merchants = await prisma.merchant.findMany({
     where: { active: true },
-    select: { id: true, name: true, slug: true, priceSource: true, lastScrapeAt: true, lastOfferCount: true },
+    select: { id: true, name: true, slug: true, priceChannel: true, lastScrapeAt: true, lastOfferCount: true },
     orderBy: { name: "asc" },
   });
 
@@ -40,7 +42,7 @@ export default async function HealthPage() {
         prisma.scraperRun.findMany({ where: { merchantId: m.id }, orderBy: { startedAt: "desc" }, take: 2 }),
         prisma.offer.count({ where: { merchantId: m.id } }),
         prisma.offer.count({ where: { merchantId: m.id, flagged: true } }),
-        prisma.offer.count({ where: { merchantId: m.id, OR: [{ isStale: true }, { lastSeenAt: { lt: staleCutoff } }] } }),
+        prisma.offer.count({ where: { merchantId: m.id, OR: [{ isStale: true }, { lastObservedAt: { lt: staleCutoff } }] } }),
         prisma.offer.count({ where: { merchantId: m.id, isExpired: true } }),
         prisma.priceAnomaly.count({ where: { resolved: false, offer: { merchantId: m.id } } }),
         prisma.offer.count({ where: { merchantId: m.id, productUrl: null } }),
@@ -52,6 +54,50 @@ export default async function HealthPage() {
       const delta = last && prev && prev.offersParsed > 0 ? (last.offersParsed - prev.offersParsed) / prev.offersParsed : null;
       return { m, offers, flagged, stale, expired, anomalies, noDeepLink, withRaw, last, nullRate, delta };
     }),
+  );
+
+  // LIVENESS FIRST, above everything else on this page.
+  //
+  // Every other number here describes the DATA. Metro and Mega Image were dead for three days
+  // while every one of those numbers looked healthy, because the drop guard preserved the data
+  // and had no opinion about whether the source still answered. This block is the only thing
+  // on the page that can tell those two states apart, so it goes at the top.
+  const liveness = await computeLiveness({
+    merchants: async () => merchants.map((m) => ({ id: m.id, slug: m.slug, name: m.name, lastScrapeAt: m.lastScrapeAt })),
+    newestObservedAt: async (merchantId) => {
+      const r = await prisma.offer.findFirst({
+        where: { merchantId, lastObservedAt: { not: null } },
+        orderBy: { lastObservedAt: "desc" },
+        select: { lastObservedAt: true },
+      });
+      return r?.lastObservedAt ?? null;
+    },
+    liveOfferCount: (merchantId) => prisma.offer.count({ where: { merchantId, isStale: false, availability: "in stock" } }),
+    recentRuns: (merchantId, take) => prisma.scraperRun.findMany({
+      where: { merchantId }, orderBy: { startedAt: "desc" }, take,
+      select: { aborted: true, offersWritten: true, abortReason: true },
+    }),
+  });
+  const deadMerchants = liveness.filter((l) => l.dead);
+
+  // COMPARISON vs PRICE sections. A blended comparability figure measures catalog
+  // composition rather than matching quality: DCNeu grew by 6,895 single-merchant products
+  // when its scraper stopped truncating, and the blended number FELL while the catalog got
+  // strictly better. The split is the only version that means anything.
+  const sectionRows = await prisma.product.groupBy({ by: ["section"], _count: { _all: true } });
+  const liveOfferWhere = { isStale: false, flagged: false, availability: "in stock" } as const;
+  const kindStats = await Promise.all(
+    sectionRows.map(async (r) => ({
+      section: r.section,
+      kind: sectionKind(r.section),
+      products: r._count._all,
+      priced: await prisma.product.count({
+        where: { section: r.section, offers: { some: liveOfferWhere } },
+      }),
+      laddered: await prisma.offer.count({
+        where: { ...liveOfferWhere, tiers: { some: {} }, product: { section: r.section } },
+      }),
+    })),
   );
 
   const totalAnomalies = rows.reduce((a, r) => a + r.anomalies, 0);
@@ -69,6 +115,94 @@ export default async function HealthPage() {
           <Link href="/admin">← Panou admin</Link> · <Link href="/admin/review">Verificare potriviri</Link>
         </p>
       </div>
+
+      <section className="section" style={{ paddingTop: 0 }}>
+        <div className="section-head"><h2 style={{ margin: 0 }}>Secțiuni</h2></div>
+        <div className="card" style={{ overflowX: "auto" }}>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
+            Secțiunile <b>de comparație</b> au mai multe magazine, deci comparabilitatea are
+            sens acolo. Secțiunile <b>de preț</b> au un singur magazin prin construcție —
+            pentru ele contează acoperirea, nu comparabilitatea.
+          </p>
+          <table className="admin-table">
+            <thead>
+              <tr><th>Secțiune</th><th>Tip</th><th>Produse</th><th>Cu preț azi</th><th>Cu preț la cantitate</th></tr>
+            </thead>
+            <tbody>
+              {kindStats.sort((a, b) => b.products - a.products).map((k) => (
+                <tr key={k.section}>
+                  <td style={{ fontWeight: 600 }}>{SECTION_LABELS[k.section] ?? k.section}</td>
+                  <td className="muted">{k.kind === "comparison" ? "comparație" : "preț"}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{k.products}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {k.priced} ({k.products ? Math.round((k.priced / k.products) * 100) : 0}%)
+                  </td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {k.kind === "price" ? k.laddered : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="section" style={{ paddingTop: 0 }}>
+        <div className="section-head">
+          <h2 style={{ margin: 0 }}>Ultima scriere reușită</h2>
+        </div>
+        <div
+          className="card"
+          style={{
+            overflowX: "auto",
+            borderLeft: `4px solid ${deadMerchants.length > 0 ? "#c0392b" : "var(--border)"}`,
+          }}
+        >
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
+            {deadMerchants.length > 0 ? (
+              <strong style={{ color: "#c0392b" }}>
+                {deadMerchants.length} magazin(e) nu au mai scris nimic de peste {MAX_SILENCE_HOURS} h.
+                Ofertele lor sunt încă afișate.
+              </strong>
+            ) : (
+              <>Toate magazinele au scris în ultimele {MAX_SILENCE_HOURS} h.</>
+            )}{" "}
+            O rulare care s-a oprit singură nu este o scriere reușită: dovada e un rând de
+            ofertă, nu o rulare înregistrată.
+          </p>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Magazin</th>
+                <th>De la ultima scriere</th>
+                <th>Oferte live</th>
+                <th>Rulări fără rezultat</th>
+                <th>Motiv</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liveness.map((l) => (
+                <tr key={l.slug} style={l.dead ? { background: "rgba(192,57,43,0.07)" } : undefined}>
+                  <td style={{ fontWeight: 600 }}>
+                    {l.name}
+                    {l.claimsWithoutWrites && (
+                      <span className="muted" style={{ display: "block", fontSize: 11 }}>
+                        a rulat, dar nu a scris nimic
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ fontVariantNumeric: "tabular-nums", color: l.dead ? "#c0392b" : undefined, fontWeight: l.dead ? 700 : 400 }}>
+                    {formatSilence(l.hoursSinceWrite)}
+                  </td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{l.liveOffers}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{l.deadRunStreak || "—"}</td>
+                  <td className="muted" style={{ fontSize: 12 }}>{l.lastAbortReason ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="card" style={{ overflowX: "auto" }}>
         <table className="admin-table">
@@ -94,7 +228,7 @@ export default async function HealthPage() {
                 <tr key={r.m.id}>
                   <td style={{ fontWeight: 600 }}>
                     {r.m.name}
-                    <div className="muted" style={{ fontSize: 11.5 }}>{r.m.priceSource}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>{r.m.priceChannel}</div>
                   </td>
                   <td className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
                     {r.last ? formatDate(r.last.startedAt) : r.m.lastScrapeAt ? formatDate(r.m.lastScrapeAt) : "—"}

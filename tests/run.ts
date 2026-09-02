@@ -33,6 +33,18 @@ export function expect(actual: unknown) {
     toEqual(exp: unknown) {
       if (!deepEqual(actual, exp)) throw new Error(`expected ${JSON.stringify(exp)}, got ${JSON.stringify(actual)}`);
     },
+    /** Substring for a string, membership for an array. */
+    toContain(needle: unknown) {
+      if (typeof actual === "string") {
+        if (!actual.includes(String(needle))) throw new Error(`expected ${JSON.stringify(actual)} to contain ${JSON.stringify(needle)}`);
+        return;
+      }
+      if (Array.isArray(actual)) {
+        if (!actual.some((v) => deepEqual(v, needle))) throw new Error(`expected array to contain ${JSON.stringify(needle)}`);
+        return;
+      }
+      throw new Error(`toContain expects a string or array, got ${typeof actual}`);
+    },
     toBeTruthy() { if (!actual) throw new Error(`expected truthy, got ${JSON.stringify(actual)}`); },
     toBeFalsy() { if (actual) throw new Error(`expected falsy, got ${JSON.stringify(actual)}`); },
     toBeGreaterThan(n: number) { if (!(Number(actual) > n)) throw new Error(`expected > ${n}, got ${actual}`); },

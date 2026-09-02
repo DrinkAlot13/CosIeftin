@@ -70,7 +70,13 @@ describe("pending matches are not offers", () => {
         // The admin review path and the matcher that queues them are the ONLY legitimate
         // readers. Everything else — any page, the optimizer, any count — must not see this
         // table, which is the property under test.
-        const allowed = ["/lib/pending-matches", "/lib/match-stats", "/admin/matches", "/scrape-util"];
+        // `/admin/page` counts unresolved matches for its navigation badge. That is an admin
+        // read, and a queue nobody can find is not a queue — the sub-pages had no links at
+        // all until now. The property under test is unchanged: no SHOPPER-facing route, no
+        // optimizer input, no product count may read this table.
+        const allowed = [
+          "/lib/pending-matches", "/lib/match-stats", "/admin/matches", "/admin/page", "/scrape-util",
+        ];
         if (allowed.some((a) => rel.includes(a))) continue;
         if (fs.readFileSync(full, "utf8").includes("pendingMatch")) offenders.push(rel.split("/src/")[1] ?? rel);
       }

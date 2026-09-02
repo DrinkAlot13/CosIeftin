@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — promo-pack parsing across all names.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // Blast radius of the promo-pack parse (Phase 1a).
 //
 // Read-only. Runs the OLD reading and the NEW reading of every product name in the catalog

@@ -4,9 +4,39 @@ import { normalizeText } from "@/lib/matching";
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
 import { rankSearch } from "@/lib/search/rank";
-import { buildDailyLowSeries, dropPercent, summarize } from "@/lib/pricing";
+import { buildDailyLowSeries, dropPercent, isCurrent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
+import { visibleTiers } from "./bulk-tiers";
 
-const activeInclude = { where: { merchant: { active: true } }, include: { merchant: true } } as const;
+const activeInclude = {
+  where: { merchant: { active: true } },
+  // `tiers` rides along so a listing card can show the quantity discount. DCNeu is a
+  // discounter: the ladder IS the offer, and a card showing only the single-unit price shows
+  // the least attractive number on it.
+  include: { merchant: true, tiers: { orderBy: { minQuantity: "asc" } } },
+} as const;
+
+/**
+ * What "a price we can stand behind" means, expressed as a Prisma filter.
+ *
+ * The SAME rule as `isCurrent` in lib/pricing, pushed down to the database so a page does not
+ * fetch a thousand month-old rows to discard them in JavaScript. Both must agree; the test
+ * `summarize — only a price we can stand behind` covers the predicate, and this is its query
+ * twin.
+ *
+ * `isStale` alone was not enough: it is set by the scrape and 3,468 Auchan offers were 26 days
+ * old with isStale=false, so the age is checked directly against the observation date.
+ */
+export function currentOfferWhere(now: Date = new Date()) {
+  return {
+    merchant: { active: true },
+    availability: "in stock",
+    isStale: false,
+    // Must match isCurrent: a withheld offer is not a current price. Its absence here meant
+    // every listing and count treated flagged rows as live.
+    flagged: false,
+    lastObservedAt: { gte: new Date(now.getTime() - MAX_DISPLAY_AGE_DAYS * 86_400_000) },
+  } as const;
+}
 
 /** Active grocery chains that actually have offers — for the "my stores" picker. */
 export async function getStoreList() {
@@ -29,7 +59,7 @@ export async function getDeals(limit = 60) {
   const rows = products
     .map((p) => {
       const summary = summarize(p.offers);
-      const inStock = p.offers.filter((o) => o.availability === "in stock");
+      const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
       const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
       const drop = dropPercent(buildDailyLowSeries(p.offers));
@@ -55,12 +85,35 @@ export async function getAlcoholCategories() {
 }
 
 /** Add headline price + lowest price-per-unit to a product's offers. */
-function decorate<T extends { offers: { price: number; availability: string; pricePerUnit: number }[] }>(products: T[]) {
+function decorate<T extends {
+  offers: {
+    price: number; availability: string; pricePerUnit: number;
+    priceBani?: number | null; flagged?: boolean; isStale?: boolean;
+    tiers?: { minQuantity: number; unitPriceBani: number; discountBp: number | null }[];
+  }[];
+}>(products: T[]) {
   return products.map((p) => {
-    const inStock = p.offers.filter((o) => o.availability === "in stock");
+    const inStock = p.offers.filter((o) => isCurrent(o as never));
     const pool = inStock.length > 0 ? inStock : p.offers;
     const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
-    return { ...p, summary: summarize(p.offers), unitLowest };
+    // Best trusted ladder across this product's offers. `visibleTiers` refuses one hanging
+    // off a flagged, stale or out-of-stock price, so a card cannot advertise a discount
+    // against a base we are withholding.
+    let bulk: { bestUnitBani: number; bestFromQty: number; bestDiscountBp: number } | null = null;
+    for (const o of p.offers) {
+      const l = visibleTiers({
+        priceBani: o.priceBani ?? null,
+        price: o.price,
+        flagged: o.flagged ?? false,
+        isStale: o.isStale ?? false,
+        availability: o.availability,
+        tiers: o.tiers,
+      });
+      if (l && (!bulk || l.bestUnitBani < bulk.bestUnitBani)) {
+        bulk = { bestUnitBani: l.bestUnitBani, bestFromQty: l.bestFromQty, bestDiscountBp: l.bestDiscountBp };
+      }
+    }
+    return { ...p, summary: summarize(p.offers), unitLowest, bulk };
   });
 }
 
@@ -87,14 +140,27 @@ export async function getItemPage(slug: string) {
     where: { slug },
     include: {
       category: true,
-      offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } } } },
+      // A WITHHELD OFFER DOES NOT RENDER AT ALL.
+      //
+      // Out-of-stock rows stay, greyed, with their last-seen date — that is a fact about a
+      // shop that does carry the product. A FLAGGED row is different: it is one a gate
+      // withheld, which means we do not believe the price, the match, or both.
+      //
+      // The Pepsi page proved the difference. After a full re-scrape it still rendered
+      // "Mega Image · Stoc epuizat · 10,49 RON" and the same for Carrefour — on a six-pack
+      // neither of them sells. Those rows were stale AND withheld, and still claimed two
+      // shops carried the product. Greying a false claim does not make it true.
+      offers: {
+        where: { merchant: { active: true }, flagged: false },
+        include: { merchant: true, history: { orderBy: { recordedAt: "asc" } }, tiers: { orderBy: { minQuantity: "asc" } } },
+      },
     },
   });
   if (!product) return null;
   const offers = [...product.offers].sort((a, b) => baniOf(a) - baniOf(b));
   const summary = summarize(offers);
   const series = buildDailyLowSeries(offers);
-  const inStock = offers.filter((o) => o.availability === "in stock");
+  const inStock = offers.filter((o) => isCurrent(o as never));
   const bestOffer = inStock[0] ?? offers[0] ?? null;
 
   // "Best time to buy": compare today's lowest to its own price history.
@@ -195,7 +261,7 @@ export async function suggestProducts(query: string, limit = 6) {
  * for an answer that had not changed since the last scrape.
  */
 export async function getHomeSections() {
-  const live = { isStale: false, merchant: { active: true } } as const;
+  const live = currentOfferWhere();
   const shelf = {
     // No history: neither shelf renders a chart. That single omission is most of the win.
     offers: { where: { merchant: { active: true } }, include: { merchant: true } },
@@ -207,7 +273,9 @@ export async function getHomeSections() {
       where: { section: "grocery", offers: { some: live } },
       include: shelf,
       orderBy: { id: "asc" },
-      take: 8,
+      // Over-fetch: the offers included below are unfiltered (the card shows stale rows greyed),
+      // so a product can still fall out when summarize finds nothing current.
+      take: 40,
     }),
     prisma.product.findMany({
       where: { section: "grocery", dropPct: { gt: 2 }, offers: { some: live } },
@@ -221,14 +289,14 @@ export async function getHomeSections() {
     ...p,
     summary: summarize(p.offers),
     unitLowest: (() => {
-      const inStock = p.offers.filter((o) => o.availability === "in stock");
+      const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
       return pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
     })(),
     drop: p.dropPct ?? 0,
   });
 
-  const featured = featuredRows.map(decorate).filter((p) => p.summary.offerCount > 0);
+  const featured = featuredRows.map(decorate).filter((p) => p.summary.hasCurrentPrice).slice(0, 8);
   // A "drop" on a single-merchant product is one shop changing its own price, which is not the
   // comparison this shelf is for.
   const drops = dropRows.map(decorate).filter((p) => p.summary.offerCount >= 2).slice(0, 6);
@@ -255,8 +323,7 @@ export async function getBasketProducts(slugs: string[]) {
  * a price. Those are not lies a visitor can check, which is exactly why they have to be right.
  */
 const liveOffer = {
-  isStale: false,
-  merchant: { active: true },
+  ...currentOfferWhere(),
   product: { section: "grocery" },
 } as const;
 
@@ -326,6 +393,6 @@ export async function getAdminStats() {
     include: { _count: { select: { offers: true } } },
     orderBy: { name: "asc" },
   });
-  const newest = await prisma.offer.findFirst({ orderBy: { lastSeen: "desc" }, select: { lastSeen: true } });
-  return { products, offers, chains, merchantRows, lastUpdated: newest?.lastSeen ?? null };
+  const newest = await prisma.offer.findFirst({ orderBy: { lastObservedAt: "desc" }, select: { lastObservedAt: true } });
+  return { products, offers, chains, merchantRows, lastUpdated: newest?.lastObservedAt ?? null };
 }

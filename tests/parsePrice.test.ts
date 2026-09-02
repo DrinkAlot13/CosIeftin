@@ -122,10 +122,11 @@ describe("money helpers — integer math only", () => {
 // happens in integers.
 describe("money — bani is authoritative, the float is derived", () => {
   it("summarize compares in bani and exposes lei derived from it", () => {
+    const seen = { lastObservedAt: new Date(), isStale: false };
     const s = summarize([
-      { price: 6.5, priceBani: 650, availability: "in stock" },
-      { price: 5.49, priceBani: 549, availability: "in stock" },
-      { price: 7.99, priceBani: 799, availability: "in stock" },
+      { price: 6.5, priceBani: 650, availability: "in stock", ...seen },
+      { price: 5.49, priceBani: 549, availability: "in stock", ...seen },
+      { price: 7.99, priceBani: 799, availability: "in stock", ...seen },
     ]);
     expect(s.lowestBani).toBe(549);
     expect(s.highestBani).toBe(799);
@@ -137,18 +138,20 @@ describe("money — bani is authoritative, the float is derived", () => {
   it("a float that disagrees with bani does NOT win — bani does", () => {
     // The exact drift shape found in production: rawPriceText and the float said 152.42,
     // priceBani said 449.97. Whichever is stale, comparison must use one column, not both.
+    const seen = { lastObservedAt: new Date(), isStale: false };
     const s = summarize([
-      { price: 999.99, priceBani: 650, availability: "in stock" },
-      { price: 1.0, priceBani: 799, availability: "in stock" },
+      { price: 999.99, priceBani: 650, availability: "in stock", ...seen },
+      { price: 1.0, priceBani: 799, availability: "in stock", ...seen },
     ]);
     expect(s.lowestBani).toBe(650);
     expect(s.highestBani).toBe(799);
   });
 
   it("out-of-stock offers do not set the floor but still set the ceiling", () => {
+    const seen = { lastObservedAt: new Date(), isStale: false };
     const s = summarize([
-      { price: 1.0, priceBani: 100, availability: "out of stock" },
-      { price: 5.0, priceBani: 500, availability: "in stock" },
+      { price: 1.0, priceBani: 100, availability: "out of stock", ...seen },
+      { price: 5.0, priceBani: 500, availability: "in stock", ...seen },
     ]);
     expect(s.lowestBani).toBe(500);
     expect(s.inStockCount).toBe(1);
@@ -161,7 +164,11 @@ describe("money — bani is authoritative, the float is derived", () => {
   });
 
   it("integer money never produces a fractional ban", () => {
-    const s = summarize([{ price: 0.1, priceBani: 10, availability: "in stock" }, { price: 0.2, priceBani: 20, availability: "in stock" }]);
+    const seen = { lastObservedAt: new Date(), isStale: false };
+    const s = summarize([
+      { price: 0.1, priceBani: 10, availability: "in stock", ...seen },
+      { price: 0.2, priceBani: 20, availability: "in stock", ...seen },
+    ]);
     expect(Number.isInteger(s.savingsBani)).toBeTruthy();
     expect(s.savingsBani).toBe(10); // 0.2 - 0.1 in floats is 0.1000000000000000055
   });
@@ -170,5 +177,79 @@ describe("money — bani is authoritative, the float is derived", () => {
     for (const lei of [0.01, 1.99, 12.34, 152.42, 2033.39]) {
       expect(baniToLei(leiToBaniExact(lei))).toBeCloseTo(lei, 6);
     }
+  });
+});
+
+// A month-old, out-of-stock price presented as "cel mai mic preț".
+//
+// Three offers last actually observed on 6 August were displayed as current 26 days later, one
+// of them badged as the cheapest: Carrefour at 10,49 against a real 10,75, Freshful at 17,99
+// against a real 24,99. Neither is a parse error. They were correct prices, a month ago, and
+// nothing in the read path stopped them being presented as today's.
+describe("summarize — only a price we can stand behind sets the headline", () => {
+  const now = new Date("2026-09-01T12:00:00Z");
+  const daysAgo = (n: number): Date => new Date(now.getTime() - n * 86_400_000);
+  const o = (price: number, over: Partial<{ availability: string; lastObservedAt: Date; isStale: boolean; priceSource: string }> = {}) => ({
+    price, priceBani: Math.round(price * 100),
+    availability: "in stock", lastObservedAt: daysAgo(1), isStale: false, ...over,
+  });
+
+  it("an out-of-stock offer never sets the headline, however cheap", () => {
+    const s = summarize([o(5.0, { availability: "out of stock" }), o(9.0)], now);
+    expect(s.lowest).toBeCloseTo(9.0, 4);
+    expect(s.offerCount).toBe(1);
+    expect(s.staleCount).toBe(1);
+  });
+
+  it("an offer older than 14 days never sets the headline", () => {
+    const s = summarize([o(5.0, { lastObservedAt: daysAgo(26) }), o(9.0)], now);
+    expect(s.lowest).toBeCloseTo(9.0, 4);
+    expect(s.offerCount).toBe(1);
+  });
+
+  it("14 days is inside, 15 is outside", () => {
+    expect(summarize([o(5.0, { lastObservedAt: daysAgo(14) })], now).offerCount).toBe(1);
+    expect(summarize([o(5.0, { lastObservedAt: daysAgo(15) })], now).offerCount).toBe(0);
+  });
+
+  it("an isStale offer never sets the headline even when recently seen", () => {
+    const s = summarize([o(5.0, { isStale: true }), o(9.0)], now);
+    expect(s.lowest).toBeCloseTo(9.0, 4);
+  });
+
+  it("when NOTHING is current there is no headline price at all", () => {
+    // The old code fell back to the full set, which is how a month-old out-of-stock price won
+    // the badge on 8,633 pages. Reporting zero is the honest answer.
+    const s = summarize([o(5.0, { availability: "out of stock" }), o(9.0, { lastObservedAt: daysAgo(30) })], now);
+    expect(s.hasCurrentPrice).toBeFalsy();
+    expect(s.lowest).toBe(0);
+    expect(s.offerCount).toBe(0);
+    expect(s.staleCount).toBe(2);
+  });
+
+  it("the merchant count counts merchants you could buy from TODAY", () => {
+    const s = summarize([o(5.0), o(6.0), o(7.0, { lastObservedAt: daysAgo(40) }), o(8.0, { availability: "out of stock" })], now);
+    expect(s.offerCount).toBe(2);
+    expect(s.staleCount).toBe(2);
+  });
+
+  it("a FLYER offer with no observation date is fine — it expires by its promo window", () => {
+    const s = summarize([{ price: 5, priceBani: 500, availability: "in stock", priceSource: "FLYER" }], now);
+    expect(s.offerCount).toBe(1);
+  });
+
+  it("a NON-FLYER offer with no observation date is NOT current", () => {
+    // Before the consolidation this was a safe default, because most rows genuinely lacked a
+    // date. After a full scrape every observed offer has one, so a null means we did not see
+    // it — and "we did not see it" must never be shown as a current price.
+    const s = summarize([{ price: 5, priceBani: 500, availability: "in stock", priceSource: "ONLINE" }], now);
+    expect(s.offerCount).toBe(0);
+    expect(s.hasCurrentPrice).toBeFalsy();
+  });
+
+  it("the price range is computed over current offers only", () => {
+    const s = summarize([o(5.0), o(20.0, { lastObservedAt: daysAgo(40) })], now);
+    expect(s.highest).toBeCloseTo(5.0, 4);
+    expect(s.savings).toBe(0);
   });
 });

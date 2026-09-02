@@ -70,19 +70,27 @@ async function cards(ids: number[]): Promise<Cand[]> {
     catch { continue; }
     for (const p of data || []) {
       const price = p?.prices?.salePrice ?? p?.prices?.originalPrice;
-      if (typeof price !== "number" || price <= 0 || !p.name) continue;
+      // A missing price is REFUSED, not dropped. Pooling it with price 0 sends it through
+      // matchPoolToCatalog's pre-offer refusal path, which records the item and its raw
+      // value; it still never becomes an offer. A bare `continue` here made an item with an
+      // unreadable price indistinguishable from an item the shop does not sell.
+      if (!p.name) continue;
+      const priceNum = typeof price === "number" && price > 0 ? price : 0;
       const size = p.textualAmount ? ` ${p.textualAmount}` : "";
       const url = p.slug ? `${BASE}/${p.slug}` : BASE;
       out.push({
         name: `${p.name}${size}`, // fold size into name so parseQuantity can read it
         brand: p.brand || "",
         sourceId: String(p.productId),
-        price,
+        price: priceNum,
         available: p?.stock?.availabilityStatus === "AVAILABLE",
         url,
         // Provenance set at the READ, not at the matcher call where a map can drop it.
         productUrl: p.slug ? url : null,
-        rawPriceText: String(price),
+        rawPriceText: String(priceNum),
+        // KEEP THE SOURCE PAYLOAD — see scrape-util. Without it, no independent check on
+        // our size handling is possible for this merchant.
+        rawSourceBlob: JSON.stringify(p).slice(0, 4096),
         image: p?.image?.path || null,
       });
     }

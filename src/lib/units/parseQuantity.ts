@@ -115,6 +115,13 @@ function make(
   packSize: number,
   paidCount: number,
   freeCount: number,
+  /**
+   * Force the promotional flag. A BONUS PACK ("1kg+330g") has no free ITEMS to count — the
+   * shopper takes home one container holding more — but it is still a pack that reverts when
+   * the promotion ends, and `isPromoPack` is what stops a shrinkflation detector calling that
+   * reversion shrinkage.
+   */
+  promoPack?: boolean,
 ): Quantity {
   return {
     value: round(value),
@@ -123,7 +130,7 @@ function make(
     packSize: round(packSize),
     paidCount,
     freeCount,
-    isPromoPack: freeCount > 0,
+    isPromoPack: promoPack ?? freeCount > 0,
   };
 }
 
@@ -302,10 +309,63 @@ function parseBase(s: string): Quantity | null {
  * Parse a pack size out of a Romanian product name.
  * @returns the canonical quantity, or null when the name declares no size.
  */
+
+/**
+ * "1kg+330g", "500 g + 150 g gratis", "2 l+0,5 l" — a measured base plus a measured bonus.
+ *
+ * Requires a unit on BOTH sides and the same dimension on both, which is what separates it
+ * from the bare `N+M` that is not a promotion at all. Mixed dimensions ("1 kg + 500 ml") are
+ * deliberately refused: that is a bundle of two different things, not a bigger pack of one.
+ */
+function detectBonusPack(s: string): Quantity | null {
+  // PACK UNITS ONLY — never `mg`.
+  //
+  // "Crema rectala Procto-Glyvenol, 50 mg + 20 mg/g, 30 g" is a CONCENTRATION followed by the
+  // real pack size. Summing the two doses gives 70 mg and turns a 30 g tube into 0,07 g, a
+  // 400x error in the opposite direction from the one this function exists to fix. An existing
+  // regression test caught it within a minute of the rule going in.
+  //
+  // The structural rule: a bonus pack is advertised in the units a pack is SOLD in (g, kg, ml,
+  // l), and a dose is stated in mg. CLAUDE.md already treats mg as dosage vocabulary, and the
+  // matcher already compares strengths separately for exactly this reason.
+  const PACK_MEASURE = "kg|kilograme|kilogram|kilo|gr|grame|gram|ml|mililitri|cl|centilitri|litri|litru|g|l";
+  const re = new RegExp(
+    String.raw`${NUM}\s*(${PACK_MEASURE})\s*\+\s*${NUM}\s*(${PACK_MEASURE})(?![a-zăâîșț/])`,
+    "i",
+  );
+  const m = s.match(re);
+  if (!m) return null;
+  const base = toCanonical(num(m[1]), m[2]);
+  const extra = toCanonical(num(m[3]), m[4]);
+  if (!base || !extra) return null;
+  // Same dimension only. G+G and ML+ML are a bigger pack; G+ML is two different products.
+  if (base.unit !== extra.unit) return null;
+  const total = round(base.value + extra.value);
+  // packCount 1: the shopper takes home ONE container that happens to hold more.
+  return make(total, base.unit, 1, total, 1, 0, true);
+}
+
 export function parseQuantity(input: string | null | undefined): Quantity | null {
   if (input == null) return null;
   const s = String(input).replace(/[    ⁠]/g, " ").trim();
   if (!s) return null;
+
+  // BONUS PACK: "1kg+330g" — a measured amount PLUS a measured bonus of the same dimension.
+  //
+  // Found by Kaufland's own published per-unit price, which is the only check in this project
+  // that shares no assumption with our parser. It said 14,28 lei/kg for Edenia Amestec Mexican
+  // and we said 57,55: we had read "1kg+330g" as 330 g and thrown the kilogram away. A 4x
+  // error, on the shelf, invisible to every check we owned.
+  //
+  // THIS IS NOT THE BARE `N+M` CLAUDE.md FORBIDS. "Omega 3+6+9", "90 Gr+" and "3+ ani" are not
+  // offers, and inventing a promotion out of them corrupts a real quantity. The structural
+  // difference is that BOTH SIDES CARRY A UNIT OF THE SAME DIMENSION: 1kg+330g is mass plus
+  // mass. "Omega 3+6+9" has no units at all, and "90 Gr+" has nothing after the plus.
+  //
+  // The bonus is free, so paidCount stays 1 and the pack IS promotional — when the promotion
+  // ends the pack reverts to 1 kg, and a shrinkflation detector must not call that shrinkage.
+  const bonus = detectBonusPack(s);
+  if (bonus) return bonus;
 
   const promo = detectPromo(s);
   if (!promo) return parseBase(s);

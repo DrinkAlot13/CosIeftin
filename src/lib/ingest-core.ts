@@ -110,7 +110,7 @@ export async function ingestItemsForMerchant(merchantId: number, items: ScrapedI
         url: String(it.url ?? ""),
         currency: "RON",
         matchedBy: method,
-        lastSeen: new Date(),
+        lastObservedAt: new Date(),
       },
       create: {
         productId,

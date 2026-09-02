@@ -16,15 +16,20 @@
 //      npm run audit:db -- --run <scraperRunId>   (record the result against a run)
 
 import { PrismaClient } from "@prisma/client";
+import { parsePrice } from "../src/lib/price/parsePrice";
+import { findOutliers, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
 import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
 
 const prisma = new PrismaClient();
+
+/** When ScraperRun.offersWritten was added. Earlier rows default it to 0 and mean nothing. */
+const OFFERS_WRITTEN_SINCE = new Date("2026-09-02T00:00:00Z");
 
 // ── local helpers, deliberately not imported ──────────────────────────────────────
 const MIN_BANI = 1;
 const MAX_BANI = 100_000_000; // 1,000,000 lei
 const STALE_DAYS = 14;
-const MEDIAN_DEVIATION = 0.7; // 70%
+
 const FANOUT_P95_GROCERY = 3;
 const FANOUT_MAX_ANY = 8;
 const SMEAR_MIN_PRODUCTS = 5;
@@ -53,7 +58,7 @@ async function auditPrices() {
   const offers = await prisma.offer.findMany({
     select: {
       id: true, price: true, priceBani: true, vatBasis: true, vatRateBp: true,
-      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastSeenAt: true,
+      isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastObservedAt: true, availability: true, priceSource: true, promoValidTo: true,
       productId: true, merchant: { select: { name: true, slug: true } }, product: { select: { name: true, section: true } },
     },
   });
@@ -79,6 +84,338 @@ async function auditPrices() {
     record("Prices", "the published origin is not localhost in production", problems);
   }
 
+  // ── STALENESS. A price we last observed a month ago is not a current price, and an
+  //    out-of-stock offer is not one either. Both were winning "cel mai mic preț" and counting
+  //    toward "N magazine" on thousands of pages, because the read path filtered on neither.
+  {
+    const bad: string[] = [];
+    const byProduct = new Map<number, typeof offers>();
+    for (const o of offers) { const a = byProduct.get(o.productId) ?? []; a.push(o); byProduct.set(o.productId, a); }
+    const nowMs = Date.now();
+    for (const [, list] of byProduct) {
+      // WITHHELD OFFERS ARE NOT CANDIDATES FOR "cel mai mic preț".
+      //
+      // This invariant asked whether the cheapest offer of ALL was stale or out of stock, and
+      // after 9,822 unverifiable rows were withheld it reported 8,822 violations — nearly
+      // every one a product where the withholding did exactly its job. A flagged offer is on
+      // no page and can win nothing, so counting it here measures a defect the site does not
+      // have. The question that matters is whether anything a shopper CAN see is stale.
+      const priced = list.filter(
+        (o) => (o.priceBani ?? Math.round(o.price * 100)) > 0 && !o.flagged,
+      );
+      if (priced.length === 0) continue;
+      // THE QUESTION IS WHAT THE SITE WOULD SHOW, NOT WHAT THE DATA CONTAINS.
+      //
+      // A product whose cheapest offer is out of stock is now normal and handled: the read
+      // path picks its headline from CURRENT offers only, and the out-of-stock row still
+      // renders greyed with its last-seen date. Counting the data condition reported 3,605
+      // violations for a defect the display does not have.
+      //
+      // So the candidate pool here is the one the site actually chooses from. If that pool is
+      // empty the page says it has no current price, which is correct and not a violation.
+      const showable = priced.filter(
+        (o) =>
+          o.availability === "in stock" &&
+          !o.isStale &&
+          (o.priceSource === "FLYER" ||
+            (o.lastObservedAt != null && (nowMs - o.lastObservedAt.getTime()) / 86400000 <= 14)),
+      );
+      if (showable.length === 0) continue;
+      const cheapest = showable.reduce((a, b) => ((b.priceBani ?? 0) < (a.priceBani ?? 0) ? b : a));
+      const ageDays = (nowMs - (cheapest.lastObservedAt ?? new Date(0)).getTime()) / 86400000;
+      const oos = cheapest.availability !== "in stock";
+      if (cheapest.lastObservedAt && ageDays > 14) {
+        bad.push(`offer ${cheapest.id} [${cheapest.merchant.name}] is the cheapest and is ${ageDays.toFixed(0)} days old`);
+      } else if (oos) {
+        bad.push(`offer ${cheapest.id} [${cheapest.merchant.name}] is the cheapest and is OUT OF STOCK`);
+      }
+    }
+    record("Freshness", "no stale or out-of-stock offer is a product's cheapest price", bad);
+  }
+
+  // ── OBSERVATION PROVENANCE. lastObservedAt is written by the scrape, on the rows the scrape
+  //    actually saw, and NOWHERE ELSE. A merchant-level job must never touch it: one did,
+  //    stamping merchant.lastScrapeAt onto 10,388 offers it had not observed, and three offers
+  //    last seen on 6 August were shown as current 26 days later.
+  //
+  //    A FLYER offer expires by promoValidTo and needs no observation date. For every other
+  //    source a null means we did not see it, and after a full scrape that should be near zero.
+  //    If it is not, something is writing offers without observing them.
+  record("Freshness", "no non-flyer offer lacks an observation date",
+    offers.filter((o) => !o.lastObservedAt && (o.priceSource ?? "") !== "FLYER")
+      .map((o) => `offer ${o.id} [${o.merchant.name}] priceSource=${o.priceSource ?? "null"} — ${o.product.name.slice(0, 40)}`));
+
+  // ── THE FLYER EXEMPTION IS A TRIPWIRE, SO IT MUST NOT BE DISARMABLE BY RELABELLING.
+  //
+  //    FLYER offers are excused the observation-date requirement on the grounds that they
+  //    expire by promoValidTo instead. That excuse is only honest if two things hold: the
+  //    offers actually carry a window, and the set of merchants issuing flyers does not quietly
+  //    grow. Otherwise a writer that stops recording observation dates can route around the
+  //    check by stamping priceSource = "FLYER", and the invariant reports green forever.
+  {
+    const flyers = offers.filter((o) => (o.priceSource ?? "") === "FLYER");
+
+    // An offer exempt because it expires by a window MUST have that window.
+    record("Freshness", "every FLYER offer carries a promoValidTo",
+      flyers.filter((o) => !o.promoValidTo)
+        .map((o) => `offer ${o.id} [${o.merchant.name}] priceSource=FLYER with no promoValidTo`));
+
+    // Only Kaufland publishes a weekly flyer today. A new name here is either a real change or
+    // a writer routing around the exemption; both are worth seeing, neither should be silent.
+    const EXPECTED_FLYER_MERCHANTS = new Set(["kaufland"]);
+    const byMerchant = new Map<string, number>();
+    for (const o of flyers) byMerchant.set(o.merchant.slug, (byMerchant.get(o.merchant.slug) ?? 0) + 1);
+    record("Freshness", "only expected merchants issue FLYER offers",
+      [...byMerchant.entries()]
+        .filter(([slug]) => !EXPECTED_FLYER_MERCHANTS.has(slug))
+        .map(([slug, n]) => `${slug} has ${n} FLYER offers but is not an expected flyer merchant`),
+      `flyer counts: ${[...byMerchant.entries()].map(([m, n]) => `${m}=${n}`).join(", ") || "none"}`);
+  }
+
+  // ── ONE FIELD, ONE VOCABULARY. priceSource is written by two paths that disagree on case:
+  //    backfill-phase1 writes SHELF/ONLINE/FLYER, while matchPoolToCatalog falls back to the
+  //    MERCHANT's own value, which is lowercase shelf/delivery. Consumers compare against
+  //    literals, so the same concept spelled two ways silently takes two different branches.
+  {
+    const ALLOWED = new Set(["SHELF", "ONLINE", "DELIVERY_PLATFORM", "FLYER"]);
+    const seen = new Map<string, number>();
+    for (const o of offers) {
+      const v = o.priceSource ?? "(null)";
+      if (!ALLOWED.has(v)) seen.set(v, (seen.get(v) ?? 0) + 1);
+    }
+    record("Prices", "priceSource uses only the documented vocabulary",
+      [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
+  }
+
+  // ── A PRICE MUST REPRODUCE FROM ITS OWN SOURCE STRING.
+  //
+  //    `rawPriceText` exists so a stored price can be checked against what the page said, and
+  //    so a parser change can be replayed against history. A row where the two disagree is a
+  //    row whose provenance is a lie.
+  //
+  //    Before this invariant existed, 129 rows disagreed — and ALL 129 were flagged offers,
+  //    129 of the 130 flagged rows in the database. The cause was on the shared write path:
+  //    when a gate refused a price we kept the previously trusted value and overwrote
+  //    rawPriceText with the REFUSED string anyway, corrupting the provenance of exactly the
+  //    rows most in need of checking. Found by chasing a single farmaciatei row that stored
+  //    31,00 against a source of "146,00".
+  {
+    const offers = await prisma.offer.findMany({
+      where: { rawPriceText: { not: null } },
+      select: { id: true, price: true, priceBani: true, rawPriceText: true, flagged: true,
+                merchant: { select: { slug: true } } },
+    });
+    const broken: string[] = [];
+    for (const o of offers) {
+      const want = o.priceBani ?? Math.round(o.price * 100);
+      const got = parsePrice(o.rawPriceText ?? "");
+      if (got == null) continue; // unparseable is a different invariant
+      if (Math.abs(got - want) <= 1) continue;
+      broken.push(
+        `offer ${o.id} [${o.merchant.slug}] stores ${(want / 100).toFixed(2)} but its own ` +
+        `rawPriceText ${JSON.stringify(o.rawPriceText)} reads ${(got / 100).toFixed(2)}` +
+        `${o.flagged ? " (flagged)" : ""}`,
+      );
+    }
+    record("Prices", "every stored price reproduces from its own rawPriceText", broken);
+  }
+
+  // ── A TRUNCATED SCRAPE IS NOT A COMPLETED SCRAPE.
+  //
+  //    DCNeu published 180 leaf categories and MAX_CATS was 90, so `.slice(0, 90)` read the
+  //    first half in page order and the run reported success. The offer count was simply
+  //    lower — and a lower count is indistinguishable from a shop that sells less, which is
+  //    why it survived weeks and why the product a user asked about did not exist.
+  //
+  //    Scrapers now call `noteCap`/`notePageCap` and a truncated run is refused at source.
+  //    This invariant is the after-the-fact half: a merchant whose product count collapses
+  //    relative to its own history, without an abort recorded, is the shape truncation leaves
+  //    behind in the data.
+  {
+    const merchants = await prisma.merchant.findMany({
+      where: { active: true },
+      select: { id: true, slug: true, lastOfferCount: true },
+    });
+    const suspicious: string[] = [];
+    for (const m of merchants) {
+      const runs = await prisma.scraperRun.findMany({
+        where: { merchantId: m.id, aborted: false, offersWritten: { gt: 0 } },
+        orderBy: { startedAt: "desc" },
+        take: 4,
+        select: { offersWritten: true, startedAt: true },
+      });
+      if (runs.length < 3) continue;
+      const latest = runs[0].offersWritten;
+      const earlier = runs.slice(1).map((r) => r.offersWritten);
+      const best = Math.max(...earlier);
+      // Half or less than its own best recent run, while reporting success.
+      if (best > 0 && latest <= best * 0.5) {
+        suspicious.push(
+          `${m.slug}: newest successful run wrote ${latest} against a recent best of ${best} ` +
+          `— a collapse with no abort is what a silent cap looks like`,
+        );
+      }
+    }
+    record("Scraping", "no merchant's successful run collapsed to half its own recent best", suspicious);
+  }
+
+  // ── A MERCHANT THAT PRODUCES NOTHING IS NOT A QUIET MERCHANT.
+  //
+  //    Metro and Mega Image returned ZERO products from 31 August onward. A commit that
+  //    hardened every fetch in the project added `AbortSignal.timeout(REQUEST_TIMEOUT_MS)`
+  //    inside two `page.evaluate` callbacks, where Node module scope does not exist; the
+  //    ReferenceError was swallowed by each scraper's own catch and pagination stopped after
+  //    page one.
+  //
+  //    It hid for two days because the 60% drop guard WORKED. It refused each empty run and
+  //    kept the previous data instead of wiping it. So the data was safe and the merchant was
+  //    dead, and nothing in the system distinguished those two states — the offers still had
+  //    prices, still had dates, still looked live.
+  //
+  //    A guard that protects data is not a guard that reports health. This is the second one.
+  {
+    const ABORT_STREAK = 2;
+    const merchants = await prisma.merchant.findMany({
+      where: { active: true },
+      select: { id: true, slug: true },
+    });
+    const dead: string[] = [];
+    for (const m of merchants) {
+      const runs = await prisma.scraperRun.findMany({
+        where: { merchantId: m.id },
+        orderBy: { startedAt: "desc" },
+        take: ABORT_STREAK,
+        select: { aborted: true, offersWritten: true, startedAt: true, abortReason: true },
+      });
+      if (runs.length < ABORT_STREAK) continue;
+      const allBad = runs.every((r) => r.aborted || r.offersWritten === 0);
+      if (allBad) {
+        dead.push(
+          `${m.slug}: last ${ABORT_STREAK} runs produced nothing ` +
+          `(latest ${runs[0].startedAt.toISOString().slice(0, 16)}: ${runs[0].abortReason ?? "0 parsed"}) — ` +
+          `its stored offers still look live`,
+        );
+      }
+    }
+    // ── THIS ONE IS A HISTORICAL RECORD. DO NOT TRY TO MAKE IT GREEN. ──────────────
+    //
+    //    It reads ScraperRun history, and Kaufland genuinely aborted twice on 2 September
+    //    when the drop guard compared one week's flyer against three weeks of expired ones.
+    //    That happened. The cause is fixed — the baseline now excludes offers past their
+    //    promo window and Kaufland writes 296 offers — but the two aborted runs remain in the
+    //    log, correctly, and this invariant will keep reporting them until they age out of
+    //    the last ${ABORT_STREAK} runs on the next successful nightly.
+    //
+    //    Deleting the run rows to clear it would be falsifying the record of an outage to
+    //    make a dashboard green. If this is still failing in a week, THAT is the signal.
+    record("Scraping", `no active merchant has ${ABORT_STREAK} consecutive runs that produced nothing`, dead);
+  }
+
+  // ── A RUN CANNOT REPORT SUCCESS WITHOUT HAVING WRITTEN ANYTHING.
+  //
+  //    `offersParsed` counts pool items that had a readable price. A DCNeu run recorded
+  //    offersParsed = 6,044, finished cleanly, marked itself not-aborted — and wrote ZERO
+  //    offer rows; the merchant's newest observation date stayed a day old. Every check that
+  //    read offersParsed called it a success, including the liveness check built that morning
+  //    to catch exactly this.
+  //
+  //    `offersWritten` is counted at the write site and `recordScraperRun` derives `aborted`
+  //    from it, so a scraper can no longer mark itself green while producing nothing. This
+  //    invariant is what proves that derivation is still in force.
+  {
+    const bad = await prisma.scraperRun.findMany({
+      // Only runs recorded SINCE offersWritten existed. Rows written before the column was
+      // added default it to 0 while carrying aborted=false, so counting them reports 46
+      // historical runs as liars when the truth is that nobody was recording the number yet.
+      where: { aborted: false, offersWritten: 0, startedAt: { gte: OFFERS_WRITTEN_SINCE } },
+      select: { id: true, startedAt: true, offersParsed: true, merchant: { select: { slug: true } } },
+      take: 50,
+    });
+    record("Scraping", "no run is marked successful while having written zero offers",
+      bad.map((r) => `run ${r.id} [${r.merchant.slug}] ${r.startedAt.toISOString().slice(0, 16)}: ` +
+        `aborted=false but offersWritten=0 (offersParsed=${r.offersParsed})`));
+  }
+
+  // ── A DAY IS NOT A MARKET EVENT.
+  //
+  //    On 30 August, 1,675 offers moved more than 50% in a single afternoon across nine
+  //    merchants, almost all upward. That turned out to be legitimate — the first full
+  //    re-scrape after several parsers were fixed, and 1,652 of 1,653 current values agree
+  //    with their own rawPriceText — but NOBODY KNEW THAT FOR TWO DAYS. Answering it took a
+  //    fresh Auchan scrape to arbitrate against, because the evidence had not been kept.
+  //
+  //    The point of this invariant is not that a mass move is wrong. It is that a mass move
+  //    must be NOTICED and explained at the time, while the cause is still knowable. A real
+  //    market does not move 7% of a re-scraped catalog by more than half in one afternoon;
+  //    a code change does.
+  //
+  //    THE DENOMINATOR IS OFFERS WRITTEN THAT DAY, not the whole catalog. A 200-offer run
+  //    with 20 big moves is a broken run; 20 big moves across 40,000 offers is Tuesday.
+  //
+  //    THE THRESHOLD IS PROVISIONAL. It is set from five days of history: ordinary re-scrape
+  //    days sit at 1.3%, 3.1% and 3.2%; the 30 August event was 7.3%. That is a thin margin
+  //    and five days is not a distribution. Revisit it once the soak has produced a month.
+  {
+    const MASS_MOVE_PCT = 5;        // of the offers written that day
+    const MIN_DAY_WRITES = 200;     // below this, a percentage is noise
+    const hist = await prisma.priceHistory.findMany({
+      select: { offerId: true, price: true, priceBani: true, recordedAt: true },
+      orderBy: [{ offerId: "asc" }, { recordedAt: "asc" }],
+    });
+    const moves = new Map<string, number>();
+    const writes = new Map<string, Set<number>>();
+    let prevId = -1;
+    let prevBani = 0;
+    for (const h of hist) {
+      const bani = h.priceBani ?? Math.round(h.price * 100);
+      const day = h.recordedAt.toISOString().slice(0, 10);
+      const w = writes.get(day) ?? new Set<number>();
+      w.add(h.offerId);
+      writes.set(day, w);
+      if (h.offerId !== prevId) { prevId = h.offerId; prevBani = bani; continue; }
+      if (prevBani > 0 && bani > 0 && Math.abs(bani - prevBani) / prevBani > 0.5) {
+        moves.set(day, (moves.get(day) ?? 0) + 1);
+      }
+      prevBani = bani;
+    }
+    const spikes: string[] = [];
+    for (const [day, written] of [...writes.entries()].sort()) {
+      const n = moves.get(day) ?? 0;
+      const pct = written.size === 0 ? 0 : (n / written.size) * 100;
+      if (written.size >= MIN_DAY_WRITES && pct > MASS_MOVE_PCT) {
+        spikes.push(
+          `${day}: ${n} of ${written.size} offers written that day moved >50% (${pct.toFixed(1)}%) — ` +
+          `identify the cause before trusting the day's prices`,
+        );
+      }
+    }
+    // ── THIS ONE IS A HISTORICAL RECORD TOO. DO NOT TRY TO MAKE IT GREEN. ─────────
+    //
+    //    Two days trip it: 30 August and 2 September. Both were full re-scrapes after a
+    //    matcher change, and moving a lot of prices is exactly what those are for. The
+    //    invariant cannot tell a mass CORRECTION from a mass CORRUPTION and should not try —
+    //    the whole point is that a human looks at any day where it fires and says which it
+    //    was. Both have been looked at and both are corrections: 1,652 of 1,653 prices from
+    //    30 August reproduce from their own source strings.
+    //
+    //    It clears on its own once those days fall outside the history window. Tuning the
+    //    threshold to hide them would disable the check for the next real corruption.
+    record("Prices", `no day moves >50% on more than ${MASS_MOVE_PCT}% of the offers written that day`, spikes);
+  }
+
+  // ── MERCHANT-SIDE VOCABULARY. Merchant.priceChannel answers "how does this store's price
+  //    reach us"; Offer.priceSource answers "what kind of price is it". They used to share the
+  //    name priceSource, and that shared name turned a translation across two vocabularies into
+  //    something that looked like a harmless default. The deprecated column is now dropped;
+  //    what remains is keeping this one inside its own vocabulary.
+  {
+    const merchants = await prisma.merchant.findMany({ select: { slug: true, priceChannel: true } });
+    const CHANNELS = new Set(["shelf", "delivery", "aggregator"]);
+    record("Prices", "Merchant.priceChannel uses the merchant-side vocabulary",
+      merchants.filter((m) => !CHANNELS.has(m.priceChannel))
+        .map((m) => `${m.slug}: priceChannel=${JSON.stringify(m.priceChannel)} is not shelf|delivery|aggregator`));
+  }
+
   // ── THE MIGRATION INVARIANT. This should have existed from the day the bani columns were
   //    added, and its absence is why they drifted for weeks in total silence: every
   //    user-facing read still used the float, so nothing the shopper touched ever exercised
@@ -97,24 +434,28 @@ async function auditPrices() {
     offers.filter((o) => { const b = o.priceBani ?? Math.round(o.price * 100); return b < MIN_BANI || b > MAX_BANI; })
       .map((o) => `offer ${o.id} [${o.merchant.name}] ${lei(o.priceBani ?? Math.round(o.price * 100))} lei`));
 
-  // cross-store median deviation, computed here rather than trusted from the writer
-  const byProduct = new Map<number, typeof offers>();
-  for (const o of offers) { const a = byProduct.get(o.productId) ?? []; a.push(o); byProduct.set(o.productId, a); }
-  const deviants: string[] = [];
-  for (const [, list] of byProduct) {
-    if (list.length < 3) continue; // a median of two is not a median
-    const prices = list.map((o) => o.priceBani ?? Math.round(o.price * 100));
-    const med = median(prices);
-    if (med <= 0) continue;
-    for (const o of list) {
-      const b = o.priceBani ?? Math.round(o.price * 100);
-      if (o.flagged) continue; // already known and quarantined
-      if (Math.abs(b - med) > med * MEDIAN_DEVIATION) {
-        deviants.push(`offer ${o.id} [${o.merchant.name}] ${lei(b)} vs median ${lei(med)} — ${o.product.name.slice(0, 36)}`);
-      }
+  // ── CROSS-STORE MEDIAN DEVIATION — one definition, imported.
+  //
+  //    This block used to carry its own copy of the rule while `withhold-outliers` carried
+  //    another: two thresholds (absolute vs ratio, differing by a factor of two on the low
+  //    side) over two populations (all offers vs visible ones). The audit said 47, the repair
+  //    found 7, and the gap read as a bug in one of them rather than a disagreement between
+  //    them. Both now import `lib/outlier`.
+  //
+  //    USER-FACING: counts only offers that reach a page.
+  {
+    const byProduct = new Map<number, typeof offers>();
+    for (const o of offers) {
+      const a = byProduct.get(o.productId) ?? [];
+      a.push(o);
+      byProduct.set(o.productId, a);
     }
+    const found = findOutliers(byProduct);
+    record("Prices", `no VISIBLE offer deviates >${MEDIAN_DEVIATION * 100}% from its cross-store median`,
+      found.map((f) =>
+        `offer ${f.offer.id} [${f.offer.merchant.name}] ${lei(baniOf(f.offer))} vs median ` +
+        `${lei(f.medianBani)} of ${f.peers} — ${f.offer.product.name.slice(0, 36)}`));
   }
-  record("Prices", `no unflagged offer deviates >${MEDIAN_DEVIATION * 100}% from its cross-store median`, deviants);
 
   // A net price must never be reachable by the optimizer — nobody pays the fără-TVA figure.
   record("Prices", "no WITHOUT_VAT offer is live (reachable by the optimizer)",
@@ -251,12 +592,12 @@ async function auditMatching() {
 async function auditFreshness() {
   const cutoff = new Date(Date.now() - STALE_DAYS * 864e5);
   const staleNotMarked = await prisma.offer.findMany({
-    where: { lastSeenAt: { lt: cutoff }, isStale: false },
-    select: { id: true, lastSeenAt: true, merchant: { select: { name: true } } },
+    where: { lastObservedAt: { lt: cutoff }, isStale: false },
+    select: { id: true, lastObservedAt: true, merchant: { select: { name: true } } },
     take: 100,
   });
   record("Freshness", `no offer unseen for >${STALE_DAYS} days left unmarked as stale`,
-    staleNotMarked.map((o) => `offer ${o.id} [${o.merchant.name}] lastSeenAt=${o.lastSeenAt?.toISOString().slice(0, 10)}`));
+    staleNotMarked.map((o) => `offer ${o.id} [${o.merchant.name}] lastObservedAt=${o.lastObservedAt?.toISOString().slice(0, 10)}`));
 
   const expiredNotMarked = await prisma.offer.findMany({
     where: { promoValidTo: { lt: new Date() }, isExpired: false },
@@ -273,9 +614,14 @@ async function auditFreshness() {
   const unexpectedNullUrl: string[] = [];
   const expectedRows: string[] = [];
   for (const m of merchants) {
-    const nulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null } });
+    // USER-FACING: a link can only mislead someone who can click it, so withheld, stale and
+    // out-of-stock rows are out of scope. Counting them reported 6 offers whose "La magazin"
+    // was generic on pages nobody can reach.
+    const nulls = await prisma.offer.count({
+      where: { merchantId: m.id, productUrl: null, isStale: false, flagged: false, availability: "in stock" },
+    });
     if (nulls === 0) continue;
-    const flyerNulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null, priceSource: "FLYER" } });
+    const flyerNulls = await prisma.offer.count({ where: { merchantId: m.id, productUrl: null, priceSource: "FLYER", isStale: false, flagged: false, availability: "in stock" } });
     if (flyerNulls > 0) expectedRows.push(`${m.name}: ${flyerNulls} FLYER offers — expected`);
     const rest = nulls - flyerNulls;
     if (rest > 0) unexpectedNullUrl.push(`${m.name}: ${rest} non-flyer offers with no deep link`);
@@ -285,8 +631,16 @@ async function auditFreshness() {
 
   // rawPriceText only became mandatory once the column existed; judge recent rows only.
   const since = new Date(Date.now() - 2 * 864e5);
-  const noRaw = await prisma.offer.count({ where: { rawPriceText: null, lastSeenAt: { gte: since } } });
-  const withRaw = await prisma.offer.count({ where: { rawPriceText: { not: null }, lastSeenAt: { gte: since } } });
+  // A FLAGGED offer is exempt, and the exemption is not laziness — it resolves a genuine
+  // conflict between two rules in this project. `repair-flagged-provenance` NULLS
+  // rawPriceText when a gate refused a price, because the string we held belonged to the
+  // refused value and not to the one we kept: null is the honest answer to "what produced
+  // this price" once we no longer know. This invariant then flagged exactly those rows for
+  // lacking what the repair deliberately removed. Both rules are right; the scope was wrong.
+  const noRaw = await prisma.offer.count({
+    where: { rawPriceText: null, flagged: false, lastObservedAt: { gte: since } },
+  });
+  const withRaw = await prisma.offer.count({ where: { rawPriceText: { not: null }, flagged: false, lastObservedAt: { gte: since } } });
   record("Freshness", "every recently-seen offer carries its raw source string",
     noRaw > 0 ? [`${noRaw} offers seen in the last 2 days have no rawPriceText (vs ${withRaw} that do)`] : []);
 }
