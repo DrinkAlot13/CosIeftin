@@ -1,27 +1,71 @@
 // The Indexul CoșMic basket definition + the split-vs-single decision, which is the
 // single most consequential number the site shows a shopper.
 import { describe, it, expect } from "./run";
-import { INDEX_BASKET } from "../src/lib/cosmic-index";
+import { INDEX_BASKET } from "../src/lib/index-basket";
+import { changeBetween, periodChanges, type SeriesPoint } from "../src/lib/index-series";
 import { optimizeBasket, type ProductForBasket } from "../src/lib/basket";
 
 describe("Indexul CoșMic — basket definition", () => {
-  it("covers the staples an INS-style consumer basket needs", () => {
+  it("covers the staples a Romanian household buys every week", () => {
     const keys = INDEX_BASKET.map((b) => b.key);
-    for (const need of ["lapte", "paine", "oua", "ulei", "faina", "zahar"]) {
+    for (const need of ["lapte", "paine", "oua", "ulei", "faina", "zahar", "unt", "orez", "cafea", "hartie", "detergent"]) {
       expect(keys.includes(need)).toBeTruthy();
     }
   });
 
-  it("every line declares a unit and a positive size (so lei/kg normalization works)", () => {
-    expect(INDEX_BASKET.every((b) => ["kg", "l", "buc"].includes(b.unit) && b.unitSize > 0)).toBeTruthy();
+  it("has 40 lines", () => {
+    expect(INDEX_BASKET.length).toBe(40);
   });
 
-  it("match terms are diacritic-free, matching how nameNorm is stored", () => {
-    expect(INDEX_BASKET.every((b) => !/[ăâîșțşţ]/i.test(b.match))).toBeTruthy();
+  it("every line is PINNED to one product slug and records the name it was pinned to", () => {
+    // The pin is the whole design. A line without one resolves by search at runtime, which is
+    // how coffee creamer was priced as coffee and how the total moved 26.8% in three days.
+    expect(INDEX_BASKET.every((b) => b.slug.length > 0 && b.expectedName.length > 0)).toBeTruthy();
   });
 
-  it("keys are unique", () => {
+  it("keys and slugs are both unique, so no product can be counted twice", () => {
     expect(new Set(INDEX_BASKET.map((b) => b.key)).size).toBe(INDEX_BASKET.length);
+    expect(new Set(INDEX_BASKET.map((b) => b.slug)).size).toBe(INDEX_BASKET.length);
+  });
+
+  it("every line is filed under a group, so the page can show what is in the basket", () => {
+    expect(INDEX_BASKET.every((b) => b.group.length > 0)).toBeTruthy();
+  });
+});
+
+describe("Indexul CoșMic — comparisons refuse unlike things", () => {
+  const pt = (day: string, total: number, priced: number): SeriesPoint => ({
+    day, total, priced, of: 40, complete: priced === 40, byMerchant: [],
+  });
+
+  it("compares two days that priced the same number of lines", () => {
+    const c = changeBetween(pt("2026-08-01", 100, 40), pt("2026-09-01", 110, 40));
+    expect(c!.pct).toBeCloseTo(10);
+  });
+
+  it("REFUSES to compare a 40-line total with a 37-line total", () => {
+    // Otherwise the number reports the three missing products as a price fall.
+    expect(changeBetween(pt("2026-08-01", 100, 40), pt("2026-09-01", 92, 37))).toBe(null);
+  });
+
+  it("refuses when there is nothing to compare against", () => {
+    expect(changeBetween(undefined, pt("2026-09-01", 100, 40))).toBe(null);
+    expect(changeBetween(pt("2026-08-01", 0, 40), pt("2026-09-01", 100, 40))).toBe(null);
+  });
+
+  it("reports no month-over-month figure when the series is younger than 28 days", () => {
+    // Six days of history cannot produce a monthly change, and inventing one from the earliest
+    // point available would silently relabel a 6-day move as a monthly move.
+    const short = [pt("2026-08-28", 100, 40), pt("2026-09-02", 104, 40)];
+    const { month, year, spanDays } = periodChanges(short);
+    expect(month).toBe(null);
+    expect(year).toBe(null);
+    expect(spanDays).toBe(5);
+  });
+
+  it("reports month-over-month once two points are 28 days apart", () => {
+    const long = [pt("2026-07-01", 100, 40), pt("2026-08-05", 105, 40)];
+    expect(periodChanges(long).month!.pct).toBeCloseTo(5);
   });
 });
 

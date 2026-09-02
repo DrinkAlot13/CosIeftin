@@ -97,7 +97,8 @@
     "audit:cutover": "tsx scripts/audit-cutover.ts",
     "audit:staleness": "tsx scripts/audit-staleness.ts",
     "backfill:pricesource": "tsx scripts/backfill-pricesource.ts",
-    "backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts"
+    "backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts",
+    "audit:basket": "tsx scripts/audit-basket.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -614,3 +614,18 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
 .ms-not-enough-signal { color: var(--muted); }
 .ms-callout { padding: 10px 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-2); font-size: 13.5px; }
 .mr-rate a { color: var(--primary); text-decoration: underline; }
+
+/* "Indexul CoșMic" alone told nobody what the page was — the owner of the site did not know.
+   The nav now carries a short gloss, dropped on narrow screens where the bar is tight and the
+   title attribute still explains it. */
+.nav-sub { color: var(--muted); font-weight: 500; }
+@media (max-width: 1240px) { .nav-sub { display: none; } }
+
+/* Index headline cards. `.result-cards` is a fixed two-column grid that the basket builder
+   depends on, so this page gets its own three-up grid rather than changing that. */
+.index-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 900px) { .index-cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .index-cards { grid-template-columns: 1fr; } }
+/* "încă nu" is the absence of a figure, not a good figure. The accent green on .rc-total reads
+   as a value; a placeholder must not borrow that. */
+.rc-none { font-size: 21px; font-weight: 700; color: var(--muted); margin: 2px 0 4px; }

@@ -54,7 +54,11 @@ export async function Header({ categories }: { categories: MenuCategory[] }) {
           </ul>
           <ul className="catnav catnav-tools">
             <li><Link href="/oferte"><span aria-hidden>🔥</span> Oferte</Link></li>
-            <li><Link href="/index-cosmic"><span aria-hidden>📊</span> Indexul CoșMic</Link></li>
+            <li>
+              <Link href="/index-cosmic" title="Un coș fix de 40 de produse de bază, urmărit în timp">
+                <span aria-hidden>📊</span> Indexul CoșMic <span className="nav-sub">— cât costă coșul</span>
+              </Link>
+            </li>
             <li><Link href="/retete"><span aria-hidden>🍳</span> Rețete</Link></li>
             <li><Link href="/carduri"><span aria-hidden>💳</span> Carduri</Link></li>
           </ul>
