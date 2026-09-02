@@ -17,6 +17,7 @@
 // Read-only. Run: npm run audit:unitprice
 
 import { PrismaClient } from "@prisma/client";
+import { nameBag } from "../src/lib/outlier";
 import { parseQuantity } from "../src/lib/units/parseQuantity";
 
 const prisma = new PrismaClient();
@@ -118,17 +119,17 @@ async function main(): Promise<void> {
   //
   // Offers on ONE product that disagree about lei/L by more than 2x are almost certainly not
   // the same product. This is the cheapest detector we have for the Pepsi failure mode.
-  const byProduct = new Map<number, { name: string; rows: { m: string; ppu: number; price: number; name: string }[] }>();
+  const byProduct = new Map<number, { name: string; rows: { m: string; ppu: number; price: number; name: string; storeName: string | null }[] }>();
   for (const o of offers) {
     const own = ownSizeOf(o.product.name);
     const ppu = own && own.unitSize > 0 ? o.price / own.unitSize : 0;
     if (ppu <= 0) continue;
     const e = byProduct.get(o.product.id) ?? { name: o.product.name, rows: [] };
-    e.rows.push({ m: o.merchant.slug, ppu, price: o.price, name: o.product.name });
+    e.rows.push({ m: o.merchant.slug, ppu, price: o.price, name: o.product.name, storeName: o.storeName });
     byProduct.set(o.product.id, e);
   }
 
-  const spreads: { id: number; name: string; ratio: number; rows: { m: string; ppu: number; price: number }[] }[] = [];
+  const spreads: { id: number; name: string; ratio: number; rows: { m: string; ppu: number; price: number; storeName?: string | null }[] }[] = [];
   for (const [id, e] of byProduct) {
     if (e.rows.length < 2) continue;
     const ppus = e.rows.map((r) => r.ppu);
@@ -140,12 +141,33 @@ async function main(): Promise<void> {
   const over2x = spreads.filter((s) => s.ratio >= 2).length;
   console.log("\n════ UNIT-PRICE SPREAD PER CATALOG PRODUCT ══════════════════════════════");
   console.log(`  products with 2+ live offers: ${[...byProduct.values()].filter((e) => e.rows.length >= 2).length}`);
-  console.log(`  offers disagree on lei/unit by 2x or more: ${over2x}   <- almost certainly bad matches`);
+  console.log(`  offers disagree on lei/unit by 2x or more: ${over2x}`);
+  console.log("");
+  console.log("  A SPREAD IS A DISAGREEMENT, NOT A VERDICT — see CLAUDE.md, \"a peer-relative");
+  console.log("  check flags disagreement, not guilt\". This audit cannot say which row is wrong.");
+  console.log("  Every member is printed with the STORE'S OWN NAME plus the tokens only some of");
+  console.log("  them carry: differing tokens point at a mismatch, identical tokens at a real");
+  console.log("  price gap. Resolve against an EAN or the payload's own size before withholding.");
   console.log("\n  WORST 100");
   for (const s of spreads.slice(0, 100)) {
+    const bags = s.rows
+      .map((r) => new Set(nameBag(r.storeName).split(" ").filter(Boolean)))
+      .filter((b) => b.size > 0);
+    let diff: string[] = [];
+    if (bags.length >= 2) {
+      const union = new Set<string>();
+      for (const b of bags) for (const t of b) union.add(t);
+      diff = [...union].filter((t) => !bags.every((b) => b.has(t))).sort();
+    }
+    const verdict = s.rows.some((r) => !r.storeName)
+      ? "a row has NO store name — cannot be judged on names"
+      : diff.length === 0
+        ? "same store-name tokens — a real unit-price gap"
+        : `not all rows carry: ${diff.slice(0, 6).join(", ")} — CHECK FOR A MISMATCH first`;
     console.log(`\n  ${s.ratio.toFixed(1)}x  ${s.name.slice(0, 72)}`);
+    console.log(`        ${verdict}`);
     for (const r of s.rows.sort((a, b) => a.ppu - b.ppu)) {
-      console.log(`        ${pad(r.m, 13)} ${lp(r.price.toFixed(2), 9)} lei   ${lp(r.ppu.toFixed(2), 9)} /unit`);
+      console.log(`        ${pad(r.m, 13)} ${lp(r.price.toFixed(2), 9)} lei   ${lp(r.ppu.toFixed(2), 9)} /unit   ${(r.storeName ?? "(no store name)").slice(0, 44)}`);
     }
   }
   console.log();

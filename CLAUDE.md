@@ -190,6 +190,47 @@ took the golden set from 97.3% to 97.8% and false matches from 2 to 1.
 - **`prisma/schema.postgres.prisma` is GENERATED.** Edit `schema.prisma`, then
   `npm run gen:postgres`. Hand-maintaining it let it fall 11 models behind.
 
+## A PEER-RELATIVE CHECK FLAGS DISAGREEMENT, NOT GUILT
+
+Every check that compares a row against its peers — cross-store median deviation, MAD bands,
+unit-price spread, any outlier detector — rests on one assumption: **that the peers are peers.**
+When a product's offer set contains false matches, they are not, and the check inverts.
+
+A false match does not merely add a wrong row. It *moves the median*. Cluster three false
+matches into a group of five and the median migrates onto them, and the check then indicts the
+two correct rows. The output reads exactly the same either way.
+
+**The worked example — `Gelatina foi Dr. Oetker 10 g`, product #2971.** The audit reported
+"Carrefour 5,79 vs median 1,59 of 3". Every instinct says withhold the 5,79. The truth:
+
+| offer | store's own name | verdict |
+|---|---|---|
+| Auchan 6,85 | `Gelatina foi Dr. Oetker 10 g`, matched by **EAN** | correct |
+| Carrefour 5,79 | `Foi de gelatina Dr.Oetker 10 g` | correct — and this is the row that got flagged |
+| Sezamo 1,59 | `Dr.Oetker Gelatina` — brand, no **format** | powder, not sheets |
+| Mega Image 1,49 | `Gelatina 10g` — no brand, no format | powder, not sheets |
+| Freshful 1,49 | *no source payload at all* | unverifiable |
+
+Dr. Oetker sells gelatine as sheets AND as powder. Three of the five rows were the powder, the
+median sat at 1,59, and acting on the flag would have **withheld the two prices that were right
+and kept the three that were wrong.** The same inversion produced "Sezamo mici 35,50 vs 17,99",
+where Sezamo was the artisanal product it claimed to be and the two cheap rows were unbranded
+supermarket mici matched at 0.67 on head-noun plus size.
+
+So the rules:
+
+- **A peer-relative check may not name a culprit.** Its output is the GROUP: how many offers,
+  how many DISTINCT store-name token bags, and every row with its own name and price. Naming one
+  row as "the outlier" encodes an answer the method cannot supply.
+- **Divergent store names inside a group are the tell.** Same product, one vocabulary. When the
+  token bags disagree, suspect a MISMATCH before suspecting a misprice — that is the cheapest
+  available discriminator and it does not depend on the prices at all.
+- **Never withhold on a peer-relative flag alone.** Resolve it against something outside the
+  group: an EAN, the merchant's own `storeName`, its published unit price, the pack size in its
+  payload. In the gelatine case Auchan's EAN settled it in one query.
+- This is a LIMIT, not a bug. Do not "fix" it by tightening thresholds — a tighter band flags
+  more correct rows, not fewer wrong ones.
+
 ## Measure the blast radius; do not assume it
 
 Every serious bug in this project was found by running the new code and the old code over the

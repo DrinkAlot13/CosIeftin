@@ -91,3 +91,110 @@ export function findOutliers<T extends OfferForOutlier>(
   }
   return out;
 }
+
+// ── THE GROUP, NOT THE CULPRIT ────────────────────────────────────────────────────────────
+//
+// See CLAUDE.md → "A peer-relative check flags disagreement, not guilt". `findOutliers` above
+// names a row, which is exactly the shape that misleads: it can only ever mean "this row
+// disagrees with the median", and when false matches cluster the median is theirs, not the
+// product's. Everything user-visible about a disagreement should be reported as a GROUP.
+
+/** A store product's own name, for spotting a group whose members are not the same product. */
+export type NamedOffer = OfferForOutlier & {
+  storeName?: string | null;
+  merchantName?: string;
+};
+
+const NAME_NOISE = new Set(["de", "cu", "la", "si", "din", "fara", "pentru", "sau", "un", "o"]);
+
+/**
+ * Word-order-independent token bag of a store name.
+ *
+ * Word order is not information here: "Somon file afumat" and "File de somon afumat" are the
+ * same product written twice. What IS information is a token one side has and the other lacks
+ * — "foi" (sheets) against nothing, "CARNE SI SARE" against nothing.
+ */
+export function nameBag(s: string | null | undefined): string {
+  if (!s) return "";
+  return [...new Set(
+    s.toLowerCase()
+      .split("ș").join("s").split("ş").join("s").split("ț").join("t").split("ţ").join("t")
+      .split("ă").join("a").split("â").join("a").split("î").join("i")
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(" ")
+      .filter((t) => t && !NAME_NOISE.has(t)),
+  )].sort().join(" ");
+}
+
+export type DisagreeingGroup<T extends NamedOffer> = {
+  productId: number;
+  productName: string;
+  medianBani: number;
+  offers: T[];
+  /** How many DISTINCT store-name token bags the group contains. >1 suggests a mismatch. */
+  distinctNames: number;
+  /** Offers whose price sits outside the band — reported as members, never as the answer. */
+  disagreeing: T[];
+  /** True when at least one member carries no store name, so the group cannot be judged on names. */
+  hasUnnamed: boolean;
+};
+
+/**
+ * Groups whose prices disagree, described rather than adjudicated.
+ *
+ * Returns the WHOLE group every time, so a caller cannot print "offer X is an outlier" without
+ * also having the rows that would contradict it.
+ */
+export function findDisagreeingGroups<T extends NamedOffer>(
+  byProduct: Map<number, { name: string; offers: T[] }>,
+): DisagreeingGroup<T>[] {
+  const out: DisagreeingGroup<T>[] = [];
+  for (const [productId, { name, offers }] of byProduct) {
+    const visible = offers.filter(isVisible);
+    if (visible.length < MIN_OFFERS_FOR_MEDIAN) continue;
+    const med = median(visible.map(baniOf));
+    if (med <= 0) continue;
+    const disagreeing = visible.filter((o) => isOutlier(baniOf(o), med));
+    if (disagreeing.length === 0) continue;
+    const bags = new Set(visible.map((o) => nameBag(o.storeName)).filter(Boolean));
+    out.push({
+      productId, productName: name, medianBani: med, offers: visible,
+      distinctNames: bags.size,
+      disagreeing,
+      hasUnnamed: visible.some((o) => !o.storeName),
+    });
+  }
+  return out;
+}
+
+/**
+ * Tokens that only SOME members of the group carry.
+ *
+ * The count of distinct names is nearly useless on its own — "Physalis caserola 100 g" and
+ * "Physalis 100g" differ, and mean the same thing. What discriminates is the token one side has
+ * and the other lacks: `foi` (sheets, against powder), `carne si sare` (a brand, against an
+ * own-label). That is the union minus the intersection, and it is what to read.
+ */
+export function discriminatingTokens(g: DisagreeingGroup<NamedOffer>): string[] {
+  // SIZE IS NOT A NAME TOKEN. "100 g", "100g" and "100" tokenise three ways and mean one
+  // thing, so leaving them in reports `100, 100g, g` as if it were evidence and buries the
+  // token that is — `caserola`, `foi`, `oetker`. Size disagreement is checked explicitly and
+  // numerically elsewhere; this function answers the different question of whether the WORDS
+  // describe the same product.
+  const isSize = (t: string): boolean => /^\d+(?:[.,]\d+)?(?:g|kg|ml|l|cl|buc|gr)?$/.test(t) || /^(?:g|kg|ml|l|cl|buc|gr)$/.test(t);
+  const bags = g.offers
+    .map((o) => new Set(nameBag(o.storeName).split(" ").filter((t) => t && !isSize(t))))
+    .filter((b) => b.size > 0);
+  if (bags.length < 2) return [];
+  const union = new Set<string>();
+  for (const b of bags) for (const t of b) union.add(t);
+  return [...union].filter((t) => !bags.every((b) => b.has(t))).sort();
+}
+
+/** One line saying what the group's names imply, in the audit's own words. */
+export function nameVerdict(g: DisagreeingGroup<NamedOffer>): string {
+  if (g.hasUnnamed) return "a row has NO store name — cannot be judged on names";
+  const diff = discriminatingTokens(g);
+  if (diff.length === 0) return "every row has the same store-name tokens — a genuine price disagreement";
+  return `not all rows carry: ${diff.slice(0, 8).join(", ")}${diff.length > 8 ? ` (+${diff.length - 8})` : ""} — CHECK FOR A MISMATCH first`;
+}

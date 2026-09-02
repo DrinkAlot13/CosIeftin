@@ -19,7 +19,7 @@ import { PrismaClient } from "@prisma/client";
 import { emitJson } from "../src/lib/audit-json";
 import { membershipOk, rulesFromAttributes } from "../src/lib/substitution/class-rules";
 import { parsePrice } from "../src/lib/price/parsePrice";
-import { findOutliers, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
+import { findDisagreeingGroups, nameVerdict, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
 import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
 
 const prisma = new PrismaClient();
@@ -61,6 +61,7 @@ async function auditPrices() {
     select: {
       id: true, price: true, priceBani: true, vatBasis: true, vatRateBp: true,
       isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastObservedAt: true, availability: true, priceSource: true, promoValidTo: true,
+      storeName: true, matchedBy: true,
       productId: true, merchant: { select: { name: true, slug: true } }, product: { select: { name: true, section: true } },
     },
   });
@@ -469,11 +470,33 @@ async function auditPrices() {
       a.push(o);
       byProduct.set(o.productId, a);
     }
-    const found = findOutliers(byProduct);
-    record("Prices", `no VISIBLE offer deviates >${MEDIAN_DEVIATION * 100}% from its cross-store median`,
-      found.map((f) =>
-        `offer ${f.offer.id} [${f.offer.merchant.name}] ${lei(baniOf(f.offer))} vs median ` +
-        `${lei(f.medianBani)} of ${f.peers} — ${f.offer.product.name.slice(0, 36)}`));
+    // REPORTS THE GROUP, NOT A CULPRIT. See CLAUDE.md → "A peer-relative check flags
+    // disagreement, not guilt". The old line named one offer as the outlier, which is a verdict
+    // the method cannot reach: on product #2971 it named Carrefour's correct 5,79 because three
+    // of the five rows were a different Dr. Oetker product and the median had moved to them.
+    //
+    // So every member is printed with its own store name, and the group is labelled by whether
+    // those names agree — which is the discriminator that does not depend on the prices at all.
+    const groups = new Map<number, { name: string; offers: typeof offers }>();
+    for (const [pid, rows] of byProduct) {
+      groups.set(pid, { name: rows[0]?.product.name ?? `#${pid}`, offers: rows });
+    }
+    const disagreeing = findDisagreeingGroups(
+      new Map([...groups].map(([k, v]) => [k, { name: v.name, offers: v.offers.map((o) => ({ ...o, merchantName: o.merchant.name })) }])),
+    );
+    const lines: string[] = [];
+    for (const g of disagreeing) {
+      lines.push(`${g.productName.slice(0, 44)} — ${g.offers.length} offers, median ${lei(g.medianBani)} — ${nameVerdict(g)}`);
+      for (const o of g.offers) {
+        const mark = g.disagreeing.some((d) => d.id === o.id) ? "≠" : " ";
+        lines.push(`      ${mark} ${(o.merchantName ?? "").padEnd(12)} ${lei(baniOf(o)).padStart(8)}  ${o.matchedBy === "ean" ? "EAN " : "    "}${(o.storeName ?? "(no store name)").slice(0, 44)}`);
+      }
+    }
+    record("Prices", `no product's offers disagree by >${MEDIAN_DEVIATION * 100}% (a GROUP finding, not a verdict on one row)`,
+      lines,
+      disagreeing.length
+        ? `${disagreeing.length} group(s). A peer-relative check cannot say WHICH side is wrong — resolve against an EAN, the store name, or the payload's own size before withholding anything.`
+        : undefined);
   }
 
   // A net price must never be reachable by the optimizer — nobody pays the fără-TVA figure.
