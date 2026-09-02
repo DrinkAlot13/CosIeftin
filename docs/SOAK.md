@@ -39,8 +39,27 @@ than twice. The verdict is identical; only the runtime differs.
 **A crashing audit is a result, not an absence.** Every step is wrapped; one that throws is
 recorded as `ok: false` with its last 40 lines. `soak:log` exits 0 even when checks are red —
 a non-zero exit would abort the rest of the chain and cost tomorrow's data to report today's
-fault. And `nightly` is `nightly:steps || echo … && soak:log`, so the night is recorded even
-when a scraper dies halfway through.
+fault.
+
+**`npm run nightly` is a TypeScript orchestrator, not a shell chain**, and that is not a
+stylistic choice. The obvious spelling is:
+
+```
+"nightly": "npm run nightly:steps || echo failed && npm run soak:log"
+```
+
+and on Windows it is wrong in the worst possible way. **cmd.exe parses `A || B && C` as
+`A || (B && C)`**, so on every night the scrape chain *succeeded*, `soak:log` would never have
+run. A fortnight of perfect nights would have produced an empty directory and the report would
+have said "no logs" while everything was fine. bash groups it the other way, so the behaviour
+would have depended on which shell npm picked.
+
+`scripts/nightly.ts` spawns the steps, then spawns `soak:log` regardless, and hands the steps'
+exit code down so the entry records `nightlySteps: {ok, exitCode}`. The report lists nights where
+the chain failed but the log was still written — distinct from a missing night, because those
+audits *did* run and are accurate about data that did not get refreshed. The nightly's own exit
+code reflects the scrape, not the audits: two invariants are red on purpose and a cron that mails
+on non-zero should not mail every night because of them.
 
 ## What the report looks for
 

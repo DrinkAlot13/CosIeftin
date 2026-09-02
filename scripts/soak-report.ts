@@ -52,6 +52,7 @@ type MerchantNight = {
 type LivenessRow = { slug: string; hoursSinceWrite: number | null; dead: boolean; claimsWithoutWrites: boolean };
 type Entry = {
   date: string;
+  nightlySteps: { ok: boolean; exitCode: number } | null;
   trustworthy: boolean;
   trustworthyNote: string | null;
   verifySite: { pass: boolean; components: Record<string, boolean> };
@@ -130,6 +131,16 @@ function main(): void {
     console.log(`    ${gaps.join("  ")}\n`);
   } else {
     console.log(`  ✓ no missing nights\n`);
+  }
+
+  // A night the log EXISTS for but the scrape chain died on. Distinct from a missing night: the
+  // audits below ran, they are accurate, and they describe yesterday's data.
+  const brokenChain = entries.filter((e) => e.nightlySteps && !e.nightlySteps.ok);
+  if (brokenChain.length > 0) {
+    console.log(`  ⚠ ${brokenChain.length} NIGHT(S) WHERE THE SCRAPE CHAIN FAILED but the night was`);
+    console.log(`    still recorded. The audits below ran and are accurate — about data that did`);
+    console.log(`    not get refreshed.`);
+    console.log(`    ${brokenChain.map((e) => `${e.date} (exit ${e.nightlySteps!.exitCode})`).join("  ")}\n`);
   }
 
   // ── 1. A MERCHANT WITH NO SUCCESSFUL WRITE IN 48 HOURS ───────────────────────

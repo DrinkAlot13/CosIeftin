@@ -226,10 +226,18 @@ async function main(): Promise<void> {
   const livenessData = liveness.data as { dead?: string[]; claimsWithoutWrites?: string[] } | null;
   const dead = livenessData?.dead ?? [];
 
+  // Did the scrape chain itself survive tonight? Handed down by scripts/nightly.ts, which runs
+  // this log whether the steps succeeded or not. Absent when soak:log was run by hand.
+  const stepsExitRaw = process.env.SOAK_STEPS_EXIT;
+  const nightlySteps = stepsExitRaw === undefined
+    ? null
+    : { ok: stepsExitRaw === "0", exitCode: Number(stepsExitRaw) };
+
   const entry = {
     date,
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
+    nightlySteps,
     // A red liveness does not make the other checks wrong — it makes them irrelevant. Say so
     // in the entry rather than leaving the fortnight's reader to notice on their own.
     trustworthy: liveness.ok,
