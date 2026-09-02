@@ -191,6 +191,15 @@ export default async function ItemPage({ params }: { params: { slug: string } })
           </h2>
         </div>
         <div className="card" style={{ padding: 4 }}><OfferTable offers={offers} unit={product.unit} /></div>
+        {/*
+          Every item page carries the report link. A comparison site's only asset is that
+          people believe the numbers, and the cheapest way to find a wrong match is to let
+          the person looking at it tell us.
+        */}
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+          Prețul nu e corect sau pagina amestecă două produse?{" "}
+          <Link href="/metodologie" style={{ color: "var(--primary)" }}>raportează un preț greșit</Link>
+        </p>
       </section>
 
       <section className="section">

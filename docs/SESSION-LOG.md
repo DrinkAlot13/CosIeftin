@@ -830,3 +830,32 @@ entirely. All now call `isCurrent`, so there is one rule and one place to change
 DEFERRED, logged rather than done: recipe pages and alerts were not swept. Both read prices
 through the same `queries.ts` helpers that now enforce `isCurrent`, so they inherit the fix,
 but neither was fetched and verified by rendered output. That verification is outstanding.
+
+## PHASE 8 — methodology page (done during the phase-1 wait)
+
+`/metodologie`, in plain Romanian, built from the live database rather than hand-written
+(merchant table, price channels, section counts all come from Prisma, so it cannot drift out
+of date the way a static page would).
+
+Covers, as the brief asked: which merchants and sections, that we read public pages once a
+day and drop anything unseen for MAX_DISPLAY_AGE_DAYS; what shelf / online / flyer each mean
+and that flyer prices carry a validity window; that we always link back to the merchant; that
+SGR deposits are shown separately and refunded on return.
+
+The matching section is deliberately the most honest part — it says we match automatically,
+that uncertain matches are held for a human and the product stays separate until then
+("preferăm să pierdem o comparație decât să punem prețul unui produs pe altul"), and that
+flavour, concentration, fat and format differences stop a match outright.
+
+A "ce nu facem" section states the three things this session fixed, as commitments: no price
+we have not seen ourselves, no tobacco, and no striking another shop's price to fake a
+discount.
+
+`raportează un preț greșit` now appears under the price table on EVERY item page, and the
+footer's "Cum funcționează" points here instead of `/despre`.
+
+VERIFIED BY RENDERED HTML: `/metodologie` returns 200 and renders the merchant table, the
+SGR section and the report link.
+
+`/despre` is left in place — it is the short pitch and is linked from elsewhere. Backlog:
+decide whether to fold it into this page or keep both.
