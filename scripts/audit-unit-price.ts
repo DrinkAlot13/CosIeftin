@@ -28,7 +28,10 @@ function ownSizeOf(name: string): { unit: string; unitSize: number } | null {
 
 async function main(): Promise<void> {
   const offers = await prisma.offer.findMany({
-    where: { isStale: false, merchant: { active: true } },
+    // `flagged: false` matters as much as `isStale`. A withheld offer is not on any page,
+    // so counting it makes the audit report a defect the site does not have — the same gap
+    // that let isCurrent() treat withheld rows as live.
+    where: { isStale: false, flagged: false, merchant: { active: true } },
     select: {
       id: true, price: true, pricePerUnit: true, flagged: true,
       storeName: true, ownUnit: true, ownUnitSize: true,

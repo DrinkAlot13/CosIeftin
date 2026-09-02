@@ -76,6 +76,7 @@
     "audit:price-moves": "tsx scripts/audit-price-moves.ts",
     "audit:dropped": "tsx scripts/audit-dropped.ts",
     "repair:flagged-provenance": "tsx scripts/repair-flagged-provenance.ts",
+    "withhold:spread": "tsx scripts/withhold-spread.ts",
     "withhold:unverifiable": "tsx scripts/withhold-unverifiable.ts",
     "withhold:excluded": "tsx scripts/withhold-excluded.ts",
     "withhold:kept-over-refused": "tsx scripts/withhold-kept-over-refused.ts",

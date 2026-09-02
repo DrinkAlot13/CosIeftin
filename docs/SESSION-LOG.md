@@ -936,3 +936,36 @@ TWO FIXES:
 
 One row, one shop, no cola, no vanilie, no 2 l PET. Count and rows agree. 28,14 / 1,98 =
 14,21. No strikethrough. PASS.
+
+## PHASE 3 — the unit-price-spread products
+
+**81 → 60 → 1.**
+
+The re-scrape under the variant block did most of it on its own: 81 products above 2x spread
+when first measured (worst 24.3x, freshful 1,69 against sezamo 40,99), 60 after the fresh data
+landed (worst 5.9x). The variant hard block and own-size provenance cut both the count and the
+severity without anyone withholding anything.
+
+`withhold:spread` then took the remaining 59 (one had already resolved between measurements):
+**106 offers withheld across 59 products, all 106 queued to /admin/matches.** The cheapest
+offer on each product stays, so the page becomes a single-shop price record with no
+cross-store claim — the claim is the part that was wrong, not the price.
+
+Re-measured after: **1 product above 2x**, and it sits exactly on the 2.0x boundary
+("CARNE SI SARE Mici porc vita oaie cca 0,53 kg" — a variable-weight meat product, where a
+2x spread between shops is plausible rather than a bad match).
+
+A BUG FOUND IN THE AUDIT ITSELF while doing this. `audit:unitprice` filtered on `isStale`
+and not on `flagged`, so after withholding 106 offers it still reported 60 — counting rows
+that are on no page. The same gap `isCurrent()` had in phase 6. Fixed; it now measures what
+the site actually shows.
+
+**A CONCERN I AM LOGGING RATHER THAN DECIDING** (morning decision 3): the brief says keep the
+cheapest offer. On some of these the cheapest may be the WRONG one. "Gelatina foi Dr. Oetker
+10 g" carried sezamo 1,59 · carrefour 5,79 · auchan 6,85 on names that all look like the same
+product — that reads more like sheets-vs-package than a bad match, and keeping 1,59 shows the
+lowest price on the page when three shops say otherwise. Kept-cheapest is what the brief asked
+for and what I did; whether it should be kept-median is your call.
+
+Worst 20 before withholding, for the record: 5.9x Măsline Kalamata · 4.6x Gelatina foi
+Dr. Oetker · 4.0x Tagliatelle Carbonara Baneasa · 3.9x Pasta de dinti Colgate Total.
