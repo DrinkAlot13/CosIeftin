@@ -1,4 +1,10 @@
-# Proposed category tree — for review before anything is built
+# Category tree — proposal, and what happened when it was populated
+
+> **STATUS 2026-09-02: the grocery tree is BUILT AND POPULATED.** 12 departments, 70 leaves,
+> 19,097 of 22,864 grocery products assigned (83.5%; **84.5% of LIVE products**, which is what a
+> sidebar would show). The sidebar is deliberately NOT built — see `npm run audit:categories` and
+> eyeball the samples first. Sections 1–2 below are the original proposal, kept for the record;
+> the outcome is appended at the end.
 
 Item 5 of the UI brief asks for a persistent two-level left sidebar with counts, and says the
 current taxonomy is bad. It is, but not in the way the brief describes, and the difference
@@ -248,3 +254,90 @@ The tree is the easy half. Assignment is the work.
    data says grocery is the one section where the tree cannot be populated without a classifier.
 3. **`Medicamente otc`** — separate legal treatment, or fold into the tree?
 4. **Brands in cosmetice** — confirm they become a filter rather than categories.
+
+---
+
+# OUTCOME — grocery categorisation, 2026-09-02
+
+## Stage 1: recovery — much smaller than the DCNeu precedent suggested
+
+DCNeu's lesson was that a merchant category can be sitting in the database unused. That is true
+here too, and worth having, but it does **not** close the grocery gap. Audited per merchant:
+
+| merchant | field | coverage | depth | usable |
+|---|---|---|---|---|
+| **auchan** | `rawSourceBlob."categories"` (VTEX) | 5,981 blobs, present in 298/300 sampled | **3** | yes |
+| **mega-image** | `productUrl` path is the breadcrumb | 2,712 offers | **3** | yes |
+| **freshful** | `rawSourceBlob."breadcrumbs"` | 357 blobs | **3** | yes |
+| dcneu | `Offer.categoryPath` | 10,458 offers | 2–4 | yes (other section) |
+| metro | — | 0 | — | no: `/shop/pv/BTY-X7915380032`, blob is `{meta, pr}` |
+| sezamo | — | 0 | — | no: `/napolact-lapte-1-5-pet`, no category key |
+| carrefour | — | 0 | — | no |
+| kaufland, penny | — | 0 | — | no |
+
+Auchan's array survives even though the blob is truncated at exactly 4,096 bytes — it sits early
+enough in the VTEX record to make the cut.
+
+**But recovery barely moved the headline**, because the gap and the recoverable set barely
+overlap: **97.2% of uncategorised grocery products (13,096) are carried ONLY by Metro, Sezamo,
+Carrefour, Kaufland and Penny** — precisely the merchants that publish nothing we stored.
+
+## The recovery that is still on the table, and is bigger than everything above
+
+`scrape-sezamo.ts`, `scrape-metro.ts` and `scrape-carrefour.ts` **iterate categories to find
+products** — Sezamo over 9 named category ids, Metro over 3 category paths, Carrefour over ~40
+leaf category paths. Each therefore KNOWS the category of every product it writes, and discards
+it before the write. That is the DCNeu pattern again, one layer earlier.
+
+Persisting `Offer.categoryPath` in those three scrapers is a small change inside the pool
+contract; one nightly then recovers a merchant-supplied category for roughly 11,000 products,
+including ~2,000 of the currently-unassigned Sezamo ones. **This is the highest-value next step
+and it is not done here** — it needs a scraper change plus a re-scrape, not a backfill.
+
+## Stage 2: assignment by name — three bands
+
+`AUTO >= 0.62` written · `REVIEW >= 0.42` proposed, not written · below that, unassigned.
+
+| | products | share |
+|---|--:|--:|
+| recovered from a merchant path | 6,536 | 28.6% |
+| assigned by name (AUTO) | 12,561 | 54.9% |
+| **assigned in total** | **19,097** | **83.5%** |
+| in REVIEW, not written | 1,553 | 6.8% |
+| unassigned | 2,214 | 9.7% |
+
+Coverage on LIVE products — the population a sidebar actually renders — is **84.5%**.
+
+## Below the 85% bar, and what is left
+
+Both figures are under 85%. The remainder is a **long tail of specific Romanian product words**,
+not a systematic hole: patisserie (`ecler`, `savarină`, `amandine`), deli (`mortadella`, `lebăr`,
+`muschi țigănesc`), fish (`fish fingers`, `sardeluță`), cooking creams. Each additional ~100
+products costs roughly one more vocabulary entry, with diminishing returns and rising risk of the
+kind of over-reach the audit caught below.
+
+Remaining uncategorised by merchant: sezamo 1,996 · metro 1,141 · auchan 494 · kaufland 295 ·
+carrefour 68 · freshful 60 · mega-image 30 · penny 7.
+
+## What the independent audit caught, after the assigner had already written it
+
+`audit:categories` imports only `PrismaClient` — not the tree, not the assigner, not even
+`normalizeRo` — and it earned that separation immediately:
+
+- **Cream cheese filed under Curățenie și igienă.** A bare `"crema"` rule scored 0.95 at index 0
+  and beat `"branza"` at index 2, sending Almette, Philadelphia and Hochland to cleaning. Now a
+  named regression test.
+- **Adult incontinence pads under Bebeluși > Scutece** (SENI, TENA), and adult milk powder under
+  baby formula.
+- **Tinned tuna and pâté under Conserve** rather than Pește and Pateuri.
+- **409 products filed on a DEPARTMENT** rather than a leaf — my department slugs collide with the
+  seven legacy flat categories, so reusing them left their old products one level too high.
+- **The apply step was write-only.** Tightening a rule so a product no longer matched left the
+  previous run's wrong assignment in place, because NONE writes nothing. Corrections could not
+  take effect. Fixed: any product this run does not stand behind is cleared first.
+
+Cross-check against Mega Image's own published category: 2,734 products comparable, **1,488
+disagreements (54.8%)**. Most are taxonomy-shape differences rather than errors — Mega Image
+shelves coffee under "pâine, cafea, cereale și mic dejun" and cooking cream under the same, where
+we file them under Băuturi and Lactate. Worth reading before the sidebar ships; not worth
+treating as 1,488 defects.
