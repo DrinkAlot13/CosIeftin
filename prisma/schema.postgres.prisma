@@ -228,6 +228,13 @@ model Offer {
   sku          String?
   /// units per carton/box, where a cash & carry states it
   cartonQty    Int?
+  /// SGR container deposit for ONE container, in bani. 50 under the scheme; read from the
+  /// merchant where it publishes the figure (Auchan does), derived otherwise. Null means the
+  /// product is not in the scheme — deliberately distinct from a deposit of zero.
+  depositBani  Int?
+  /// containers in the pack: a 6-pack is 6, a single bottle is 1. The deposit scales with
+  /// this, not with volume, which is exactly why a 6x0.33 and a 2 l differ at the till.
+  containerCount Int?
   /// the merchant hides add-to-cart behind a login
   loginGated   Boolean        @default(false)
   /// slash-joined category path from the merchant's own breadcrumb

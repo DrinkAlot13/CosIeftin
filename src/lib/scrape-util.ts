@@ -25,6 +25,7 @@ import { ensureBackup } from "./ensure-backup";
 import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
 import { toPriceSource } from "./price-source";
 import { variantConflict } from "./variant-classes";
+import { depositFor, readPublishedDepositBani } from "./deposit";
 import { parseQuantity } from "./units/parseQuantity";
 import { exclusionReason } from "./excluded-categories";
 import { recordScraperRun } from "./scraper-run";
@@ -635,7 +636,8 @@ export async function matchPoolToCatalog(
   }
   pool = kept;
 
-  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { lastOfferCount: true, priceChannel: true } });
+  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { slug: true, lastOfferCount: true, priceChannel: true } });
+  const merchantSlugForDeposit = merchant?.slug ?? "";
   const rows = await prisma.product.findMany({ where: { section }, select: { id: true, name: true, brand: true, ean: true, unit: true, unitSize: true, image: true } });
   const catMap = new Map((await prisma.category.findMany({ select: { slug: true, id: true } })).map((c) => [c.slug, c.id]));
   const overrides = new Map((await prisma.matchOverride.findMany({ where: { merchantId }, select: { storeKey: true, productId: true, decision: true } })).map((o) => [o.storeKey, o]));
@@ -992,6 +994,18 @@ export async function matchPoolToCatalog(
     // did not believe its price.
     // Always false now that the gate never substitutes. Kept as an explicit guard so that
     // if any future gate DOES substitute, it cannot silently corrupt provenance again.
+    // The deposit is computed from the offer's OWN size and pack shape, never the catalog
+    // product's — the same rule as the unit price, for the same reason: a 6-pack matched onto
+    // a 2 l entry would otherwise inherit the wrong container count.
+    const ownPack = parseQuantity(o.sp.name)?.packCount ?? 1;
+    const sgr = depositFor({
+      unit: ownSize?.unit ?? null,
+      unitSize: ownSize?.unitSize ?? null,
+      packCount: ownPack,
+      categorySlug: o.sp.category ?? null,
+      publishedPerContainerBani: readPublishedDepositBani(merchantSlugForDeposit, o.sp.rawSourceBlob ?? null),
+    });
+
     const priceWasRefused = Math.abs(writePrice - o.price) > 1e-9;
     const provenance = {
       // The offer's OWN identity, so the unit price can be re-derived and checked without a
@@ -1004,6 +1018,12 @@ export async function matchPoolToCatalog(
       promoValidTo: o.sp.promoValidTo ?? null,
       lastObservedAt: new Date(),
       isStale: false,
+      // SGR container deposit. Read from the merchant's own published figure where it has one
+      // (Auchan prints GARANTIE_SGR), derived from pack shape and category otherwise, and
+      // NULL when the product is not in the scheme — "no deposit" and "a deposit of zero" are
+      // different claims and only one of them is supportable.
+      depositBani: sgr?.perContainerBani ?? null,
+      containerCount: sgr?.containerCount ?? null,
       isExpired: o.sp.promoValidTo ? o.sp.promoValidTo.getTime() < Date.now() : false,
       // Only when the price we are writing is the price we just read.
       ...(priceWasRefused

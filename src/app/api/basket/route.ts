@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
       flagged: o.flagged,
       isStale: o.isStale,
       tiers: o.tiers,
+      depositBani: o.depositBani,
+      containerCount: o.containerCount,
       merchant: {
         id: o.merchant.id,
         slug: o.merchant.slug,

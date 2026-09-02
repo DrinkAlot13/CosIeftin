@@ -18,6 +18,9 @@ export type OfferForBasket = {
   priceBani?: number | null;
   flagged?: boolean;
   isStale?: boolean;
+  /** SGR deposit per container, in bani; null when the product is not in the scheme */
+  depositBani?: number | null;
+  containerCount?: number | null;
   /** DCNeu-style quantity discounts. The ladder IS the offer at a discounter. */
   tiers?: { minQuantity: number; unitPriceBani: number; discountBp: number | null }[];
   merchant: {
@@ -66,6 +69,8 @@ export type PerItemResult = {
     priceSource: string;
     /** set when the line's quantity reached a quantity-discount rung */
     bulk?: { fromQty: number; unitPrice: number; savedOnLine: number } | null;
+    /** SGR deposit for this whole line, in lei. Refunded on return, but paid at the till. */
+    depositLine?: number;
     /**
      * "Add one more and you pay 6,61 instead of 7,00."
      *
@@ -138,6 +143,7 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
   // Per-item cheapest (the SPLIT strategy).
   const perItem: PerItemResult[] = [];
   let splitGoods = 0;
+  let totalDeposit = 0;
   const splitByMerchant = new Map<number, number>();
   for (const { productId, qty } of items) {
     const p = byId.get(productId);
@@ -161,6 +167,14 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
       const unitPrice = usesTier ? tierUnitBani / 100 : best.price;
       const hint = best.loyalty ? null : nextRungHint(ladder, baseBani, qty);
       const line = unitPrice * qty;
+      // SGR: real money at the till, so the basket total must carry it. A basket of six-packs
+      // holds meaningfully more deposit than the same volume in 2 l bottles, and that is a
+      // difference the optimizer was silently ignoring.
+      const depositLine =
+        best.offer.depositBani != null && best.offer.containerCount != null
+          ? (best.offer.depositBani * best.offer.containerCount * qty) / 100
+          : 0;
+      totalDeposit += depositLine;
       splitGoods += line;
       splitByMerchant.set(best.offer.merchant.id, (splitByMerchant.get(best.offer.merchant.id) ?? 0) + line);
       perItem.push({
@@ -176,6 +190,7 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
           linePrice: line,
           loyalty: best.loyalty,
           priceSource: best.offer.priceSource ?? "shelf",
+          depositLine,
           bulk: usesTier
             ? {
                 fromQty: ladder!.rungs.filter((r) => qty >= r.minQuantity).slice(-1)[0].minQuantity,
@@ -280,6 +295,15 @@ export function optimizeBasket(products: ProductForBasket[], items: BasketItemIn
     bestBlockedByMinOrder,
     storesInSplit,
     savings,
+    /**
+     * SGR deposits across the whole basket, in lei.
+     *
+     * Reported SEPARATELY and not folded into splitTotal: it is money handed over at the till
+     * and returned when the containers are, so adding it to the comparison total would
+     * overstate the cost while hiding it understates the bill. The optimizer's ranking is
+     * unchanged — see the morning report for what would change if deposits did affect it.
+     */
+    totalDeposit,
     itemCount: items.length,
     useLoyalty,
   };

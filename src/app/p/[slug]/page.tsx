@@ -122,6 +122,23 @@ export default async function ItemPage({ params }: { params: { slug: string } })
               </div>
             ) : null;
           })()}
+          {/*
+            SGR: PRICE AND DEPOSIT, SEPARATELY.
+            The deposit is not part of the price - it comes back when the container does - but
+            it IS money handed over at the till, and it differs between the products on this
+            page: a 6 x 0.33 l pack carries 3,00 lei and a 2 l bottle carries 0,50. Folding it
+            into the price would misstate the price; hiding it misstates the bill.
+            It deliberately does NOT affect the unit price or the "cel mai mic preț" ranking.
+          */}
+          {bestOffer?.depositBani != null && bestOffer.containerCount != null && (
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
+              + garanție SGR {formatRON((bestOffer.depositBani * bestOffer.containerCount) / 100)}
+              {bestOffer.containerCount > 1 ? ` (${bestOffer.containerCount} × ${formatRON(bestOffer.depositBani / 100)})` : ""}
+              {" · "}
+              <b>preț + garanție {formatRON(((bestOffer.priceBani ?? Math.round(bestOffer.price * 100)) + bestOffer.depositBani * bestOffer.containerCount) / 100)}</b>
+              {" — garanția se returnează când duci ambalajul înapoi"}
+            </div>
+          )}
           {(() => {
             const range = priceRange(summary.lowestBani, summary.highestBani, summary.inStockCount);
             return range ? (

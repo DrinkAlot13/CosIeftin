@@ -32,6 +32,8 @@ type Cheapest = {
   unitPrice: number; linePrice: number; loyalty?: boolean; priceSource?: string;
   /** set when this line's quantity reached a quantity-discount rung */
   bulk?: { fromQty: number; unitPrice: number; savedOnLine: number } | null;
+  /** SGR deposit for this line, in lei — paid at the till, refunded on return */
+  depositLine?: number;
   /** the next rung, only when reaching it costs LESS IN TOTAL than the current quantity */
   nextRung?: { addUnits: number; atQty: number; newUnitPrice: number; savesTotal: number } | null;
 };
@@ -45,6 +47,8 @@ type StoreTotal = {
 type Result = {
   perItem: PerItem[];
   splitTotal: number;
+  /** SGR deposits across the basket, in lei. Separate from splitTotal on purpose. */
+  totalDeposit?: number;
   splitGoods: number;
   splitDelivery: number;
   storeTotals: StoreTotal[];
@@ -385,6 +389,11 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                   <div className="rc-label">🧩 Cel mai ieftin împărțit</div>
                   <div className="rc-store">{result.storesInSplit} {result.storesInSplit === 1 ? "magazin" : "magazine"}</div>
                   <div className="rc-total">{formatRON(result.splitTotal)}</div>
+                  {result.totalDeposit != null && result.totalDeposit > 0 && (
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      + garanție SGR {formatRON(result.totalDeposit)} (se returnează)
+                    </div>
+                  )}
                   <div className="muted">fiecare produs de unde e cel mai ieftin</div>
                 </div>
                 {bestPreferred && (
