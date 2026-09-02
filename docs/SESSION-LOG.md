@@ -1023,3 +1023,32 @@ after matching. 0 of 2,017 comparable products disagree — the first clean resu
 has produced, and it means the size gate works end to end rather than only at match time.
 
 Final backup taken.
+
+## ITEM 1 — the 47 outliers: one definition, and the 47 were not real
+
+**The 47 were an artifact of two definitions over two populations — the priceSource shape.**
+
+    audit-db:   |b - med| > 0.7*med   over EVERY offer it had loaded
+    the repair: b > 1.7*med || b < med/1.7   over VISIBLE offers only
+
+Two thresholds and two populations. They agree on the high side and differ by a factor of two
+on the low side (0.30*med against 0.588*med), and they disagree entirely about which rows
+count. The audit said 47, the repair found 7, and the gap read as a bug in one of them rather
+than a disagreement between them.
+
+`src/lib/outlier.ts` now holds the rule, the threshold, the minimum peer count and the
+population, and both callers import it. The absolute form is kept because "more than 70% from
+the median" is what CLAUDE.md states; the ratio form would need 1/1.7 = 0.588, which reads as
+41% and is not the rule.
+
+**Result under one definition: 0 visible outliers.** The 47 were withheld, stale or
+out-of-stock rows — on no page, misleading nobody. The invariant is now green and its name
+says `no VISIBLE offer deviates`.
+
+The median is computed over VISIBLE offers only, which matters: including withheld ones lets
+a price we have already refused drag the median toward itself and hide the next one.
+
+`withhold:outliers` also diagnoses, per the brief — pack-mismatch vs missing ownUnitSize vs
+genuine disagreement. With zero found there is nothing to diagnose, so the multipack question
+is answered by absence: the pack-shape gate IS reaching these rows now that the re-scrape has
+populated ownUnitSize.

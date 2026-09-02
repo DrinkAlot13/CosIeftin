@@ -17,6 +17,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { parsePrice } from "../src/lib/price/parsePrice";
+import { findOutliers, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
 import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
 
 const prisma = new PrismaClient();
@@ -28,7 +29,7 @@ const OFFERS_WRITTEN_SINCE = new Date("2026-09-02T00:00:00Z");
 const MIN_BANI = 1;
 const MAX_BANI = 100_000_000; // 1,000,000 lei
 const STALE_DAYS = 14;
-const MEDIAN_DEVIATION = 0.7; // 70%
+
 const FANOUT_P95_GROCERY = 3;
 const FANOUT_MAX_ANY = 8;
 const SMEAR_MIN_PRODUCTS = 5;
@@ -372,24 +373,28 @@ async function auditPrices() {
     offers.filter((o) => { const b = o.priceBani ?? Math.round(o.price * 100); return b < MIN_BANI || b > MAX_BANI; })
       .map((o) => `offer ${o.id} [${o.merchant.name}] ${lei(o.priceBani ?? Math.round(o.price * 100))} lei`));
 
-  // cross-store median deviation, computed here rather than trusted from the writer
-  const byProduct = new Map<number, typeof offers>();
-  for (const o of offers) { const a = byProduct.get(o.productId) ?? []; a.push(o); byProduct.set(o.productId, a); }
-  const deviants: string[] = [];
-  for (const [, list] of byProduct) {
-    if (list.length < 3) continue; // a median of two is not a median
-    const prices = list.map((o) => o.priceBani ?? Math.round(o.price * 100));
-    const med = median(prices);
-    if (med <= 0) continue;
-    for (const o of list) {
-      const b = o.priceBani ?? Math.round(o.price * 100);
-      if (o.flagged) continue; // already known and quarantined
-      if (Math.abs(b - med) > med * MEDIAN_DEVIATION) {
-        deviants.push(`offer ${o.id} [${o.merchant.name}] ${lei(b)} vs median ${lei(med)} — ${o.product.name.slice(0, 36)}`);
-      }
+  // ── CROSS-STORE MEDIAN DEVIATION — one definition, imported.
+  //
+  //    This block used to carry its own copy of the rule while `withhold-outliers` carried
+  //    another: two thresholds (absolute vs ratio, differing by a factor of two on the low
+  //    side) over two populations (all offers vs visible ones). The audit said 47, the repair
+  //    found 7, and the gap read as a bug in one of them rather than a disagreement between
+  //    them. Both now import `lib/outlier`.
+  //
+  //    USER-FACING: counts only offers that reach a page.
+  {
+    const byProduct = new Map<number, typeof offers>();
+    for (const o of offers) {
+      const a = byProduct.get(o.productId) ?? [];
+      a.push(o);
+      byProduct.set(o.productId, a);
     }
+    const found = findOutliers(byProduct);
+    record("Prices", `no VISIBLE offer deviates >${MEDIAN_DEVIATION * 100}% from its cross-store median`,
+      found.map((f) =>
+        `offer ${f.offer.id} [${f.offer.merchant.name}] ${lei(baniOf(f.offer))} vs median ` +
+        `${lei(f.medianBani)} of ${f.peers} — ${f.offer.product.name.slice(0, 36)}`));
   }
-  record("Prices", `no unflagged offer deviates >${MEDIAN_DEVIATION * 100}% from its cross-store median`, deviants);
 
   // A net price must never be reachable by the optimizer — nobody pays the fără-TVA figure.
   record("Prices", "no WITHOUT_VAT offer is live (reachable by the optimizer)",
