@@ -13,6 +13,7 @@
 import { prisma } from "../src/lib/db";
 import { normalizeRo, tokensRo, overlapTokensRo, jaccard } from "../src/lib/text/normalizeRo";
 import { doseTokens } from "../src/lib/scrape-util";
+import { membershipOk, rulesFromAttributes } from "../src/lib/substitution/class-rules";
 
 /** Minimum name overlap with the class label before we will propose an assignment. */
 const MIN_SCORE = 0.34;
@@ -46,7 +47,12 @@ async function main() {
     tokens: new Set(overlapTokensRo(c.label)),
     head: tokensRo(c.label)[0] ?? "",
     dose: doseTokens(c.label),
+    // The class's OWN discriminators, from its `attributes`. Label-token overlap plus a
+    // head-noun rule is not enough on its own: it proposed "Branza de burduf" for telemea,
+    // "Cartofi pai" for potatoes and "Slanina de porc" for pork. See lib/substitution/class-rules.
+    rules: rulesFromAttributes(c.attributes),
   }));
+  const rejected = new Map<string, number>();
 
   const proposals = new Map<number, { productId: number; name: string; score: number }[]>();
   let considered = 0;
@@ -70,7 +76,12 @@ async function main() {
       // the resolver offer a substitute that is not equivalent.
       if (k.head) {
         const lead = tokensRo(p.name).slice(0, 2);
-        if (!lead.includes(k.head)) continue;
+        // The class's own discriminator counts as a head noun too. "Brânză telemea" has head
+        // "branza", but every telemea in the catalog is named "Telemea de vaca ..." — leading
+        // with the discriminator, not the category word. Requiring the label's head alone
+        // rejected all 26 of them.
+        const heads = [k.head, ...(k.rules.require ?? []).flatMap((t) => t.split("|").map((x) => normalizeRo(x)))];
+        if (!heads.some((h) => h && lead.includes(h))) continue;
         // "cu <noun>" is Romanian for "containing <noun>" — the product is the thing BEFORE
         // it. "Crenvurști cu piept de pui" is sausage; "Parizer cu carne de porc" is parizer.
         if (new RegExp(`\\bcu\\s+(?:\\w+\\s+){0,2}${k.head}\\b`).test(normalizeRo(p.name))) continue;
@@ -81,6 +92,12 @@ async function main() {
       }
       // a stated strength must not CONTRADICT the class (3,5% milk is not the 1,5% class)
       if (k.dose && pDose && k.dose !== pDose) continue;
+      // …and the class's own require/exclude discriminators must hold.
+      const member = membershipOk(p.name, k.rules);
+      if (!member.ok) {
+        rejected.set(k.c.slug, (rejected.get(k.c.slug) ?? 0) + 1);
+        continue;
+      }
       const score = jaccard(k.tokens, pTokens);
       if (score >= MIN_SCORE && (!best || score > best.score)) best = { classId: k.c.id, score };
     }
@@ -95,12 +112,13 @@ async function main() {
   const totalProposed = [...proposals.values()].reduce((a, b) => a + b.length, 0);
   console.log(`\nConsidered ${considered} grocery products with live offers.`);
   console.log(`Proposed ${totalProposed} assignments across ${proposals.size}/${classes.length} classes.\n`);
-  console.log("CLASS                          PROPOSED  EXAMPLES");
+  console.log("CLASS                          PROPOSED  REJECT  EXAMPLES");
   console.log("-".repeat(96));
   for (const k of prepared) {
     const list = (proposals.get(k.c.id) ?? []).sort((a, b) => b.score - a.score);
     const ex = list.slice(0, 2).map((x) => `${x.name.slice(0, 34)} (${x.score.toFixed(2)})`).join(" · ");
-    console.log(`${k.c.slug.padEnd(30)} ${String(list.length).padStart(8)}  ${ex}`);
+    const rej = rejected.get(k.c.slug) ?? 0;
+    console.log(`${k.c.slug.padEnd(30)} ${String(list.length).padStart(8)} ${String(rej).padStart(7)}  ${ex}`);
   }
 
   if (!apply) {

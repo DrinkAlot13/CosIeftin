@@ -17,6 +17,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { emitJson } from "../src/lib/audit-json";
+import { membershipOk, rulesFromAttributes } from "../src/lib/substitution/class-rules";
 import { parsePrice } from "../src/lib/price/parsePrice";
 import { findOutliers, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
 import { resolveSiteUrl, isLocalOrigin } from "../src/lib/config/siteUrl";
@@ -646,6 +647,52 @@ async function auditFreshness() {
     noRaw > 0 ? [`${noRaw} offers seen in the last 2 days have no rawPriceText (vs ${withRaw} that do)`] : []);
 }
 
+/**
+ * Every product assigned to an equivalence class must still satisfy that class's own
+ * membership rules.
+ *
+ * `propose:equivalence` writes these assignments, and CLAUDE.md forbids a backfill from
+ * verifying its own work — so the check lives here and re-derives membership from the class's
+ * stored `attributes`, not from anything the proposer computed. A wrong class is worse than no
+ * class: the resolver then offers a substitute that is not equivalent, and the shopper finds out
+ * at the till. The proposer's first run wanted to file "Brânză de burduf" as telemea, "Cartofi
+ * pai" as potatoes and "Slănină de porc" as pork.
+ */
+async function auditEquivalence() {
+  const classes = await prisma.equivalenceClass.findMany({
+    select: { id: true, slug: true, unit: true, unitSize: true, attributes: true },
+  });
+  const byId = new Map(classes.map((c) => [c.id, c]));
+  const assigned = await prisma.product.findMany({
+    where: { equivalenceClassId: { not: null } },
+    select: { id: true, name: true, unit: true, unitSize: true, equivalenceClassId: true },
+  });
+
+  const violations: string[] = [];
+  const wrongUnit: string[] = [];
+  for (const p of assigned) {
+    const c = byId.get(p.equivalenceClassId!);
+    if (!c) { violations.push(`product ${p.id} points at a class that does not exist`); continue; }
+    const m = membershipOk(p.name, rulesFromAttributes(c.attributes));
+    if (!m.ok) violations.push(`${c.slug}: "${p.name.slice(0, 52)}" — ${m.failed}`);
+    if (p.unit !== c.unit) wrongUnit.push(`${c.slug}: "${p.name.slice(0, 44)}" is ${p.unit}, class is ${c.unit}`);
+  }
+  record("Substitution", "every classified product satisfies its class's membership rules", violations);
+  record("Substitution", "no product is classified into a class with a different unit", wrongUnit);
+
+  // A class nobody can substitute within is not doing its job. Not a failure — a single-merchant
+  // class is honest when only one shop stocks the need — but it is reported so the gap is visible.
+  const singles: string[] = [];
+  for (const c of classes) {
+    const shops = await prisma.offer.groupBy({
+      by: ["merchantId"],
+      where: { product: { equivalenceClassId: c.id }, isStale: false, flagged: false, availability: "in stock", merchant: { active: true } },
+    });
+    if (shops.length === 1) singles.push(`${c.slug} exists at exactly one merchant`);
+  }
+  record("Substitution", "no equivalence class is stranded at a single merchant", [], singles.length ? `${singles.length} class(es): ${singles.slice(0, 6).map((s) => s.split(" ")[0]).join(", ")}` : undefined);
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("\n═══ DATABASE INVARIANT AUDIT ═══");
@@ -655,6 +702,7 @@ async function main() {
   await auditTiers();
   await auditMatching();
   await auditFreshness();
+  await auditEquivalence();
 
   let lastGroup = "";
   for (const c of checks) {
