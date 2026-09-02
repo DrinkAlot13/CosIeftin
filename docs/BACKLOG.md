@@ -108,3 +108,19 @@ reopened.
   product and renders as an uppercase brand line on the card. Nobody has counted how many.
 - **DCNeu category slugs include product names.** `Asevi Balsam Rufe 1 380ml Talco Rosa 60
   Spalari` is a top-level category. See the taxonomy proposal — this is the same root cause.
+
+## Glovo — blocked on one decision, not on engineering (2026-09-02)
+
+Recon complete; see `docs/data-sources.md`. Store discovery is solved, robots.txt permits
+crawling, and the catalog is gated on a delivery address whose creation is a WRITE to Glovo's
+customer_profile service. Not attempted: crawling their pages and creating a synthetic customer
+record are different acts, and only the first is covered by robots.txt.
+
+Needs from the owner, before any further work:
+1. A decision on creating a delivery address on Glovo as a synthetic customer.
+2. The ToS review that `data-sources.md` has flagged as outstanding since 2026-08-30.
+
+If both clear, the adapter is Playwright-over-RSC (there is no product JSON API even in served
+markets), and the markup work in the original brief follows. Nothing was built, because an
+adapter with no reachable data is inert code — the failure mode that cost this project the
+substitution engine and the `doseTokens` regex.

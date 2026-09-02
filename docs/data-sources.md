@@ -64,6 +64,65 @@ Prices as facts aren't copyrightable, but the EU *sui generis* database right
 robots is only one dimension — each platform's **Terms of Service** is a separate question and
 has not been reviewed here. Do that before any production run.
 
+### Glovo recon, 2026-09-02 — the blocker is now precisely located
+
+Supersedes the 2026-08-30 note below, which concluded "reverse-engineer the app auth flow". That
+was too pessimistic in one way and too optimistic in another. Re-verified live:
+
+**robots.txt is unchanged and permits this.** Fetched 2026-09-02T15:44Z:
+`User-Agent: *` / `Allow: /`, disallowing only `/embedded-web-views/*`,
+`/*/order-tracking/*/share`, `/*/password-recovery`. PetalBot is blocked; we are not PetalBot.
+
+**The store slugs are real and discoverable.** The old note's URL
+`/ro/ro/bucuresti/kaufland-buc/` now 302s through `/legacy-url-handler` to
+`/ro/ro/bucuresti/stores/kaufland-buc`. The RO sitemaps carry only city/category pages and no
+store pages at all, but one page enumerates them —
+`/ro/ro/glovo-delivery/categories/supermarket` links:
+
+    /ro/ro/bucuresti/stores/kaufland-buc      /ro/ro/bucuresti/stores/penny-buc
+    /ro/ro/bucuresti/stores/carrefour-buc     /ro/ro/bucuresti/stores/mega-image-buc
+    /ro/ro/bucuresti/stores/freshful-buc      /ro/ro/bucuresti/stores/carrefour-supermarket-buc
+
+So store discovery is solved and needs no reverse engineering.
+
+**The gate is a delivery address, and only that.** Every store page renders
+"Această pagină nu există" until one is set. Two GUEST endpoints already work unauthenticated:
+
+    GET /v3/addresslookup/pub/coordinates?latitude=..&longitude=..&allowFallback=true
+        -> { placeId, cityCode: "BUC", fullAddress, addressComponents }
+    GET /customer_profile/api/v1/guest/address_book/delivery_point_info?latitude=..&longitude=..
+        -> { valid: true, fullGlovoPlaceId: "cad%3A44.4268%0A26.1025%0A...", action: "GO_TO_ADDRESS_CREATION" }
+
+`GO_TO_ADDRESS_CREATION` is the whole remaining blocker: the guest has no stored address, and
+creating one is a **write to Glovo's customer_profile service**. That is a different act from
+crawling — robots.txt permits reading their pages; it does not authorize creating records in
+their user database as a synthetic customer. **Not attempted deliberately.** It needs an explicit
+decision and a ToS review, which has still never been done.
+
+**There is no JSON product API to prefer over rendering.** Control experiment, same method
+against a fully-served market:
+
+| route | renders | store links | product JSON API calls |
+|---|---|---|---|
+| `/es/es/madrid/` (control) | yes | 2 | 0 |
+| `/es/es/madrid/stores/superglovo-mad` | yes | – | 0 (only `features/query`) |
+| `/ro/ro/bucuresti` | **404** | 0 | 0 |
+| `/ro/ro/timisoara` | yes | – | 0 |
+
+Madrid works with the identical script, so the method is sound and the difference is the address,
+not our approach. And even in Madrid the web client never calls a product JSON endpoint — the
+catalog is server-rendered React Server Components. So the answer to "JSON API or rendered?" is
+**rendered**, and any adapter would be Playwright-based, against RSC payloads, behind an
+account-bound address.
+
+**foodpanda.ro now redirects to `glovoapp.com/ro/ro`** — Glovo is the Romanian operator, so this
+is the only aggregator door for Kaufland/Penny/Profi, not one of several.
+
+**Recommendation unchanged, and now better evidenced:** Monitorul Prețurilor is mandatory-reporting
+SHELF data across the same chains, with no markup to model, no address gate, and no ToS exposure.
+Glovo is reachable only by creating a customer address record, and it yields marked-up prices we
+would then have to hide by default anyway.
+
 ### Glovo is blocked on more than a delivery address
 
 Two serious attempts, both failing at the same wall:
