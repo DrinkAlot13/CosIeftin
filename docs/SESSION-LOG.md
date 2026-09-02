@@ -859,3 +859,80 @@ SGR section and the report link.
 
 `/despre` is left in place — it is the short pitch and is linked from elsewhere. Backlog:
 decide whether to fold it into this page or keep both.
+
+## PHASE 1 — completed
+
+All 12 attempted. **KAUFLAND ABORTED TWICE** — see the morning report, decision 2.
+
+Late completions: DCNeu (6,129 fresh offers, 18,330 review candidates queued),
+Farmacia Tei 2,022, Penny 30. Kaufland refused both times:
+`296 offers < 60% of last 594 live in section "grocery"`.
+
+The Kaufland abort is the drop guard working and being wrong at the same time. Kaufland is a
+FLYER source: its weekly catalogue genuinely varies in size, and this week's has 264 products
+against a baseline built from a larger one. The 60% guard was designed for a site redesign or
+an anti-bot block, where a collapse means the read broke. For a weekly flyer, a collapse can
+just be a smaller week. The guard kept the previous data, which is the safe outcome, so
+Kaufland is serving last week's prices with last week's dates.
+
+Provenance coverage after the run (percentages of that merchant's total offers):
+
+| merchant | offers | fresh | storeName | ownSize | rawText | blob |
+|---|---|---|---|---|---|---|
+| auchan | 9,391 | 5,981 | 64% | 61% | 65% | 64% |
+| carrefour | 2,801 | 2,131 | 76% | 76% | 77% | 76% |
+| dcneu | 8,279 | 6,129 | 74% | 64% | 97% | 74% |
+| farmaciatei | 2,717 | 2,022 | 74% | 57% | 82% | 74% |
+| finestore | 278 | 276 | 99% | 99% | 100% | 99% |
+| freshful | 1,938 | 357 | 18% | 18% | 22% | 18% |
+| kaufland | 655 | 595 | 91% | 80% | 100% | 100% |
+| lemanoir | 94 | 94 | 100% | 4% | 100% | 100% |
+| mega-image | 2,746 | 724 | 26% | 26% | 27% | 26% |
+| metro | 6,519 | 5,339 | 82% | 74% | 83% | 81% |
+| penny | 53 | 30 | 57% | 11% | 58% | 0% |
+| sezamo | 9,219 | 7,808 | 85% | 85% | 86% | 85% |
+
+The low percentages are all the same thing: offers not re-seen this run keep their old rows,
+and those predate the provenance columns. freshful and mega-image are lowest because they are
+match-only and reject 70%+ of their pool.
+
+Penny at 0% blob is a real gap: the adapter runner sets `rawSourceBlob` on the JSON path and
+not the DOM path. Logged to BACKLOG.
+
+## PHASE 2 — the Pepsi product, PROVEN
+
+Auchan's genuine six-pack now matches by EAN: storeName
+`"Bautura carbogazoasa cu gust de zmeura Pepsi, doza, 6 x 0.33 l"`, ownUnitSize 1.98 l,
+packCount 6, 28,14 lei, unit price 14,21 lei/l. Nothing new attached wrongly — the variant
+block held across the whole catalog (variant-flavour fired 1,515 times, pack-shape 409).
+
+BUT THE FIRST RENDER STILL FAILED. Three pre-block offers were still on the product:
+
+    Mega Image | Stoc epuizat | ultimul preț 6 aug. 2026 | 10,49 RON | 5,30 lei/L
+    Carrefour  | Stoc epuizat | ultimul preț 6 aug. 2026 | 10,49 RON | 5,30 lei/L
+    Freshful   | Stoc epuizat | ultimul preț 6 aug. 2026 | 17,99 RON | 9,09 lei/L
+
+all `storeName` NULL, `matchedBy` "scraper", stale. The variant block governs matches the
+matcher MAKES; these were made before it existed and their merchants' fresh runs simply never
+re-matched them, so the rows were marked stale and left where they were. Greyed with a date,
+they still claimed two shops carry a six-pack they do not sell.
+
+TWO FIXES:
+
+1. `withhold:unverifiable` — 9,822 offers across ~6,600 products that are stale, carry no
+   name of their own, and were matched by the pre-band path. They cannot be re-judged and the
+   matcher that made them is discredited. Flagged, not deleted; a re-scrape that sees the
+   product again writes a real offer and clears it.
+2. The item page now excludes FLAGGED offers from the table entirely. Out-of-stock rows still
+   show with their dates — that is a fact about a shop that does carry the product — but a
+   withheld row is one we do not believe, and greying a false claim does not make it true.
+
+**RENDERED HTML, after the fixes:**
+
+    cel mai mic preț | 28,14 RON | 14,21 lei/L · | 1 magazine | Vezi la Auchan · 28,14 RON →
+    Prețuri în 1 magazine
+    Magazin | Disponibilitate | Preț | Preț/unitate
+    Auchan | 🏬 | Magazin + online | În stoc | 28,14 RON | ✓ Cel mai mic preț | 14,21 lei/L
+
+One row, one shop, no cola, no vanilie, no 2 l PET. Count and rows agree. 28,14 / 1,98 =
+14,21. No strikethrough. PASS.

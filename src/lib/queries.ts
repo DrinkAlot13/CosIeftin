@@ -140,7 +140,20 @@ export async function getItemPage(slug: string) {
     where: { slug },
     include: {
       category: true,
-      offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } }, tiers: { orderBy: { minQuantity: "asc" } } } },
+      // A WITHHELD OFFER DOES NOT RENDER AT ALL.
+      //
+      // Out-of-stock rows stay, greyed, with their last-seen date — that is a fact about a
+      // shop that does carry the product. A FLAGGED row is different: it is one a gate
+      // withheld, which means we do not believe the price, the match, or both.
+      //
+      // The Pepsi page proved the difference. After a full re-scrape it still rendered
+      // "Mega Image · Stoc epuizat · 10,49 RON" and the same for Carrefour — on a six-pack
+      // neither of them sells. Those rows were stale AND withheld, and still claimed two
+      // shops carried the product. Greying a false claim does not make it true.
+      offers: {
+        where: { merchant: { active: true }, flagged: false },
+        include: { merchant: true, history: { orderBy: { recordedAt: "asc" } }, tiers: { orderBy: { minQuantity: "asc" } } },
+      },
     },
   });
   if (!product) return null;
