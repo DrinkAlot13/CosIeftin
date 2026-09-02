@@ -139,6 +139,27 @@ export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") 
   return { category, products: decorated };
 }
 
+/**
+ * The uncategorised listing.
+ *
+ * Same shape and same filter as `getCategoryPage`, on purpose: these products are ordinary in
+ * every way except that nothing has managed to classify them, and showing them through a
+ * different code path would be how their prices quietly start behaving differently.
+ */
+export async function getUncategorisedPage(sort: SortKey = "unit-asc") {
+  const products = await prisma.product.findMany({
+    where: { categoryId: null, section: "grocery" },
+    include: { offers: activeInclude, category: true },
+  });
+  const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
+  decorated.sort((a, b) => {
+    if (sort === "name") return a.name.localeCompare(b.name, "ro");
+    if (sort === "price-asc") return a.summary.lowestBani - b.summary.lowestBani;
+    return a.unitLowest - b.unitLowest;
+  });
+  return { products: decorated };
+}
+
 export async function getItemPage(slug: string, showDeliveryPlatform = false) {
   const product = await prisma.product.findUnique({
     where: { slug },

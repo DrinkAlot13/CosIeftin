@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/ProductCard";
 import { getCategoryPage, type SortKey } from "@/lib/queries";
+import { CategorySidebar } from "@/components/CategorySidebar";
+import { getCategoryNav } from "@/lib/category-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -24,15 +26,30 @@ export default async function CategoryPage({
   searchParams: { sort?: string };
 }) {
   const sort = (searchParams.sort as SortKey) || "unit-asc";
-  const data = await getCategoryPage(params.slug, sort);
+  const [data, nav] = await Promise.all([
+    getCategoryPage(params.slug, sort),
+    getCategoryNav("grocery"),
+  ]);
   if (!data) notFound();
   const { category, products } = data;
+  // The department this shelf belongs to, so the breadcrumb has the middle step a two-level
+  // tree implies. Without it a shopper cannot get back up to the department they came from.
+  const parent = nav.departments.find((d) => d.leaves.some((l) => l.slug === category.slug));
 
   return (
     <div className="container">
+      <div className="cat-layout" style={{ marginTop: 16 }}>
+      <CategorySidebar nav={nav} activeSlug={category.slug} />
+      <div>
       <nav className="breadcrumb" aria-label="breadcrumb">
         <Link href="/">Acasă</Link>
         <span className="sep">/</span>
+        {parent ? (
+          <>
+            <span className="muted">{parent.name}</span>
+            <span className="sep">/</span>
+          </>
+        ) : null}
         <span>{category.name}</span>
       </nav>
       <div className="section-head" style={{ marginTop: 8 }}>
@@ -57,6 +74,8 @@ export default async function CategoryPage({
         </div>
       )}
       <div style={{ height: 32 }} />
+      </div>
+      </div>
     </div>
   );
 }
