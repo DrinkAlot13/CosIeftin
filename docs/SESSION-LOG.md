@@ -1004,3 +1004,22 @@ DCNeu alone takes over an hour and the remaining phases matter more.
 
 Logged to BACKLOG: every other scraper with a MAX_* constant needs the same look. The failure
 is silent by construction — a cap that bites produces a smaller, entirely valid-looking run.
+
+## PHASES 9 & 10 — verify, measure, close out
+
+audit:displayed 8/8. audit-db 23/28. verify:site NOT green; the five remaining are itemised
+in MORNING-REPORT §2 with a judgement on each.
+
+THREE AUDITS WERE MEASURING THE WRONG THING, all the same way — counting rows that
+withholding had already removed from every page. 8,822 then 22 then 46 reported failures,
+none of them a defect the site has. Fixing the site made its own checks lie, which is as
+dangerous as a check that misses real defects: both teach you to ignore it.
+
+Real fixes in this phase: 60 offers past their promo window marked expired, 129 tier rows
+removed from offers under review, 7 median outliers withheld with refusals recorded.
+
+THE ASSUMPTION TEST: every offer on one product describes the same size. Nothing verified it
+after matching. 0 of 2,017 comparable products disagree — the first clean result this method
+has produced, and it means the size gate works end to end rather than only at match time.
+
+Final backup taken.
