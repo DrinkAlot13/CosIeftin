@@ -64,3 +64,21 @@ Fixed for DCNeu (cap 250, and the log now says when the cap bit). **Every other 
 a MAX_* constant needs the same look** — `MAX_PAGES`, `maxPages`, `take`, `slice` — because
 the failure is silent by construction: a cap that bites produces a smaller, entirely valid
 looking run.
+
+## DCNeu's category-discovery regex catches product pages
+
+`/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/` matches any two-segment
+path, so 7 PRODUCT urls (`balsam-rufe/asevi-balsam-rufe-1-44l-concentrat-zen` and six
+siblings) are counted as leaf categories. "Discovered 180" is really 173 categories plus 7
+products; all 173 real ones scrape and none yields zero.
+
+Harmless today — a product page fetched as a category simply yields nothing extra — but it
+makes the discovered/scraped assertion impossible to state cleanly, which is the assertion
+that would catch the next truncation.
+
+## FLORI ARTIFICIALE TOPORAS A-80600 is delisted at DCNeu
+
+The category is now scraped (133 products listed, 140 pooled) and its ladders render. The
+specific SKU the user pointed at is gone from DCNeu itself: zero TOPORAS products and no
+"A-80600" anywhere in that category page. Nothing to fix — recorded so the question is not
+reopened.
