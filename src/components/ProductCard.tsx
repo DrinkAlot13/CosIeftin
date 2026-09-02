@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { AddToList } from "@/components/AddToList";
+import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ProductImage } from "@/components/ProductImage";
 import { formatPerUnit, formatRON } from "@/lib/format";
 
 export type CardProduct = {
+  id: number;
   slug: string;
   name: string;
   brand: string | null;
@@ -26,6 +28,9 @@ export type CardProduct = {
 export function ProductCard({ p }: { p: CardProduct }) {
   return (
     <div className="card pcard">
+      {/* Outside the Link: a heart inside an anchor navigates on click, and stopPropagation
+          alone does not stop Next's client router from following the parent href. */}
+      <div className="pcard-heart"><FavoriteHeart productId={p.id} size={19} /></div>
       <Link href={`/p/${p.slug}`} className="pcard-link">
         <div className="pimg">
           <ProductImage name={p.name} brand={p.brand} src={p.image} />
@@ -53,7 +58,7 @@ export function ProductCard({ p }: { p: CardProduct }) {
         </div>
       </Link>
       <div className="pcard-actions">
-        <AddToList slug={p.slug} name={p.name} />
+        <AddToList slug={p.slug} name={p.name} productId={p.id} />
       </div>
     </div>
   );

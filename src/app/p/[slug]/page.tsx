@@ -7,10 +7,11 @@ import { visibleTiers } from "@/lib/bulk-tiers";
 import { priceDisplayFor, priceRange } from "@/lib/reference-price";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { ProductCard } from "@/components/ProductCard";
+import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ProductImage } from "@/components/ProductImage";
 import { TrackPrice } from "@/components/TrackPrice";
 import { formatPerUnit, formatRON } from "@/lib/format";
-import { getAlternatives, getItemPage } from "@/lib/queries";
+import { getAlternatives, getClassEquivalents, getItemPage } from "@/lib/queries";
 import { abs, breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
 
 // Prices refresh once a night, so serve these from cache and regenerate hourly —
@@ -49,6 +50,7 @@ export default async function ItemPage({ params }: { params: { slug: string } })
   if (!data) notFound();
   const { product, offers, summary, bestOffer, priceInsight } = data;
   const alternatives = await getAlternatives(product.id);
+  const equivalents = await getClassEquivalents(product.id);
 
   const dateSet = new Set<string>();
   for (const o of offers) for (const h of o.history) dateSet.add(h.recordedAt.toISOString().slice(0, 10));
@@ -87,7 +89,10 @@ export default async function ItemPage({ params }: { params: { slug: string } })
         <div className="product-gallery"><ProductImage name={product.name} brand={product.brand} src={product.image} /></div>
         <div>
           {product.brand && <div className="pbrand" style={{ fontSize: 13 }}>{product.brand}</div>}
-          <h1 className="product-title">{product.name}</h1>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <h1 className="product-title" style={{ flex: 1, minWidth: 0 }}>{product.name}</h1>
+            <FavoriteHeart productId={product.id} size={26} />
+          </div>
           {/*
             A STRIKETHROUGH IS A CLAIM ABOUT ONE OFFER'S OWN HISTORY.
             This block used to render `summary.highest` — ANOTHER MERCHANT'S price for the
@@ -171,7 +176,7 @@ export default async function ItemPage({ params }: { params: { slug: string } })
                 Vezi la {bestOffer.merchant.name} · {formatRON(bestOffer.price)} →
               </a>
             )}
-            <AddToList slug={product.slug} name={product.name} />
+            <AddToList slug={product.slug} name={product.name} productId={product.id} />
             <TrackPrice slug={product.slug} name={product.name} price={summary.lowest} />
           </div>
           {/*
@@ -226,6 +231,42 @@ export default async function ItemPage({ params }: { params: { slug: string } })
           <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Treci cu mouse-ul peste grafic pentru prețul fiecărui magazin.</p>
         </div>
       </section>
+
+      {/* SAME NEED, ANY SHOP.
+          `getAlternatives` below finds products that look similar. This finds products the
+          substitution engine would actually accept in place of this one — the equivalence
+          class — and shows them PER SHOP. That distinction is the site's reason to exist: if
+          Auchan sells eggs L 10-pack and Mega sells a different brand of eggs L 10-pack, both
+          belong here, priced, with the shop named. */}
+      {equivalents.rows.length > 1 && (
+        <section className="section">
+          <div className="section-head"><h2>🔁 Același lucru, la alt magazin</h2></div>
+          <p className="muted" style={{ marginTop: -8, marginBottom: 12 }}>
+            Produse pe care le considerăm <b>echivalente</b>{equivalents.label ? <> ({equivalents.label.toLowerCase()})</> : null} —
+            marcă diferită, aceeași nevoie. Sortate după prețul pe unitate.
+          </p>
+          <div className="card" style={{ overflowX: "auto" }}>
+            <table className="admin-table">
+              <thead><tr><th>Produs</th><th>Magazin</th><th className="num">Preț</th><th className="num">Preț/unitate</th></tr></thead>
+              <tbody>
+                {equivalents.rows.map((r, i) => (
+                  <tr key={`${r.productId}-${r.merchantSlug}-${i}`} style={r.isSelf ? { background: "var(--primary-050)" } : undefined}>
+                    <td>
+                      <Link href={`/p/${r.slug}`} style={{ fontWeight: r.isSelf ? 700 : 500 }}>{r.name}</Link>
+                      {r.isSelf && <span className="muted" style={{ fontSize: 12 }}> · produsul de mai sus</span>}
+                    </td>
+                    <td>{r.merchantName}</td>
+                    <td className="num" style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{formatRON(r.priceBani / 100)}</td>
+                    <td className="num muted" style={{ whiteSpace: "nowrap" }}>
+                      {r.pricePerUnit > 0 ? formatPerUnit(r.pricePerUnit, r.unit) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {alternatives.length > 0 && (
         <section className="section">

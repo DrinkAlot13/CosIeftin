@@ -89,6 +89,7 @@ model Product {
   equivalenceClass   EquivalenceClass? @relation(fields: [equivalenceClassId], references: [id])
   attributes ProductAttribute[]
   favorites  UserFavorite[]
+  productAdds UserProductAdd[]
   blocked    UserBlocklist[]
   packChanges ProductPackChange[]
   pendingMatches PendingMatch[]
@@ -506,6 +507,7 @@ model User {
   lists        GroceryList[]
   favorites    UserFavorite[]
   blocklist    UserBlocklist[]
+  productAdds  UserProductAdd[]
 }
 
 /// A saved shopping list (tied to a user, or anonymous via `token`).
@@ -663,4 +665,27 @@ model PendingMatch {
   @@index([resolved, score])
   @@index([decision, reason])
   @@index([merchantId])
+}
+
+/// How many times a shopper has added a given product to a list.
+///
+/// This is the evidence behind an INFERRED favourite. A product added three times is one the
+/// shopper keeps buying, and the resolver should prefer it over a cheaper stranger without
+/// them having to say so. It is deliberately a COUNT and not a boolean: the threshold is a
+/// product decision that may change, and a boolean would have thrown away the evidence needed
+/// to change it.
+///
+/// Carts live in localStorage, so this is written by an explicit API call on add rather than
+/// derived from GroceryListItem — which only exists for saved, server-side lists.
+model UserProductAdd {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  count     Int      @default(1)
+  lastAddedAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
 }

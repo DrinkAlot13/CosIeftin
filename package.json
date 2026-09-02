@@ -98,7 +98,8 @@
     "backfill:pricesource": "tsx scripts/backfill-pricesource.ts",
     "backfill:pricechannel": "tsx scripts/backfill-pricechannel.ts",
     "audit:basket": "tsx scripts/audit-basket.ts",
-    "audit:search-quality": "tsx scripts/audit-search-quality.ts"
+    "audit:search-quality": "tsx scripts/audit-search-quality.ts",
+    "audit:recipes": "tsx scripts/audit-recipes.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

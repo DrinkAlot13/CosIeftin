@@ -427,7 +427,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
 
               <div className="card" style={{ overflowX: "auto", marginTop: 16 }}>
                 <table className="admin-table">
-                  <thead><tr><th>Magazin</th><th>Produse</th><th>Livrare</th><th>Total de plată</th><th>Acoperire</th></tr></thead>
+                  <thead><tr><th>Magazin</th><th>Produse</th><th>Livrare</th><th>Total de plată</th><th>Acoperire</th><th></th></tr></thead>
                   <tbody>
                     {sortedStoreTotals.map((st) => {
                       const mine = prefSet.has(st.slug);
@@ -458,6 +458,14 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                           </td>
                           <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{formatRON(st.total)}</td>
                           <td className="muted">{st.itemsFound}/{result.itemCount}{st.missing > 0 ? ` (lipsesc ${st.missing})` : ""}</td>
+                          {/* The coverage number says what is missing; this says what to do
+                              about it. Every row gets the link, not only incomplete ones — a
+                              complete basket at one shop is exactly when you want to go there. */}
+                          <td>
+                            <Link className="btn btn-outline btn-sm" href={`/lista/magazin/${st.slug}`}>
+                              {st.missing > 0 ? `Completează coșul la ${st.name}` : `Vezi coșul la ${st.name}`}
+                            </Link>
+                          </td>
                         </tr>
                       );
                     })}

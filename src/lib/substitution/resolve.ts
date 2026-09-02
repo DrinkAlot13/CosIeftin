@@ -123,7 +123,7 @@ export function totalForPacks(o: OfferLike, packs: number): Bani {
   return per * packs;
 }
 
-function isBuyable(o: OfferLike, ctx: UserContext, now: Date): { ok: boolean; why?: keyof NonNullable<ResolutionReason["excluded"]> } {
+export function isBuyable(o: OfferLike, ctx: UserContext, now: Date): { ok: boolean; why?: keyof NonNullable<ResolutionReason["excluded"]> } {
   if (ctx.blockedProductIds.has(o.product.id)) return { ok: false, why: "blocked" };
   if (o.product.brand && ctx.blockedBrands.has(o.product.brand.toLowerCase())) return { ok: false, why: "blocked" };
   if (o.hasUnresolvedAnomaly) return { ok: false, why: "anomaly" };
@@ -162,7 +162,7 @@ function candidatesFor(line: ListLine, requested: OfferLike | undefined, all: Of
 }
 
 /** Rank survivors: favourites first, then private label if preferred, then unit price. */
-function rank(cands: OfferLike[], ctx: UserContext, unitsNeeded: number): OfferLike[] {
+export function rank(cands: OfferLike[], ctx: UserContext, unitsNeeded: number): OfferLike[] {
   return [...cands].sort((a, b) => {
     const fav = (o: OfferLike) => (ctx.favouriteProductIds.has(o.product.id) ? 0 : ctx.inferredFavouriteProductIds.has(o.product.id) ? 1 : 2);
     if (fav(a) !== fav(b)) return fav(a) - fav(b);

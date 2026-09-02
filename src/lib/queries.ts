@@ -228,6 +228,62 @@ export async function getAlternatives(productId: number, limit = 8, strictness: 
 export type AltProduct = Awaited<ReturnType<typeof getAlternatives>>[number];
 
 /**
+ * Products that meet the SAME NEED, at whichever shop sells them.
+ *
+ * Different question from `getAlternatives`, which finds products with the same head noun and a
+ * similar pack size regardless of whether they are interchangeable. This one uses the
+ * equivalence class — the thing the substitution engine actually substitutes within — so what
+ * comes back is what the basket would really give you at another shop.
+ *
+ * The shop is the point. "Auchan sells eggs L 10-pack and Mega sells a different brand of eggs
+ * L 10-pack" is two answers to one need, and a comparison site that shows only the first is
+ * hiding the reason it exists. Each row therefore carries its cheapest CURRENT offer and the
+ * merchant behind it, and the same product appearing at three shops appears three times — once
+ * per shop, priced.
+ */
+export async function getClassEquivalents(productId: number, limit = 12) {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true, equivalenceClassId: true, equivalenceClass: { select: { label: true, unit: true } } },
+  });
+  if (!p?.equivalenceClassId) return { label: null, rows: [] };
+
+  const siblings = await prisma.product.findMany({
+    where: { equivalenceClassId: p.equivalenceClassId },
+    select: {
+      id: true, slug: true, name: true, brand: true, unit: true, unitSize: true,
+      offers: {
+        where: { ...currentOfferWhere(), merchant: { active: true } },
+        select: {
+          price: true, priceBani: true, pricePerUnit: true, url: true, productUrl: true,
+          merchant: { select: { id: true, name: true, slug: true } },
+        },
+      },
+    },
+  });
+
+  // One row per (product, shop): the same eggs at three shops are three offers to compare.
+  const rows = siblings.flatMap((sib) =>
+    sib.offers.map((o) => ({
+      productId: sib.id,
+      slug: sib.slug,
+      name: sib.name,
+      brand: sib.brand,
+      unit: sib.unit,
+      isSelf: sib.id === p.id,
+      merchantName: o.merchant.name,
+      merchantSlug: o.merchant.slug,
+      priceBani: o.priceBani ?? Math.round(o.price * 100),
+      pricePerUnit: o.pricePerUnit,
+      url: o.productUrl ?? o.url,
+    })),
+  );
+  rows.sort((a, b) => (a.pricePerUnit || Infinity) - (b.pricePerUnit || Infinity) || a.priceBani - b.priceBani);
+  return { label: p.equivalenceClass?.label ?? null, rows: rows.slice(0, limit) };
+}
+export type ClassEquivalents = Awaited<ReturnType<typeof getClassEquivalents>>;
+
+/**
  * Search the grocery catalog.
  *
  * TWO RULES ARE ENFORCED HERE RATHER THAN IN THE RANKER, because they are about what may be

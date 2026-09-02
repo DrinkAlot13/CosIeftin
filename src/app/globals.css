@@ -237,7 +237,7 @@ img { max-width: 100%; }
 .grid-products { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
 .grid-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 
-.pcard { display: flex; flex-direction: column; overflow: hidden; transition: box-shadow .15s, transform .15s; }
+.pcard { position: relative; display: flex; flex-direction: column; overflow: hidden; transition: box-shadow .15s, transform .15s; }
 .pcard:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
 .pcard .pimg { aspect-ratio: 1 / 1; background: #fff; display: grid; place-items: center; overflow: hidden; }
 /* All product photos fill their square box identically (no crop) so browsing looks uniform. */
@@ -641,3 +641,39 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
   margin: 6px 0 4px;
 }
 .search-miss-head { margin: 0; font-size: 16px; font-weight: 600; }
+
+/* ---------- Favourites ---------- */
+.heart {
+  background: none; border: none; cursor: pointer; line-height: 1; padding: 2px 4px;
+  color: var(--muted); font-family: inherit;
+}
+.heart:hover { color: var(--danger); }
+.heart.on { color: var(--danger); }
+/* An INFERRED favourite is evidence, not a statement, so it is shown as an outline in the
+   accent colour rather than a filled heart — the shopper has not said this, we noticed it. */
+.heart.inferred { color: var(--accent); }
+.heart:disabled { opacity: .5; cursor: default; }
+.heart-note {
+  position: absolute; top: 100%; right: 0; z-index: 30; white-space: nowrap;
+  background: var(--text); color: var(--surface); font-size: 12px;
+  padding: 5px 9px; border-radius: 6px; margin-top: 4px;
+}
+.pcard .pimg { position: relative; }
+.pcard-heart { position: absolute; top: 6px; right: 6px; z-index: 2; }
+
+/* ---------- Recipe resolution preview ---------- */
+.recipe-lines { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.recipe-lines li {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
+}
+.recipe-lines li.missing { color: var(--warn); }
+.recipe-price { margin-left: auto; font-weight: 700; white-space: nowrap; }
+
+/* ---------- Per-shop basket ---------- */
+.btn-sm { padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
+.sub-note { font-size: 12.5px; margin-top: 2px; }
+.sub-note.good { color: var(--accent); }
+.sub-note.warn { color: var(--warn); }
+.sub-note.neutral { color: var(--muted); }
+.line-missing { background: var(--stale-bg); }
