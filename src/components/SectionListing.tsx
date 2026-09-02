@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CardBoundary } from "@/components/CardBoundary";
+import { CategoryChips } from "@/components/CategoryChips";
 import { ProductCard } from "@/components/ProductCard";
 import { getSectionCategories, getSectionProducts, type SortKey } from "@/lib/queries";
 
@@ -55,27 +56,33 @@ export async function SectionListing({
       <p className="muted" style={{ marginTop: -4 }}>{blurb}</p>
 
       {categories.length > 0 && (
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 0", whiteSpace: "nowrap" }}>
-          <Link href={link({ cat: null })} className={!cat ? "chip active" : "chip"}>Toate</Link>
-          {categories.map((c) => (
-            <Link key={c.id} href={link({ cat: c.slug })} className={cat === c.slug ? "chip active" : "chip"}>{c.name}</Link>
-          ))}
-        </div>
+        <CategoryChips
+          chips={[
+            { key: "__all", href: link({ cat: null }), label: "Toate", active: !cat },
+            ...categories.map((c) => ({ key: String(c.id), href: link({ cat: c.slug }), label: c.name, active: cat === c.slug })),
+          ]}
+        />
       )}
 
-      <form action={base} method="get" className="toolbar" style={{ gap: 8 }}>
-        <input type="search" name="q" defaultValue={q ?? ""} placeholder="Caută…" className="input" style={{ maxWidth: 320 }} />
-        <input type="hidden" name="sort" value={sort} />
-        {cat && <input type="hidden" name="cat" value={cat} />}
-        <button type="submit" className="btn">Caută</button>
-        <span className="muted" style={{ marginLeft: "auto" }}>{all.length} produse</span>
-        <div className="sortlinks">
-          <span className="muted">Sortează:</span>
-          {SORTS.map((s) => (
-            <Link key={s.key} href={link({ sort: s.key })} className={sort === s.key ? "active" : undefined}>{s.label}</Link>
-          ))}
+      {/* Search on its own line, count and sort on the right. Previously all four sat in one
+          `justify-content: space-between` row and overlapped below ~1100px. */}
+      <div className="listing-bar">
+        <form action={base} method="get" className="listing-search">
+          <input type="search" name="q" defaultValue={q ?? ""} placeholder="Caută în secțiune…" className="input" />
+          <input type="hidden" name="sort" value={sort} />
+          {cat && <input type="hidden" name="cat" value={cat} />}
+          <button type="submit" className="btn">Caută</button>
+        </form>
+        <div className="listing-meta">
+          <span className="muted">{all.length} produse</span>
+          <div className="sortlinks">
+            <span className="muted">Sortează:</span>
+            {SORTS.map((s) => (
+              <Link key={s.key} href={link({ sort: s.key })} className={sort === s.key ? "active" : undefined}>{s.label}</Link>
+            ))}
+          </div>
         </div>
-      </form>
+      </div>
 
       {products.length === 0 ? (
         <div className="empty">{emptyHint}</div>

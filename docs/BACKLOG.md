@@ -94,3 +94,17 @@ reopened.
   exact ordering the liveness comment warns against. Fixed while adding the dead-source banner,
   but it says something that a comment saying "LIVENESS FIRST, above everything else on this
   page" did not prevent the section being inserted above it a session later.
+
+## Found in the UI session (2026-09-02) — not started
+
+- **962 products store a loading spinner as their product image.** The scraper reads `<img src>`
+  before the site's lazy-loader swaps in the real URL, so what lands in the catalog is the site's
+  own placeholder asset: 870 Carrefour `AjaxLoader_1.gif` (**40.7% of Carrefour's live
+  products**, all in `alcohol`) and 92 DCNeu `placeholder-350x350.png`. These return HTTP 200, so
+  `onError` never fires and no broken-image sweep can see them. The renderer now refuses them and
+  shows a static named placeholder; the real fix is at each scraper's read site (prefer
+  `data-src`/`srcset` over `src`, or wait for the lazy-load swap) and needs a re-scrape.
+- **`Product.brand` holds junk values.** "X Y" is stored as the brand of at least one alcohol
+  product and renders as an uppercase brand line on the card. Nobody has counted how many.
+- **DCNeu category slugs include product names.** `Asevi Balsam Rufe 1 380ml Talco Rosa 60
+  Spalari` is a top-level category. See the taxonomy proposal — this is the same root cause.

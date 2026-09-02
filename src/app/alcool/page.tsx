@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CategoryChips } from "@/components/CategoryChips";
 import { ProductCard } from "@/components/ProductCard";
 import { getAlcoholPage, type SortKey } from "@/lib/queries";
 
@@ -39,24 +40,29 @@ export default async function AlcoholPage({ searchParams }: { searchParams: { so
         Prețuri de la magazine specializate (FineStore, Le Manoir). Separate de coșul alimentar.
       </p>
 
-      <div className="chips" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "14px 0" }}>
-        <Link href={qs({ cat: undefined })} className={!cat ? "chip active" : "chip"}>Toate</Link>
-        {categories.map((c) => (
-          <Link key={c.id} href={qs({ cat: c.slug })} className={cat === c.slug ? "chip active" : "chip"}>
-            {c.icon ? `${c.icon} ` : ""}{c.name}
-          </Link>
-        ))}
-      </div>
+      <CategoryChips
+        chips={[
+          { key: "__all", href: qs({ cat: undefined }), label: "Toate", active: !cat },
+          ...categories.map((c) => ({
+            key: String(c.id),
+            href: qs({ cat: c.slug }),
+            label: `${c.icon ? `${c.icon} ` : ""}${c.name}`,
+            active: cat === c.slug,
+          })),
+        ]}
+      />
 
-      <div className="toolbar">
-        <span className="muted">{products.length} produse</span>
-        <div className="sortlinks">
-          <span className="muted">Sortează:</span>
-          {SORTS.map((s) => (
-            <Link key={s.key} href={qs({ sort: s.key })} className={sort === s.key ? "active" : undefined}>
-              {s.label}
-            </Link>
-          ))}
+      <div className="listing-bar">
+        <div className="listing-meta" style={{ marginLeft: 0 }}>
+          <span className="muted">{products.length} produse</span>
+          <div className="sortlinks">
+            <span className="muted">Sortează:</span>
+            {SORTS.map((s) => (
+              <Link key={s.key} href={qs({ sort: s.key })} className={sort === s.key ? "active" : undefined}>
+                {s.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 

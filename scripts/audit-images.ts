@@ -22,6 +22,7 @@
 // Read-only. Run: npm run audit:images
 
 import { PrismaClient } from "@prisma/client";
+import { isPlaceholderImage } from "../src/lib/placeholder-image";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -95,8 +96,61 @@ async function main(): Promise<void> {
     const gb = (remote * 40) / 1024; // ~40 KB per product image, from the files already on disk
     console.log(`  Rough cost of clearing it: ~${gb.toFixed(1)} MB of disk and ${remote} requests.`);
   }
+  await auditPlaceholders();
   console.log();
   await prisma.$disconnect();
+}
+
+/**
+ * Products whose stored image is the SOURCE SITE'S OWN LOADING SPINNER, not a photograph.
+ *
+ * These are invisible to every other check in this file and to any broken-image sweep, because
+ * they resolve and return HTTP 200. They are what a visitor sees as a card that shimmers
+ * forever — the scraper read `<img src>` before the lazy-loader replaced it.
+ *
+ * Reported per merchant because that is where the fix belongs: it is one scraper's read site,
+ * not a rendering problem, and Carrefour's alcohol scraper accounts for almost all of it.
+ */
+async function auditPlaceholders(): Promise<void> {
+  const rows = await prisma.product.findMany({
+    where: { image: { not: null } },
+    select: { id: true, image: true, section: true },
+  });
+  const bad = new Set<number>();
+  const byUrl = new Map<string, number>();
+  for (const r of rows) {
+    if (!isPlaceholderImage(r.image)) continue;
+    bad.add(r.id);
+    byUrl.set(r.image!, (byUrl.get(r.image!) ?? 0) + 1);
+  }
+  const noUrl = await prisma.product.count({ where: { OR: [{ image: null }, { image: "" }] } });
+
+  console.log("\n════ PRODUCTS WITH NO USABLE IMAGE ══════════════════════════════════════════");
+  console.log("  A stored loading-spinner URL is NOT a missing image — it resolves, so onError");
+  console.log("  never fires and the card animates forever. Counted separately from a null.\n");
+  console.log(`  no image URL at all:          ${noUrl}`);
+  console.log(`  URL is a loading placeholder: ${bad.size}`);
+  for (const [url, n] of [...byUrl.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)) {
+    console.log(`      ${String(n).padStart(6)}  ${url}`);
+  }
+
+  const merchants = await prisma.merchant.findMany({
+    where: { active: true }, select: { id: true, slug: true }, orderBy: { slug: "asc" },
+  });
+  console.log(`\n  ${pad("merchant", 16)}${lpad("live products", 15)}${lpad("no image", 10)}${lpad("share", 8)}`);
+  for (const m of merchants) {
+    const prods = await prisma.product.findMany({
+      where: { offers: { some: { merchantId: m.id, isStale: false, flagged: false } } },
+      select: { id: true, image: true },
+    });
+    const none = prods.filter((p) => isPlaceholderImage(p.image)).length;
+    const share = prods.length === 0 ? "—" : ((none / prods.length) * 100).toFixed(1) + "%";
+    console.log(`  ${pad(m.slug, 16)}${lpad(prods.length, 15)}${lpad(none, 10)}${lpad(share, 8)}`);
+  }
+  console.log("\n  The renderer refuses these URLs and shows a static named placeholder instead.");
+  console.log("  The real fix is at the scraper's read site (prefer data-src over src) and needs");
+  console.log("  a re-scrape — tracked in BACKLOG. Nothing is deleted: a wrong image is still");
+  console.log("  evidence of what the scraper read.");
 }
 
 main().catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });
