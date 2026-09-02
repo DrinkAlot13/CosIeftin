@@ -1052,3 +1052,35 @@ a price we have already refused drag the median toward itself and hide the next 
 genuine disagreement. With zero found there is nothing to diagnose, so the multipack question
 is answered by absence: the pack-shape gate IS reaching these rows now that the re-scrape has
 populated ownUnitSize.
+
+## ITEM 2 — DCNeu at full coverage, and truncation made loud everywhere
+
+`src/lib/truncation.ts`: `noteCap(label, discovered, scraped, cap)` for slice-style caps and
+`notePageCap(label, pagesRead, cap)` for pagination loops. Both print a loud line when the cap
+bites, because the failure is silent by construction — nothing crashes, the count is merely
+lower, and a lower count is indistinguishable from a shop that sells less.
+
+**Every cap in the codebase, surveyed:**
+
+| scraper | cap | value | shape | currently truncating |
+|---|---|---|---|---|
+| dcneu | MAX_CATS | 90 → **250** | slice | **YES — 90 of 180.** Fixed |
+| farmaciatei | MAX_SUBS | 24 | slice | wired to `noteCap`; reports at run time |
+| carrefour | MAX_PAGES | 13 | pagination | wired to `notePageCap` |
+| carrefour-alcohol | MAX_PAGES | 8 | pagination | wired |
+| finestore | MAX_PAGES | 12 | pagination | wired |
+| lemanoir | MAX_PAGES | 15 | pagination | wired |
+| metro | MAX_PAGES | 45 | pagination | wired |
+| megaimage | MAX_PAGES | 65 | pagination | loop shape differs, not wired — BACKLOG |
+| sezamo | MAX_PAGES | 30 | pagination | loop shape differs, not wired — BACKLOG |
+| auchan (adapter) | maxPages | 8 | pagination | runner breaks on an empty page, self-limiting |
+
+The slice-style caps are the dangerous ones: they take the FIRST N in page order and lose the
+tail. Pagination loops usually exit early when a page adds nothing, so reaching the cap is
+suspicious rather than proof — `notePageCap` says so in those words.
+
+**New invariant:** `no merchant's successful run collapsed to half its own recent best`. That
+is the shape truncation leaves in the data after the fact — a run reporting success while
+writing half what it used to. Currently green.
+
+DCNeu now reports `Discovered 180 leaf categories, scraping 180`. Re-scrape running.

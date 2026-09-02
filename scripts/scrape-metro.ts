@@ -13,6 +13,7 @@
 import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { notePageCap } from "../src/lib/truncation";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -119,6 +120,7 @@ async function main() {
     const priced = new Map<string, { price: number; available: boolean }>();
     let totalPages = 1;
     for (let p = 1; p <= MAX_PAGES; p++) {
+      if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
       const j = await apiGet(page, searchUrl(cat, p));
       if (!j || j.__err) break;
       totalPages = j.totalPages ?? 1;

@@ -26,6 +26,7 @@ import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { deriveVatRateBp } from "../src/lib/price/vat";
 import { validateTiers, findSmearedLadders, type RawTier } from "../src/lib/price/bulkTiers";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { noteCap } from "../src/lib/truncation";
 
 const BASE = "https://comenzi.dcneu.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -260,14 +261,11 @@ async function readTiers(page: Page, basePriceBani: number): Promise<RawTier[]> 
 async function main() {
   const startedAt = new Date();
   const home = (await getHtml(`${BASE}/`)) ?? "";
-  const cats = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
-    .filter((u) => !/\.(jpg|png|gif|css|js|woff)/i.test(u))
-    .slice(0, MAX_CATS);
-  // Say when the cap bit. "Discovered 90" looked like a fact about DCNeu for weeks.
-  console.log(
-    `Discovered ${cats.length} leaf categories.` +
-    (cats.length >= MAX_CATS ? `  ⚠ CAPPED at MAX_CATS=${MAX_CATS} — there may be more.` : ""),
-  );
+  const allCats = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
+    .filter((u) => !/\.(jpg|png|gif|css|js|woff)/i.test(u));
+  const cats = allCats.slice(0, MAX_CATS);
+  noteCap("dcneu categories", allCats.length, cats.length, MAX_CATS);
+  console.log(`Discovered ${allCats.length} leaf categories, scraping ${cats.length}.`);
 
   const pool: DcneuProduct[] = [];
   const seen = new Set<string>();

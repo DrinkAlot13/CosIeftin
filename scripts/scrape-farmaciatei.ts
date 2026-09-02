@@ -10,6 +10,7 @@
 import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { noteCap } from "../src/lib/truncation";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -79,7 +80,13 @@ async function scrapeInto(sectionPool: Map<string, StoreProduct[]>, top: string,
   const topHtml = await getHtml(`${BASE}/${top}/`);
   if (!topHtml) return;
   // subcategory URLs under this top category
-  const subs = [...new Set([...topHtml.matchAll(new RegExp(`href="(https://comenzi\\.farmaciatei\\.ro/${top}/[a-z0-9-]+/)"`, "gi"))].map((m) => m[1]))].slice(0, MAX_SUBS);
+  //
+  // Same shape as DCNeu's MAX_CATS: a slice takes the FIRST N in page order, so a category
+  // with more subcategories than the cap loses the tail silently and the smaller product
+  // count reads as a fact about the shop.
+  const allSubs = [...new Set([...topHtml.matchAll(new RegExp(`href="(https://comenzi\\.farmaciatei\\.ro/${top}/[a-z0-9-]+/)"`, "gi"))].map((m) => m[1]))];
+  const subs = allSubs.slice(0, MAX_SUBS);
+  noteCap(`farmaciatei ${top} subcategories`, allSubs.length, subs.length, MAX_SUBS);
   const urls = [`${BASE}/${top}/`, ...subs];
   let added = 0;
   for (const u of urls) {

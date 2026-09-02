@@ -220,6 +220,45 @@ async function auditPrices() {
     record("Prices", "every stored price reproduces from its own rawPriceText", broken);
   }
 
+  // ── A TRUNCATED SCRAPE IS NOT A COMPLETED SCRAPE.
+  //
+  //    DCNeu published 180 leaf categories and MAX_CATS was 90, so `.slice(0, 90)` read the
+  //    first half in page order and the run reported success. The offer count was simply
+  //    lower — and a lower count is indistinguishable from a shop that sells less, which is
+  //    why it survived weeks and why the product a user asked about did not exist.
+  //
+  //    Scrapers now call `noteCap`/`notePageCap` and a truncated run is refused at source.
+  //    This invariant is the after-the-fact half: a merchant whose product count collapses
+  //    relative to its own history, without an abort recorded, is the shape truncation leaves
+  //    behind in the data.
+  {
+    const merchants = await prisma.merchant.findMany({
+      where: { active: true },
+      select: { id: true, slug: true, lastOfferCount: true },
+    });
+    const suspicious: string[] = [];
+    for (const m of merchants) {
+      const runs = await prisma.scraperRun.findMany({
+        where: { merchantId: m.id, aborted: false, offersWritten: { gt: 0 } },
+        orderBy: { startedAt: "desc" },
+        take: 4,
+        select: { offersWritten: true, startedAt: true },
+      });
+      if (runs.length < 3) continue;
+      const latest = runs[0].offersWritten;
+      const earlier = runs.slice(1).map((r) => r.offersWritten);
+      const best = Math.max(...earlier);
+      // Half or less than its own best recent run, while reporting success.
+      if (best > 0 && latest <= best * 0.5) {
+        suspicious.push(
+          `${m.slug}: newest successful run wrote ${latest} against a recent best of ${best} ` +
+          `— a collapse with no abort is what a silent cap looks like`,
+        );
+      }
+    }
+    record("Scraping", "no merchant's successful run collapsed to half its own recent best", suspicious);
+  }
+
   // ── A MERCHANT THAT PRODUCES NOTHING IS NOT A QUIET MERCHANT.
   //
   //    Metro and Mega Image returned ZERO products from 31 August onward. A commit that
