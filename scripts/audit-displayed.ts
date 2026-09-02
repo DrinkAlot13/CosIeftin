@@ -1,3 +1,10 @@
+// ── SCOPE: USER-FACING ────────────────────────────────────────────────────────
+// Counts ONLY rows that reach a page — what a shopper can see right now.
+// A withheld, flagged, stale-and-hidden or quarantined row is on no page and cannot
+// mislead anyone, so counting it reports a defect the site does not have. Three checks
+// did exactly that and returned 8,822, 22 and 46 phantom failures; an audit that does
+// not share the display's definition of "shown" trains you to ignore it, which is as
+// dangerous as one that misses real defects.
 // What a user actually sees. Everything here is checked against the DATABASE the pages read,
 // not against the code that writes it.
 //

@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — matcher rejections, none of which are on a page.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // WHY is a merchant's pool being rejected? Replays the matcher and shows the near-misses.
 //
 // Mega Image pools 7,160 products and writes 724 offers. The pool census says 5,170 (72%)

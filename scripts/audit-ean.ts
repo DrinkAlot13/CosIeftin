@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — the EAN join across the whole catalog.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // EAN coverage, and the number that actually matters: how many merchants back one product.
 //
 // A price comparator's whole value is "this product, at these N shops". If N is 1 for most of

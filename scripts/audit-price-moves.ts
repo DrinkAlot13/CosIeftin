@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — every recorded price change, shown or not.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // Which prices moved far enough that a human should have been asked?
 //
 // Auchan wrote 28,14 -> 12,00 on one product on 30 August and nothing objected, because

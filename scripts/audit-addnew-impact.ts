@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — what addNew would create.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // What would the catalog look like if a match-only merchant ran with addNew enabled?
 //
 // `addNew` defaults to FALSE and mega-image, carrefour and freshful never pass it. They are

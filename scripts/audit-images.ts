@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — image coverage across all products.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // Are we serving product images, or is the visitor's browser fetching them from 13 retailers?
 //
 // Hotlinking a merchant's CDN is three problems wearing one coat:

@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — every stored unit price, shown or not.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // Does every stored unit price still equal price ÷ the offer's OWN size?
 //
 // Mega Image showed 5,30 lei/L where 10,49 ÷ 2 L is 5,25. The writer was fixed — unit price

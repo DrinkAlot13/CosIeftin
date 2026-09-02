@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — prices a gate substituted, shown or not.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // Every stored price that a history-anchored gate KEPT over a fresher one it refused.
 //
 // Four refusals were examined today and in all four the refused value was the better one:

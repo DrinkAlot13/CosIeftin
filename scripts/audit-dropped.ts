@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — what each merchant discards, including rows never shown.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // What each merchant is silently dropping, and whether "no price" means "out of stock".
 //
 // Auchan carries Price: 0 on 16.4% of its catalog, and across 304 sampled products Price===0

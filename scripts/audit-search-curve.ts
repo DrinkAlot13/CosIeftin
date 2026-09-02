@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — search ranking.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // Search threshold: the tradeoff curve, not a number someone liked.
 //
 // The 40-query fixture passes at every setting below, because `mustFind` only asks whether the

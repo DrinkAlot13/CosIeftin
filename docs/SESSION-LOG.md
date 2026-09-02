@@ -1113,3 +1113,32 @@ in `audit:liveness`, because a write of zero offers still updates nothing and le
 rows in place. **The risk of exempting is that the one merchant whose data is hardest to
 sanity-check (weekly, no deep links, 100% flyer) would lose its only structural guard.** The
 baseline fix removes the need to decide: the guard now works correctly on flyer data.
+
+## ITEM 4 — every audit now declares its scope
+
+Three audits reported 8,822, 22 and 46 failures that were artifacts of withholding working.
+The cause was never a bad threshold — it was that an audit and the display disagreed about
+what "shown" means, and nothing in the audit said which it meant.
+
+All 21 audits now carry a scope banner as their first lines:
+
+**USER-FACING** — counts only rows that reach a page: `audit-displayed`,
+`audit-comparability`, `audit-unit-price`. A withheld, flagged, stale-and-hidden or
+quarantined row is on no page and cannot mislead anyone, so counting it reports a defect the
+site does not have.
+
+**DATA INTEGRITY** — counts every row, shown or not, and says "do not add a visibility filter
+here": the other 18. A withheld row is still data and a corruption hiding inside one is still
+a corruption.
+
+Corrected numbers after the re-scope:
+
+| audit | before | after |
+|---|---|---|
+| audit-displayed | 6/8 | **8/8** |
+| median outliers | 47 | **0** |
+| cheapest offer withheld | 8,822 | **0** |
+| struck price collisions | 22 | **0** (check replaced with a structural one) |
+| run successful with zero writes | 46 | **0** |
+| audit:unit-recompute | 0 live bugs | 0 live bugs |
+| audit:liveness | green | green, all 12 merchants |

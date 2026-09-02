@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — constraints SQLite cannot enforce.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // THE POSTGRES CUTOVER CHECKLIST — as a program, not a document.
 //
 // Every rule below is one this project relies on and the local database cannot refuse. A

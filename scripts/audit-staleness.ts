@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — the age of every stored offer, shown or not.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // How old are the prices we present as current, and do we know when we saw them?
 //
 // Three of four offers on one product were last actually observed on 6 August and were shown as

@@ -1,3 +1,10 @@
+// ── SCOPE: USER-FACING ────────────────────────────────────────────────────────
+// Counts ONLY rows that reach a page — what a shopper can compare right now.
+// A withheld, flagged, stale-and-hidden or quarantined row is on no page and cannot
+// mislead anyone, so counting it reports a defect the site does not have. Three checks
+// did exactly that and returned 8,822, 22 and 46 phantom failures; an audit that does
+// not share the display's definition of "shown" trains you to ignore it, which is as
+// dangerous as one that misses real defects.
 // THE NUMBER. How much of this catalog actually compares two shops' prices for one product?
 //
 // Everything else in this project is in service of this figure, and it has been quoted three

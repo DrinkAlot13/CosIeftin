@@ -1,3 +1,8 @@
+// ── SCOPE: DATA INTEGRITY ─────────────────────────────────────────────────────
+// Counts EVERY row, shown or not — our maths against the merchant's, on every row we can check.
+// That is deliberate and is the opposite of the user-facing audits: a withheld row is
+// still data, and a corruption hiding inside one is still a corruption. Do not add a
+// visibility filter here.
 // An INDEPENDENT check on our unit-price maths, from the merchant's own published figure.
 //
 // Everything else in this project validates the unit price against our own parse of our own
