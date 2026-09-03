@@ -23,6 +23,22 @@
 
 import { prisma } from "./db";
 
+// THE TWO QUARANTINED DCNeu ROWS ARE DELIBERATELY NOT RE-WITHHELD, and the commit that
+// introduced this file said they would be. That was wrong, and this is the correction.
+//
+// Offers 26587 (BELLA ABSORBANTE) and 28300 (BYPHASSE SER FATA) were quarantined as
+// "fabricated by the pre-fix DCNeu scraper (shared price+url across distinct products)".
+// Checked before acting: both now carry a per-product productUrl, a rawPriceText that matches
+// the stored price ("8.59 Lei" -> 8.59, "19.20 Lei" -> 19.20), were re-read on 2026-09-03 by
+// the FIXED scraper, and share their (price, productUrl) with ZERO other offers. The signature
+// the quarantine named is gone.
+//
+// So re-withholding them would suppress two prices that are now correct. They have no
+// PriceAnomaly row, so nothing re-applies automatically — which is the honest state: the
+// quarantine was a judgement about a scraper that no longer exists, and it expired with it.
+// Recorded here rather than silently dropped, because "we stopped withholding these" is
+// exactly the kind of decision that should not live only in someone's memory.
+
 export type ReassertResult = {
   /** Offers re-flagged because a REJECTED MatchOverride forbids the pairing. */
   rejected: number;
