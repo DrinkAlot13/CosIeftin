@@ -29,6 +29,7 @@ import { depositFor, readPublishedDepositBani } from "./deposit";
 import { parseQuantity } from "./units/parseQuantity";
 import { exclusionReason } from "./excluded-categories";
 import { recordScraperRun } from "./scraper-run";
+import { rejectedPairs, reassertStandingDecisions } from "./standing-decisions";
 
 /**
  * THE contract between a scraper and the matcher. Every scraper builds `StoreProduct[]`
@@ -777,9 +778,19 @@ export async function matchPoolToCatalog(
     // computed from; the catalog product's size is a different product's size.
     if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: resolvePriceSource(c.sp.priceSource, merchant?.priceChannel), sp: c.sp });
   };
-  // productId a store item is forbidden from (reject override), keyed by storeKey.
-  const rejects = new Set<string>();
-  for (const [k, o] of overrides) if (o.decision === "reject") rejects.add(`${k}:${o.productId}`);
+  // PRODUCTS THIS MERCHANT IS FORBIDDEN FROM, keyed on the PRODUCT and not on the store name.
+  //
+  // This used to be keyed `${storeKey}:${productId}`, and storeKey is `slugify(storeName)` — a
+  // field that changes between scrapes. Freshful's "Mici din carne de porc și vită 500g" came
+  // back as "Mici din carne de vită și oaie 500g"; three of five reject keys stopped matching
+  // and the rejects silently stopped applying. Consulted and MISSED, not overruled.
+  //
+  // A reject is a human saying this shop's item does not belong on this product. Reading it per
+  // product is broader than the old key and errs the right way: a false miss costs a comparison,
+  // a false match publishes one product's price on another. A CONFIRM on a specific store item
+  // still wins in PHASE 0, so a merchant that genuinely starts stocking it can be paired.
+  const rejectedProducts = await rejectedPairs(merchantId);
+  const rejects = { has: (pid: number): boolean => rejectedProducts.has(pid) };
   const rowById = new Map(rows.map((r) => [r.id, r]));
   const catUnitById = new Map(rows.map((r) => [r.id, r.unit]));
 
@@ -792,7 +803,7 @@ export async function matchPoolToCatalog(
   const review = new Map<string, { productId: number; c: Prepared; score: number; reason: string }>();
   const noteReview = (productId: number, c: Prepared, d: Decision): void => {
     if (d.band !== "REVIEW") return;
-    if (rejects.has(`${c.storeKey}:${productId}`)) return;
+    if (rejects.has(productId)) return;
     const key = `${c.storeKey}:${productId}`;
     const prev = review.get(key);
     if (!prev || d.score > prev.score) review.set(key, { productId, c, score: d.score, reason: d.reason });
@@ -807,7 +818,7 @@ export async function matchPoolToCatalog(
     }
     if (c.item.ean) {
       const pid = eanToProduct.get(c.item.ean);
-      if (pid != null && !rejects.has(`${c.storeKey}:${pid}`)) {
+      if (pid != null && !rejects.has(pid)) {
         const r = rowById.get(pid);
         if (r) { explained.add(c); consider(pid, r.unitSize, r.image, c, 1, "ean"); }
       }
@@ -832,7 +843,7 @@ export async function matchPoolToCatalog(
     if (!cands) continue;
     const cSize = { unit: cp.unit, unitSize: cp.unitSize };
     for (const c of cands) {
-      if (rejects.has(`${c.storeKey}:${cp.id}`)) continue;
+      if (rejects.has(cp.id)) continue;
       consideredPool.add(c);
       const d = decide(cItem, cSize, c.item, c.size, section);
       coverage.record(d);
@@ -1160,6 +1171,20 @@ export async function matchPoolToCatalog(
         reason: `${flagReason ?? "large move"} — written and flagged for review, not refused`,
       });
     }
+  }
+
+  // RE-ASSERT WHAT MUST SURVIVE THE REWRITE, before anything reports success.
+  //
+  // The gates above judge today's data and are meant to be recomputed. Standing decisions — a
+  // human's REJECT, an unresolved PriceAnomaly — are not about today's data and were being
+  // cleared by the same write. Two quarantined DCNeu rows fabricated by the pre-fix scraper
+  // went back on the site that way.
+  const reasserted = await reassertStandingDecisions(merchantId);
+  if (reasserted.rejected || reasserted.quarantined) {
+    console.log(
+      `  standing decisions re-applied: ${reasserted.rejected} rejected pairing(s), ` +
+      `${reasserted.quarantined} with an unresolved anomaly — withheld again.`,
+    );
   }
 
   await prisma.merchant.update({ where: { id: merchantId }, data: { lastOfferCount: chosen.size, lastScrapeAt: new Date() } }).catch(() => {});
