@@ -149,8 +149,13 @@ Confirmed instances:
   publishing availability and one that says "in stock" are not the same fact.
 - `lastObservedAt` — on a FLYER row it means "the flyer still lists it", on a scraped row "we
   re-read this price". Liveness treats them identically.
-- `matchScore` — an EAN join is 1.0 because it is a JOIN; a name match is 1.0 because it scored
-  well. Same number, incomparable confidence, and the review queue ranks on it.
+- `matchScore` — an EAN join is 1.0 because it is a JOIN (a fact about IDENTITY); a name match
+  is 1.0 because it scored well (a fact about SIMILARITY). Same number, incommensurable, and
+  `/admin/matches` ranks on it — a queue whose whole purpose is to put the highest-value
+  decision first would be ordering by noise wherever the two kinds mix.
+  **Check first whether EAN matches reach the queue at all.** They are AUTO by construction, so
+  if they never enter it the two quantities never mix, the damage is nil, and this is a latent
+  bug rather than an active one. That single query decides how urgent the rest is.
 - `Product.unitSize` — a stated pack size vs one parsed out of a name vs a default.
 
 **How to audit it**, when the fortnight is over: for each candidate, find two consumers that
