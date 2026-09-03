@@ -12,9 +12,13 @@
 // Run: npm run seed:equivalence
 
 import { prisma } from "../src/lib/db";
+import { PRODUCE_CLASSES } from "../src/data/produce-classes";
 
 type Klass = { slug: string; label: string; section?: string; unit: string; unitSize: number; attributes: Record<string, unknown> & { require?: string[]; exclude?: string[] } };
 
+// The fresh-produce classes live in their own file — 60-odd of them, written against the names
+// actually in the catalog rather than from memory, and carrying `anySize` because loose produce
+// is sold by weight. See src/data/produce-classes.ts for what is deliberately kept apart.
 const CLASSES: Klass[] = [
   // ── dairy & eggs ──
   { slug: "oua-l-10", label: "Ouă mărimea L, 10 buc", unit: "buc", unitSize: 10, attributes: { size: "L", type: "oua de gaina", cod: ["0", "1", "2", "3"], require: ["l|marimea l|marime l"], exclude: ["m/l|prepelita|ciocolata"] } },
@@ -57,6 +61,7 @@ const CLASSES: Klass[] = [
   // ── household ──
   { slug: "hartie-igienica-8", label: "Hârtie igienică, 8 role", unit: "buc", unitSize: 8, attributes: { straturi: ["2", "3"], require: ["igienica"], exclude: ["umeda|servetele|prosoape|bucatarie"] } },
   { slug: "detergent-rufe-3l", label: "Detergent lichid rufe, 3 L", unit: "l", unitSize: 3, attributes: { forma: "lichid", require: ["rufe"], exclude: ["vase|geam|pardoseli|wc|baie|universal|masina de spalat vase"] } },
+  ...PRODUCE_CLASSES,
 ];
 
 async function main() {

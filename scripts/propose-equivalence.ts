@@ -65,8 +65,28 @@ async function main() {
 
     for (const k of prepared) {
       if (k.c.unit !== p.unit) continue;
-      const sizeOk = k.c.unitSize > 0 && Math.abs(p.unitSize - k.c.unitSize) <= k.c.unitSize * SIZE_TOLERANCE;
-      if (!sizeOk) continue;
+      // QUANTITY IS NOT A DISCRIMINATOR FOR GOODS SOLD BY WEIGHT.
+      //
+      // A class normally pins a pack: 400 g of yoghurt is not 900 g, and the size gate is what
+      // keeps those apart. Loose produce is the opposite case — Auchan sells bananas as
+      // "+/- 1 kg", Sezamo as "(bucata) cca 200 g", Metro by the piece, and they are the SAME
+      // BANANAS. The size gate rejected every such pairing, which is most of why fresh produce
+      // sits single-merchant: not a naming problem, a pack-size problem.
+      //
+      // `anySize` says so explicitly, per class, and it is only honest because lei/kg carries
+      // the comparison for these goods — 83.4% of fresh produce is already stored in kg. It is
+      // NOT a licence to ignore size generally: a class without it still pins its pack.
+      if (k.rules.anySize) {
+        // Any size UP TO the ceiling. Without one, a 10 kg catering sack joined the loose
+        // class and the loose-vs-packaged distinction vanished — the thing anySize exists
+        // alongside, not instead of.
+        const cap = k.rules.maxUnitSize ?? Infinity;
+        if (p.unitSize > cap) continue;
+        if (p.unitSize < (k.rules.minUnitSize ?? 0)) continue;
+      } else {
+        const sizeOk = k.c.unitSize > 0 && Math.abs(p.unitSize - k.c.unitSize) <= k.c.unitSize * SIZE_TOLERANCE;
+        if (!sizeOk) continue;
+      }
       // The class's head noun must be what the product IS, not merely something it
       // CONTAINS. Romanian marks the difference with "cu": "Cartofiori cu sare" is a
       // potato snack, not salt; "Crenvurști cu piept de pui" is sausage, not chicken
@@ -98,8 +118,20 @@ async function main() {
         rejected.set(k.c.slug, (rejected.get(k.c.slug) ?? 0) + 1);
         continue;
       }
+      // THE LABEL-OVERLAP FLOOR IS A PROXY, AND A CLASS WITH EXPLICIT RULES DOES NOT NEED IT.
+      //
+      // `jaccard` compares the class LABEL's tokens with the product's, which is the only
+      // signal available when a class has no discriminators of its own. Where require/exclude
+      // ARE written, they have already decided membership — and re-litigating it with label
+      // overlap rejects correct members for having extra words. "Banane, la kg" against
+      // "Banane (bucata) cca 200 g" scores 0.33 and fell under the 0.34 floor: Sezamo's
+      // bananas, excluded from the banana class for saying which size the bunch is.
+      //
+      // Scoped to `anySize` classes — the loose-produce ones written with full require/exclude
+      // lists — so the original 30, which lean on the floor, are untouched.
       const score = jaccard(k.tokens, pTokens);
-      if (score >= MIN_SCORE && (!best || score > best.score)) best = { classId: k.c.id, score };
+      const floor = k.rules.anySize && (k.rules.require ?? []).length > 0 ? 0 : MIN_SCORE;
+      if (score >= floor && (!best || score > best.score)) best = { classId: k.c.id, score };
     }
 
     if (best) {

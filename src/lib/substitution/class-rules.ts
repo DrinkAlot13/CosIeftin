@@ -29,6 +29,28 @@ export type ClassRules = {
   require?: string[];
   /** Any match disqualifies. */
   exclude?: string[];
+  /**
+   * Quantity is not a discriminator for this class — for goods sold BY WEIGHT.
+   *
+   * Bananas are bananas whether the shop prices them at "+/- 1 kg", "(bucata) cca 200 g" or by
+   * the piece, and lei/kg is what makes those comparable. Set ONLY where that is true; a packed
+   * good still has to match its pack, or 400 g of yoghurt joins the 900 g class.
+   */
+  anySize?: boolean;
+  /**
+   * …but not ANY size. `anySize` alone was too blunt: it pulled "Ceapa Galbena 10 Kg" — a
+   * catering sack — into the loose-onion class, erasing precisely the loose-vs-packaged
+   * distinction it is supposed to preserve. A shopper buying a kilo of onions is not shopping
+   * for a 10 kg sack, and the per-kilo price of the two is not the same trade.
+   *
+   * So a weight-sold class accepts any size UP TO this ceiling, in the class's own unit.
+   */
+  maxUnitSize?: number;
+  /**
+   * …and not below this either. Fresh herbs are sold as a bunch of 20-50 g; an 8 g packet of
+   * "Mărar" is DRIED seasoning, and the name says nothing to tell them apart. Weight does.
+   */
+  minUnitSize?: number;
 };
 
 /** Does this product name satisfy the class's membership rules? */
@@ -67,6 +89,9 @@ export function rulesFromAttributes(attributes: string | null | undefined): Clas
     return {
       require: Array.isArray(req) ? req.filter((x): x is string => typeof x === "string") : undefined,
       exclude: Array.isArray(exc) ? exc.filter((x): x is string => typeof x === "string") : undefined,
+      anySize: parsed.anySize === true,
+      maxUnitSize: typeof parsed.maxUnitSize === "number" ? parsed.maxUnitSize : undefined,
+      minUnitSize: typeof parsed.minUnitSize === "number" ? parsed.minUnitSize : undefined,
     };
   } catch {
     return {};
