@@ -124,3 +124,36 @@ If both clear, the adapter is Playwright-over-RSC (there is no product JSON API 
 markets), and the markup work in the original brief follows. Nothing was built, because an
 adapter with no reachable data is inert code — the failure mode that cost this project the
 substitution engine and the `doseTokens` regex.
+
+---
+
+## One column carrying two kinds of fact — a shape to audit for, AFTER the soak
+
+Fourteen defects in this project share one mechanism, and naming it is more useful than the
+list. **Two different kinds of fact share one representation, something downstream recomputes
+both, and the tell is always two things that should agree and don't.**
+
+Confirmed instances:
+
+- `Offer.priceSource` — the MERCHANT vocabulary (`shelf`/`delivery`/`aggregator`) and the OFFER
+  vocabulary (`SHELF`/`ONLINE`/`DELIVERY_PLATFORM`/`FLYER`) in one column. 2,217 Glovo offers
+  written as shelf prices because a translator's `default:` branch swallowed a valid value.
+- **"quarantined"** — the census meant "has an unresolved PriceAnomaly", the site meant
+  "flagged". 185 live offers carried an open anomaly and were shown anyway.
+- `Offer.flagged` — a GATE'S judgement about today's data (must be recomputed) and a STANDING
+  human decision (must never be). A re-scrape cleared both.
+
+**Where to look next.** Not now — the soak forbids hunting — but these are the candidates:
+
+- `stockStatus` — observed from the merchant vs inferred by us. A merchant that stops
+  publishing availability and one that says "in stock" are not the same fact.
+- `lastObservedAt` — on a FLYER row it means "the flyer still lists it", on a scraped row "we
+  re-read this price". Liveness treats them identically.
+- `matchScore` — an EAN join is 1.0 because it is a JOIN; a name match is 1.0 because it scored
+  well. Same number, incomparable confidence, and the review queue ranks on it.
+- `Product.unitSize` — a stated pack size vs one parsed out of a name vs a default.
+
+**How to audit it**, when the fortnight is over: for each candidate, find two consumers that
+read the column and ask whether they'd give the same answer on the same row. Every one of the
+fourteen was found that way — by checking output against something that did not share the
+writer's assumptions — and never by reading the code that wrote it.
