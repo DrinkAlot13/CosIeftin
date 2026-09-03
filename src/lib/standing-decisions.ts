@@ -44,7 +44,52 @@ export type ReassertResult = {
   rejected: number;
   /** Offers re-flagged because they carry an unresolved PriceAnomaly. */
   quarantined: number;
+  /** Bulk-tier rows removed because the offer they describe is withheld or was re-priced. */
+  tiersCleared: number;
 };
+
+/**
+ * Derived data must not outlive the thing it was derived from.
+ *
+ * TWO FACES OF ONE MISTAKE, both found by audit-db after the rewrite bug was fixed:
+ *
+ *   95 offers carried bulk tiers while an unresolved PriceAnomaly stood against them. The
+ *   offer is withheld; the ladder built on its price is not, and a ladder is exactly the kind
+ *   of thing a page will happily render.
+ *
+ *   61 DCNeu rungs sat at or ABOVE their offer's base price — "tier 2+ 15.46 >= base 2.94".
+ *   Nothing was wrong with either number on its own: the offer was re-scraped to a new price
+ *   and the tiers, computed against the old one, were left where they were. A rung cheaper
+ *   than a base it no longer belongs to is a discount that does not exist.
+ *
+ * So a tier is deleted rather than kept — it is DERIVED, re-read from the merchant on the next
+ * scrape, and nothing about it is evidence. That is the difference from an offer, which is
+ * withheld and never deleted because its provenance is the record.
+ */
+export async function clearStaleTiers(merchantId: number): Promise<number> {
+  // 1. Tiers on an offer no shopper can reach.
+  const withheld = await prisma.offer.findMany({
+    where: { merchantId, flagged: true, tiers: { some: {} } },
+    select: { id: true },
+  });
+  // 2. Tiers that contradict their own offer's current price. `minQuantity` ladders must get
+  //    CHEAPER as quantity rises; a rung at or above the base is proof the base moved under it.
+  const contradicting = await prisma.offer.findMany({
+    where: { merchantId, tiers: { some: {} } },
+    select: { id: true, priceBani: true, price: true, tiers: { select: { unitPriceBani: true } } },
+  });
+  const stale = contradicting
+    .filter((o) => {
+      const base = o.priceBani ?? Math.round(o.price * 100);
+      return base > 0 && o.tiers.some((t) => t.unitPriceBani >= base);
+    })
+    .map((o) => o.id);
+
+  const ids = [...new Set([...withheld.map((o) => o.id), ...stale])];
+  if (ids.length === 0) return 0;
+  const r = await prisma.bulkTier.deleteMany({ where: { offerId: { in: ids } } });
+  return r.count;
+}
 
 /**
  * Is this merchant forbidden from attaching anything to this product?
@@ -108,5 +153,8 @@ export async function reassertStandingDecisions(merchantId: number): Promise<Rea
     quarantined = r.count;
   }
 
-  return { rejected, quarantined };
+  // Derived data last, so it sees the flags this call has just set.
+  const tiersCleared = await clearStaleTiers(merchantId);
+
+  return { rejected, quarantined, tiersCleared };
 }

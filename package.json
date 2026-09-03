@@ -107,6 +107,7 @@
     "report:tree": "tsx scripts/report-category-tree.ts",
     "report:altele": "tsx scripts/report-altele-vocabulary.ts",
     "report:basket": "tsx scripts/report-basket-comparability.ts",
+    "confirm:night-one": "tsx scripts/confirm-night-one.ts",
     "scrape:platform": "tsx scripts/scrape-platform.ts",
     "audit:markup": "tsx scripts/audit-platform-markup.ts"
   },

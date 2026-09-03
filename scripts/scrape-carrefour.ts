@@ -70,8 +70,23 @@ async function main() {
         const img = (q("img")?.getAttribute("src") || q("img")?.getAttribute("data-src") || "").trim();
         const brand = el.querySelector("[data-brand]")?.getAttribute("data-brand") || "";
         const dim = el.querySelector("[data-dimension10]")?.getAttribute("data-dimension10") || "available";
-        const linkEl = el.querySelector('a[href]:not([href^="javascript"])');
-        const link = linkEl?.getAttribute("href") || "";
+        // THE PRODUCT'S OWN LINK, not merely the first anchor in the tile.
+        //
+        // `querySelector('a[href]')` returns whichever anchor comes first in the markup, and a
+        // Carrefour tile can lead with a campaign badge. That put 20 offers on
+        // /campanii/reduceri-de-gama, 8 on a PDF of promo regulations and 4 on an ad-tracking
+        // redirect — non-products in the catalog, all sharing one URL, which also read as an
+        // 18-way matcher fan-out because the audit identifies a store product by its link.
+        //
+        // A product page lives under /produse/. Anything else is not this tile's product, and
+        // the tile's titled anchor (the one carrying the product name) is the fallback.
+        const anchors = [...el.querySelectorAll('a[href]:not([href^="javascript"])')];
+        const isProduct = (h: string) => /\/produse\//i.test(h) && !/\.(pdf|docx?|xlsx?)(\?|$)/i.test(h);
+        const linkEl =
+          anchors.find((a) => isProduct(a.getAttribute("href") || "")) ??
+          (el.querySelector("a[title][href]") as HTMLAnchorElement | null);
+        const href = linkEl?.getAttribute("href") || "";
+        const link = isProduct(href) ? href : "";
         return { id: el.getAttribute("data-product-id"), name, priceText, img, brand, available: dim !== "not available", link };
       }),
     );
@@ -94,7 +109,7 @@ async function main() {
           const key = String(r.id ?? r.name);
           if (!r.name || seen.has(key)) continue;
           seen.add(key);
-          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: cat });
+          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : null, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: cat });
           pageAdded++;
           catAdded++;
         }

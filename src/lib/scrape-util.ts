@@ -1180,10 +1180,11 @@ export async function matchPoolToCatalog(
   // cleared by the same write. Two quarantined DCNeu rows fabricated by the pre-fix scraper
   // went back on the site that way.
   const reasserted = await reassertStandingDecisions(merchantId);
-  if (reasserted.rejected || reasserted.quarantined) {
+  if (reasserted.rejected || reasserted.quarantined || reasserted.tiersCleared) {
     console.log(
       `  standing decisions re-applied: ${reasserted.rejected} rejected pairing(s), ` +
-      `${reasserted.quarantined} with an unresolved anomaly — withheld again.`,
+      `${reasserted.quarantined} with an unresolved anomaly — withheld again; ` +
+      `${reasserted.tiersCleared} stale bulk tier(s) cleared.`,
     );
   }
 

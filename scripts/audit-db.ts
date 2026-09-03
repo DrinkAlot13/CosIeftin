@@ -888,6 +888,53 @@ async function auditTreeMatchesDatabase() {
     strayLeaves.map((s) => `database leaf "${s}" is not in GROCERY_TREE — it can never be filled`));
 }
 
+/**
+ * A productUrl must point at a PRODUCT.
+ *
+ * Carrefour's tile markup can lead with a campaign badge, and `querySelector('a[href]')` takes
+ * whichever anchor comes first — so 20 offers pointed at /campanii/reduceri-de-gama, 8 at a PDF
+ * of promo regulations and 4 at an ad-tracking redirect. Non-products in the catalog, all
+ * sharing one link, which also read as an 18-way matcher fan-out because the fan-out audit
+ * identifies a store product BY its link.
+ *
+ * Checked by SHAPE rather than by a list of bad hosts: a PDF is never a product anywhere, and
+ * neither is a site root. A merchant that starts doing this tomorrow is caught the same night.
+ */
+async function auditProductUrlsAreProducts() {
+  const rows = await prisma.offer.findMany({
+    where: { productUrl: { not: null }, flagged: false, isStale: false },
+    select: { id: true, productUrl: true, merchant: { select: { name: true } } },
+  });
+  const shapes: { why: string; test: (u: string) => boolean }[] = [
+    { why: "a PDF or document", test: (u) => /\.(pdf|docx?|xlsx?)(\?|$)/i.test(u) },
+    { why: "a campaign or promo landing page", test: (u) => /\/(campanii|campaigns?|promotii|reduceri)\b/i.test(u) },
+    { why: "an ad or tracking redirect", test: (u) => /(footprints-ai|\/campaigns-smart\/|doubleclick|adservice)/i.test(u) },
+    { why: "a corporate or legal page", test: (u) => /\/(corporate|regulations|termeni|politica)\b/i.test(u) },
+    { why: "the site root", test: (u) => { try { return new URL(u).pathname.replace(/\/+$/, "") === ""; } catch { return false; } } },
+  ];
+  const bad: string[] = [];
+  for (const r of rows) {
+    const hit = shapes.find((sh) => sh.test(r.productUrl ?? ""));
+    if (hit) bad.push(`offer ${r.id} [${r.merchant.name}] ${hit.why}: ${(r.productUrl ?? "").slice(0, 64)}`);
+  }
+  record("Freshness", "every live productUrl points at a product page, not a banner or a PDF", bad);
+}
+
+/**
+ * Derived data must not outlive what it was derived from.
+ *
+ * A bulk tier is computed against an offer's price. When the offer is re-scraped to a new price
+ * the ladder is left where it is, and a rung then sits at or above a base it no longer belongs
+ * to — 61 DCNeu rows read "tier 2+ 15.46 >= base 2.94". And a tier on a WITHHELD offer is a
+ * discount on a price nobody may see. Both are cleared by `standing-decisions`; this is the
+ * check that says so from outside it.
+ */
+async function auditDerivedDataIsFresh() {
+  const onWithheld = await prisma.offer.count({ where: { flagged: true, tiers: { some: {} } } });
+  record("Tiers", "no bulk tier survives on a withheld offer",
+    onWithheld > 0 ? [`${onWithheld} withheld offer(s) still carry bulk tiers`] : []);
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("\n═══ DATABASE INVARIANT AUDIT ═══");
@@ -901,6 +948,8 @@ async function main() {
   await auditDeliveryPlatform();
   await auditCategoryPathRegression();
   await auditTreeMatchesDatabase();
+  await auditProductUrlsAreProducts();
+  await auditDerivedDataIsFresh();
 
   let lastGroup = "";
   for (const c of checks) {
