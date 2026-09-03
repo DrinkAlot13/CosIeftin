@@ -441,11 +441,24 @@ const liveOffer = {
   product: { section: "grocery" },
 } as const;
 
+/**
+ * ONE FILTER FOR ALL THREE COUNTERS.
+ *
+ * `chains` used to key on `isStale: false` alone while the other two used `liveOffer`, so it
+ * counted a merchant whose prices are not shown: glovo-kaufland has 2,217 non-stale grocery
+ * offers and ZERO visible ones, because DELIVERY_PLATFORM is excluded everywhere. The homepage
+ * was about to claim NINE stores while eight had a price a visitor could see — and the cached
+ * 8 was right only by accident, because the cache predated the Glovo ingest.
+ *
+ * Same shape as the two outlier thresholds, the two size parsers and the two definitions of
+ * "shown": one question, two spellings, and nothing to say which was right. The fix is the
+ * same — one definition, used by all three.
+ */
 export async function countStats() {
   const [products, offers, chains] = await Promise.all([
     prisma.product.count({ where: { section: "grocery", offers: { some: liveOffer } } }),
     prisma.offer.count({ where: liveOffer }),
-    prisma.merchant.count({ where: { active: true, offers: { some: { isStale: false, product: { section: "grocery" } } } } }),
+    prisma.merchant.count({ where: { active: true, offers: { some: liveOffer } } }),
   ]);
   return { products, offers, chains };
 }

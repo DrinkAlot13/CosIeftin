@@ -121,3 +121,41 @@ export function missingNights(dates: string[]): string[] {
   }
   return out;
 }
+
+/**
+ * Is this actually an N-night soak?
+ *
+ * `missingNights` only sees gaps BETWEEN the first and last recorded night, which means five
+ * consecutive nights out of an intended fourteen report "no missing nights" — the check cannot
+ * see the nights that were never attempted, only the holes between the ones that were. That is
+ * the same blind spot as counting a column's default as an observation: absence looks like
+ * agreement.
+ *
+ * So the window is stated rather than inferred. Nights are counted against the LAST `expected`
+ * calendar days ending today, and the verdict says plainly whether the fortnight happened.
+ */
+export type SoakVerdict = {
+  expected: number;
+  recorded: number;
+  missing: string[];
+  /** True only when every night in the window has a log. */
+  complete: boolean;
+  headline: string;
+};
+
+export function soakVerdict(dates: string[], expected: number, today: string): SoakVerdict {
+  const have = new Set(dates);
+  const end = Date.parse(`${today}T00:00:00Z`);
+  const window: string[] = [];
+  for (let i = expected - 1; i >= 0; i--) {
+    window.push(new Date(end - i * 86_400_000).toISOString().slice(0, 10));
+  }
+  const missing = window.filter((d) => !have.has(d));
+  const recorded = window.length - missing.length;
+  const complete = missing.length === 0;
+  const headline = complete
+    ? `${recorded} of ${expected} nights recorded — this IS a ${expected}-night soak.`
+    : `${recorded} of ${expected} nights recorded, ${missing.length} MISSING — ` +
+      `this is NOT a ${expected}-night soak and must not be read as one.`;
+  return { expected, recorded, missing, complete, headline };
+}

@@ -46,3 +46,6 @@ config/glovo-session.json
 # Generated reports. `backups/manifest.json` was tracked as generated output and blocked a
 # merge; the same shape, so it stays out of the repository. Re-create with `npm run report:tree`.
 reports/
+
+# Nightly wrapper output — one file per night, runtime evidence rather than source.
+logs/nightly/

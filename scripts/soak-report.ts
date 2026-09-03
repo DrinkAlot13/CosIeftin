@@ -31,7 +31,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { deadSources, invariantTransitions, missingNights, writeMoves } from "../src/lib/soak-analysis";
+import { deadSources, invariantTransitions, missingNights, soakVerdict, writeMoves } from "../src/lib/soak-analysis";
 
 const LOG_DIR = join(process.cwd(), "logs", "soak");
 
@@ -119,18 +119,37 @@ function main(): void {
   const span = daysBetween(first, last) + 1;
   console.log(`  ${entries.length} night(s) recorded, ${first} → ${last} (${span} calendar days)\n`);
 
-  // ── MISSING NIGHTS ────────────────────────────────────────────────────────────
-  // Checked before anything else. Every conclusion below is drawn only from nights that
-  // were actually recorded, and a fortnight with four holes in it does not support the
-  // same conclusions as a fortnight without.
+  // ── DID THE FORTNIGHT HAPPEN AT ALL? ─────────────────────────────────────────
+  // FIRST, and before any analysis, because every number below is drawn only from nights that
+  // were recorded. A fortnight with three holes does not support the conclusions of a fortnight
+  // without, and the difference has to be impossible to skim past.
+  const expected = Number(process.env.SOAK_NIGHTS ?? 14);
+  const verdict = soakVerdict(entries.map((e) => e.date), expected, new Date().toISOString().slice(0, 10));
+  console.log(rule());
+  if (verdict.complete) {
+    console.log(`  ✓ ${verdict.headline}`);
+  } else {
+    console.log(`  ✗✗ ${verdict.headline}`);
+    console.log(`     nights with no log, in the last ${expected} days:`);
+    console.log(`     ${verdict.missing.join("  ")}`);
+    console.log(`     A night with no log is not a quiet night — nothing ran, or it died before`);
+    console.log(`     reaching soak:log. Read everything below as covering ${verdict.recorded} nights.`);
+  }
+  console.log(`${rule()}
+`);
+
+  // ── GAPS INSIDE THE RECORDED RANGE ────────────────────────────────────────────
+  // A DIFFERENT QUESTION FROM THE VERDICT ABOVE, and the wording now says so. This finds holes
+  // BETWEEN the first and last recorded night; it cannot see nights that were never attempted
+  // at all. Worded as "no missing nights" it printed directly under a verdict reporting 13
+  // absent — one directory, two checks, and the whole difference was the window each looked at.
   const gaps = missingNights(entries.map((e) => e.date));
   if (gaps.length > 0) {
-    console.log(`  ⚠ ${gaps.length} NIGHT(S) WITH NO LOG — the chain did not run, or died before`);
-    console.log(`    reaching soak:log. A missing night and a quiet night look identical in a`);
-    console.log(`    directory listing, which is why they are separated here.`);
+    console.log(`  ⚠ ${gaps.length} GAP(S) INSIDE THE RECORDED RANGE ${first} → ${last} — the chain`);
+    console.log(`    did not run, or died before reaching soak:log.`);
     console.log(`    ${gaps.join("  ")}\n`);
   } else {
-    console.log(`  ✓ no missing nights\n`);
+    console.log(`  ✓ no gaps between ${first} and ${last} (this says nothing about nights outside that range)\n`);
   }
 
   // A night the log EXISTS for but the scrape chain died on. Distinct from a missing night: the

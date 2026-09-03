@@ -83,6 +83,7 @@ model Merchant {
 
 /// A canonical pre-set grocery item. Scraped offers match onto one Product.
 model Product {
+  addCount      ProductAddCount?
   id         Int               @id @default(autoincrement())
   slug       String            @unique
   name       String
@@ -711,4 +712,23 @@ model UserProductAdd {
 
   @@unique([userId, productId])
   @@index([userId])
+}
+
+/// HOW OFTEN A PRODUCT IS ADDED TO A LIST — an aggregate, and nothing else.
+///
+/// "Most added" could not be answered at all: carts live in localStorage and the favourites
+/// endpoint 401s anonymous callers, so with no accounts in use every add by every visitor was
+/// recorded nowhere. Ranking by offer count instead is circular — it selects for products that
+/// are already comparable and duly reports 100%.
+///
+/// DELIBERATELY NOT A LOG. One row per product, a counter and a date. No user, no session, no
+/// IP, no timestamps per event — nothing that could reconstruct who added what. That is strictly
+/// less than the list itself already holds, and it is all that ranking needs.
+model ProductAddCount {
+  productId   Int      @id
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  adds        Int      @default(0)
+  lastAddedAt DateTime @default(now())
+
+  @@index([adds])
 }

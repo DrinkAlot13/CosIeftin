@@ -176,6 +176,37 @@ export default async function MetodologiePage() {
       </section>
 
       <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 20 }}>Cât de bine putem compara</h2>
+        <p>
+          Comparăm foarte bine coșul de zi cu zi și mult mai slab coada lungă a catalogului.
+          Spunem ambele cifre pentru că numai prima descrie ce pățește un cumpărător:
+        </p>
+        <ul>
+          <li>
+            <b>Coșul de bază</b> — cele 40 de produse fixe din Indexul CoșMic (lapte, pâine, ouă,
+            ulei, zahăr…): <b>{"~"}62% au preț în 2 sau mai multe magazine</b>.
+          </li>
+          <li>
+            <b>Tot catalogul</b> — orice produs cu preț vizibil azi: <b>{"~"}11%</b>. Diferența nu e
+            o eroare de potrivire: catalogul e plin de mărci proprii și produse de nișă pe care
+            un singur magazin le vinde, și pe care nicio potrivire nu le poate perechea.
+          </li>
+        </ul>
+        <p>
+          <b>Numitorul.</b> Procentele de mai sus se raportează la produsele care au{" "}
+          <i>cel puțin un preț vizibil azi</i>, nu la tot ce ținem în catalog. Un produs pe care
+          nimeni nu îl are pe stoc azi e o problemă de <i>acoperire</i>, nu de comparabilitate, și
+          îl raportăm separat. Dacă l-am pune în numitor, o zi în care un magazin nu răspunde ar
+          „îmbunătăți” comparabilitatea — pentru că numitorul scade — ceea ce e exact pe dos.
+        </p>
+        <p>
+          Unde se vede cel mai tare golul: legumele și fructele vândute la kilogram. Bananele,
+          merele, roșiile, cartofii și ceapa au adesea un singur magazin, nu pentru că unul singur
+          le vinde, ci pentru că fiecare le scrie altfel.
+        </p>
+      </section>
+
+      <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 20 }}>Ce nu facem</h2>
         <ul style={{ lineHeight: 1.7, paddingLeft: 20 }}>
           <li>Nu vindem produse și nu procesăm comenzi. Comanda se face pe site-ul magazinului.</li>

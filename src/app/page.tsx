@@ -28,7 +28,9 @@ export default async function HomePage() {
           <div className="hero-stats">
             <span><b>{stats.products}</b> produse</span>
             <span><b>{stats.offers}</b> prețuri</span>
-            <span><b>{stats.chains}</b> magazine</span>
+            {/* "magazine alimentare", not "magazine": this counter is grocery-scoped and always was.
+                A bare "magazine" reads as every shop on the site, which is a different number. */}
+            <span><b>{stats.chains}</b> magazine alimentare</span>
           </div>
           <div style={{ marginTop: 18 }}>
             <Link className="btn btn-accent" href="/lista">🛒 Fă o listă de cumpărături →</Link>

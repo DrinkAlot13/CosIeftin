@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { computeLiveness, formatSilence, BROKEN_RUN_STREAK, MAX_SILENCE_HOURS } from "@/lib/liveness";
 import { sectionKind, SECTION_LABELS } from "@/lib/section-type";
+import { getComparability } from "@/lib/comparability";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sănătatea scraperelor", robots: { index: false } };
@@ -85,6 +86,11 @@ export default async function HealthPage() {
   // provably broken NOW, and waiting out the clock to say so is choosing to find out late.
   // Penny read 0 products on 2026-09-02 and would have sat green until the following night.
   const deadMerchants = liveness.filter((l) => l.dead || l.deadRunStreak >= BROKEN_RUN_STREAK);
+
+  // WHAT A SHOPPER EXPERIENCES, ABOVE WHAT THE CATALOG AVERAGES TO. The two differ by 6x, and
+  // the catalog figure was never wrong — it answers "of everything we hold, how much can be
+  // compared", which is a question about our composition rather than about anyone's shopping.
+  const cmp = await getComparability();
 
   // COMPARISON vs PRICE sections. A blended comparability figure measures catalog
   // composition rather than matching quality: DCNeu grew by 6,895 single-merchant products
@@ -165,6 +171,30 @@ export default async function HealthPage() {
           <Link href="/admin">← Panou admin</Link> · <Link href="/admin/review">Verificare potriviri</Link>
         </p>
       </div>
+
+      <section className="section" style={{ paddingTop: 0, paddingBottom: 8 }}>
+        <div className="card" style={{ padding: "14px 16px" }}>
+          <h2 style={{ margin: "0 0 4px", fontSize: 17 }}>Comparabilitate</h2>
+          <p style={{ margin: "0 0 8px", fontSize: 25, fontWeight: 800, letterSpacing: -0.4 }}>
+            coș de bază ({cmp.basket.total} produse): {cmp.basket.share2.toFixed(1).replace(".", ",")}% în 2+ magazine
+          </p>
+          <p className="muted" style={{ margin: "0 0 10px", fontSize: 13.5 }}>
+            {cmp.basket.atLeast3} din {cmp.basket.total} în 3+ magazine · {cmp.basket.atLeast4} în 4+.
+            Acesta este numărul care descrie ce vede un cumpărător — coșul fix din Indexul CoșMic.
+          </p>
+          <p style={{ margin: "0 0 6px", fontSize: 15 }}>
+            tot catalogul: <b>{cmp.catalog.share2.toFixed(1).replace(".", ",")}%</b> în 2+ magazine{" "}
+            ({cmp.catalog.atLeast2.toLocaleString("ro-RO")} din {cmp.catalog.total.toLocaleString("ro-RO")} produse cu preț azi)
+          </p>
+          <p className="muted" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5 }}>
+            Numitorul este <b>produsele cu cel puțin un preț vizibil azi</b>{" "}
+            ({cmp.catalog.total.toLocaleString("ro-RO")}), nu toate produsele din catalog{" "}
+            ({cmp.inScope.toLocaleString("ro-RO")}). Cele {cmp.unpriced.toLocaleString("ro-RO")} fără
+            niciun preț sunt o problemă de acoperire, nu de comparabilitate, și se raportează
+            separat — altfel un scraper căzut ar „îmbunătăți” comparabilitatea micșorând numitorul.
+          </p>
+        </div>
+      </section>
 
       <section className="section" style={{ paddingTop: 0 }}>
         <div className="section-head">

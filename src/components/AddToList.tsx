@@ -13,11 +13,21 @@ import { addItem, CART_EVENT, getActive, removeItem } from "@/lib/carts";
  */
 function recordAdd(productId?: number) {
   if (!productId) return;
-  void fetch("/api/favorites", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ productId, add: true }),
-  }).catch(() => { /* the add already happened; the count is best-effort */ });
+  const body = JSON.stringify({ productId, add: true });
+  const headers = { "content-type": "application/json" };
+
+  // TWO ENDPOINTS, BECAUSE THEY ANSWER TO DIFFERENT PEOPLE.
+  //
+  // /api/favorites is per-user and 401s an anonymous caller, which is right for a heart and
+  // wrong for a counter: with carts in localStorage and no accounts in use, EVERY add by
+  // EVERY visitor was recorded nowhere, and "most added" could not be answered at all.
+  //
+  // /api/list-adds is an anonymous aggregate — one row per product, a total and a date, no
+  // user and no event log — so it accepts everyone and stores nothing about anyone.
+  void fetch("/api/favorites", { method: "POST", headers, body })
+    .catch(() => { /* the add already happened; the favourite is best-effort */ });
+  void fetch("/api/list-adds", { method: "POST", headers, body })
+    .catch(() => { /* likewise: never let a counter fail an add */ });
 }
 
 export function AddToList({ slug, name, productId }: { slug: string; name: string; productId?: number }) {

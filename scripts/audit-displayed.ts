@@ -17,6 +17,7 @@
 import { PrismaClient } from "@prisma/client";
 import { emitJson } from "../src/lib/audit-json";
 import { MAX_DISPLAY_AGE_DAYS } from "../src/lib/pricing";
+import { countStats } from "../src/lib/queries";
 
 const prisma = new PrismaClient();
 
@@ -157,6 +158,51 @@ async function main(): Promise<void> {
     }
   }
   record("every struck price is the offer's own reference, above its own price", badStrike);
+
+  // ── THE HOMEPAGE COUNTERS MUST EQUAL A DIRECT QUERY ──────────────────────────────
+  //
+  // `countStats` IS imported here, on purpose, and that is not the usual mistake. The question
+  // is not "is the filter right" — it is "does the function the homepage actually calls still
+  // agree with a literal re-derivation of the same three numbers". They disagreed: `chains`
+  // keyed on `isStale: false` while the other two used the display filter, so it counted
+  // glovo-kaufland — 2,217 non-stale grocery offers, ZERO of them visible — and the homepage
+  // was one cache-refresh away from claiming nine stores when eight had a price you could see.
+  //
+  // Written out longhand rather than reusing `currentOfferWhere`, so a change to that helper
+  // cannot move both sides of the comparison at once.
+  const shown = {
+    merchant: { active: true },
+    availability: "in stock",
+    isStale: false,
+    flagged: false,
+    NOT: { priceSource: "DELIVERY_PLATFORM" },
+    lastObservedAt: { gte: cutoff },
+    product: { section: "grocery" },
+  } as const;
+  const [directProducts, directOffers, directChains] = await Promise.all([
+    prisma.product.count({ where: { section: "grocery", offers: { some: shown } } }),
+    prisma.offer.count({ where: shown }),
+    prisma.merchant.count({ where: { active: true, offers: { some: shown } } }),
+  ]);
+  const shipped = await countStats();
+  const counterMismatch: string[] = [];
+  if (shipped.products !== directProducts) counterMismatch.push(`produse: homepage ${shipped.products} vs direct query ${directProducts}`);
+  if (shipped.offers !== directOffers) counterMismatch.push(`prețuri: homepage ${shipped.offers} vs direct query ${directOffers}`);
+  if (shipped.chains !== directChains) counterMismatch.push(`magazine alimentare: homepage ${shipped.chains} vs direct query ${directChains}`);
+  console.log(`  homepage counters: produse ${directProducts} · prețuri ${directOffers} · magazine alimentare ${directChains}`);
+  record("every homepage counter equals a direct query under the same filter", counterMismatch);
+
+  // A store counted with nothing to show is the specific failure that happened; name it.
+  const merchantsCounted = await prisma.merchant.findMany({
+    where: { active: true, offers: { some: shown } },
+    select: { slug: true },
+  });
+  const empties: string[] = [];
+  for (const m of merchantsCounted) {
+    const n = await prisma.offer.count({ where: { ...shown, merchant: { slug: m.slug } } });
+    if (n === 0) empties.push(`${m.slug} is counted as a store but shows 0 prices`);
+  }
+  record("no merchant is counted on the homepage with zero visible prices", empties);
 
   // ── The two withheld cohorts must still be withheld, or be correct.
   const keptOver = await prisma.priceAnomaly.findMany({

@@ -12,7 +12,7 @@ import { describe, it, expect } from "./run";
 import {
   deadSources,
   invariantTransitions,
-  missingNights,
+  missingNights, soakVerdict,
   writeMoves,
   type NightInvariants,
 } from "../src/lib/soak-analysis";
@@ -155,5 +155,43 @@ describe("soak: missing nights", () => {
 
   it("spans a month boundary", () => {
     expect(missingNights(["2026-08-30", "2026-09-02"])).toEqual(["2026-08-31", "2026-09-01"]);
+  });
+});
+
+describe("soak: is it actually an N-night soak", () => {
+  // The blind spot this exists for: `missingNights` only sees holes BETWEEN the first and last
+  // recorded night, so five consecutive nights out of an intended fourteen reported "no missing
+  // nights". It cannot see nights that were never attempted — absence looked like agreement,
+  // the same shape as reading a column default as an observation.
+  it("counts against the INTENDED window, not the recorded range", () => {
+    const five = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05"];
+    expect(missingNights(five).length).toBe(0);           // the old check sees nothing wrong
+    const v = soakVerdict(five, 14, "2026-09-05");
+    expect(v.recorded).toBe(5);
+    expect(v.missing.length).toBe(9);
+    expect(v.complete).toBeFalsy();
+  });
+
+  it("says plainly that it is NOT an N-night soak", () => {
+    const v = soakVerdict(["2026-09-03"], 14, "2026-09-03");
+    expect(v.headline.includes("NOT a 14-night soak")).toBeTruthy();
+  });
+
+  it("passes only when every night in the window has a log", () => {
+    const all: string[] = [];
+    for (let i = 13; i >= 0; i--) {
+      all.push(new Date(Date.parse("2026-09-14T00:00:00Z") - i * 86400000).toISOString().slice(0, 10));
+    }
+    const v = soakVerdict(all, 14, "2026-09-14");
+    expect(v.complete).toBeTruthy();
+    expect(v.recorded).toBe(14);
+    expect(v.headline.includes("IS a 14-night soak")).toBeTruthy();
+  });
+
+  it("ignores logs from outside the window rather than counting them toward it", () => {
+    // A fortnight of old logs plus one recent night is not a fortnight.
+    const stale = ["2026-01-01", "2026-01-02", "2026-09-14"];
+    const v = soakVerdict(stale, 14, "2026-09-14");
+    expect(v.recorded).toBe(1);
   });
 });
