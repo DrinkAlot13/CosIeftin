@@ -115,14 +115,64 @@ IT GREEN"*:
 What matters for these two is not that they are red. It is whether they **change** — which is
 why the report separates transitions from steady state.
 
+## Before night one counts
+
+The fortnight does not start when the first log appears. It starts when a run has actually
+exercised the paths that were broken, and that is checked rather than assumed.
+
+**First, from an ADMIN PowerShell** — the scheduled task is registered but its Logon Mode reads
+`Interactive only`, so it will not fire while nobody is logged in. A fortnight the machine slept
+through four nights of is not a fortnight:
+
+```powershell
+$p = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Limited
+Set-ScheduledTask -TaskName "CosMic Nightly" -Principal $p
+```
+
+Confirm `Logon Mode` no longer says `Interactive only`.
+
+**Then, after the 04:00 run, all four:**
+
+1. `npm run confirm:night-one` — the verdict, verbatim.
+2. `npm run audit:db` — all invariants. Two are red on purpose; see below.
+3. The task fired on **its own trigger**, not by hand: `schtasks /query /TN "CosMic Nightly" /V`
+   for the result, and `logs/nightly/<date>.log` for what it did.
+4. A soak entry exists for the night in `logs/soak/`.
+
+**INCONCLUSIVE is not a failure.** `confirm:night-one` reports a rejected pairing as tested only
+if the merchant's OWN LAST RUN re-observed it. A night that did not touch those merchants proves
+nothing either way, and the script says so instead of passing. When that happens, name the night
+that would settle it and wait for it — do not count night one early.
+
+Its first version measured against a 20-hour window and called an offer "rewritten AND still
+withheld" when something else had touched it earlier that day. A check that answers easily is
+worse than one that answers rarely.
+
 ## Rules while it runs
 
 - Do not touch the matcher.
 - Do not add merchants.
 - Do not chase backlog items.
+- No thresholds, no features.
+- Bug fixes ONLY if something is actively broken for a user — and logged here, in this file,
+  with the date and what changed.
 
 The point is to find out what breaks when nobody is looking, and changing things underneath the
 measurement destroys it. Anything found goes to `docs/BACKLOG.md`, not into the working tree.
+
+### Two things that do NOT disturb the measurement
+
+- **Use the site to shop.** `GroceryList` was empty: the basket flow, the per-shop cart and the
+  substitution notices have never met a real user. That is where the next class of problem is,
+  and using them changes no measured input.
+- **The vocabulary afternoon.** `npm run report:altele` holds the token lists for the catch-all
+  leaves. Data edits, not rules — watch for the `purcel de lapte` shape, where a word means
+  something else in context, as `crema` and `matura` did.
+
+## Day seven, day fourteen
+
+Day seven: `npm run soak:report`, to confirm the reader works on seven nights rather than on
+one. Day fourteen: read it properly.
 
 ## Check on day two
 
