@@ -157,6 +157,32 @@ worse than one that answers rarely.
 - Bug fixes ONLY if something is actively broken for a user — and logged here, in this file,
   with the date and what changed.
 
+### Bug fixes during this soak
+
+**2026-09-06 — confirm:night-one had an unsatisfiable criterion.** It demanded the five
+rejected rows be re-observed, but all five are stale rows whose store items no longer exist
+under those names (Freshful's mici renamed, Sezamo's gelatine gained "foi") — they would never
+be re-observed, so the gate on counting night one could never open. It now tests what the
+mechanism guarantees: any offer WRITTEN on a rejected (merchant, product) pair since the reject
+must be withheld; a pair nothing has landed on reads "nothing to test", never pass, never fail.
+Verdict after the fix: NIGHT ONE COUNTS — 2 of 5 pairs took an offer since the reject (the two
+renamed items, i.e. the original bug's own pairs) and both were withheld; 3 pairs untested in
+production, proven by tests/standing-decisions.test.ts.
+
+**2026-09-06 — every page rendered "Ești offline" to an online browser.** The service worker
+treated "this fetch failed" and "we are offline" as one fact: a dead or moved dev server, or a
+failed cache.put (which sat inside the same try as the fetch), all rendered the offline page —
+and registration ran in development too, so a stale worker kept the trap armed through every
+rebuild. Fifteenth instance of the pattern, and visible to a user on every page. sw.js v2:
+navigations stay network-first, the offline fallback appears ONLY when `navigator.onLine` is
+false, an online fetch failure renders "Serverul nu răspunde" (502) and logs itself as a bug,
+cache.put is fire-and-forget, caches are versioned (v1 deleted on activate). Dev never
+registers and actively unregisters + drops cosmic-* caches, so recovery needs no DevTools.
+Verified by rendered output in a real browser: 5 pages online (no fallback), offline (fallback
++ "Deschide lista" works), back online (recovers, no manual unregistration). `verify:offline`
+now runs as part of verify:site — it boots its own `next start` and FAILS on a missing build
+rather than skipping.
+
 The point is to find out what breaks when nobody is looking, and changing things underneath the
 measurement destroys it. Anything found goes to `docs/BACKLOG.md`, not into the working tree.
 

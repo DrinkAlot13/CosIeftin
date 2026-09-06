@@ -1,15 +1,24 @@
 // CoșMic service worker — makes the shopping list usable IN STORE, where signal is worst.
 //
-// Strategy per request type:
-//   • navigations  → network-first, fall back to cache, then the offline page.
-//     (prices must be fresh when there IS signal; a stale list beats a dead page when there isn't)
+// v2. The first version rendered "Ești offline" on every page WHILE THE BROWSER WAS ONLINE,
+// persistently, on the dev origin. Three defects stacked:
+//
+//   1. It treated "this fetch failed" and "we are offline" as the same fact. They are not: a
+//      dev server that died or moved ports, and a cache.put that threw, both landed in the same
+//      catch and rendered the offline page to an online browser. The fifteenth instance of the
+//      project's recurring shape — two kinds of fact in one representation.
+//   2. `cache.put` sat INSIDE the same try as the fetch, so a failure to CACHE a good response
+//      discarded that response and served the fallback instead.
+//   3. It was registered in development, where asset hashes change on every rebuild, so a stale
+//      worker could sit on the origin forever. Registration is now production-only, and dev
+//      actively unregisters (see ServiceWorker.tsx).
+//
+// Strategy per request type (unchanged in intent):
+//   • navigations  → network-first; cached page, then offline page, ONLY when actually offline.
 //   • static assets → cache-first (they're content-hashed by Next).
 //   • API/POST      → never cached; a stale basket total would be worse than an error.
-//
-// The list itself lives in localStorage, so it survives with or without this worker; the SW
-// is what makes the PAGE that renders it load without a connection.
 
-const VERSION = "cosmic-v1";
+const VERSION = "cosmic-v2";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const OFFLINE_URL = "/offline.html";
@@ -37,6 +46,16 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+/** Cache a response without ever letting the attempt break the response itself. */
+function putSafely(cacheName, req, res) {
+  return caches
+    .open(cacheName)
+    .then((cache) => cache.put(req, res))
+    .catch(() => {
+      /* a response we failed to CACHE is still a response we can SERVE */
+    });
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return; // never cache mutations
@@ -48,17 +67,33 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     event.respondWith(
       (async () => {
+        let fresh;
         try {
-          const fresh = await fetch(req);
-          const cache = await caches.open(PAGE_CACHE);
-          cache.put(req, fresh.clone());
-          return fresh;
-        } catch {
+          fresh = await fetch(req);
+        } catch (err) {
+          // THE DISTINCTION THE FIRST VERSION MISSED. A failed fetch while the browser says it
+          // is ONLINE is a server problem, not an offline shopper — showing "Ești offline"
+          // there is a lie the user cannot debug. Surface the truth instead, and log it: this
+          // path executing while online IS the bug this rewrite fixed, and it must be loud if
+          // it ever happens again.
+          if (self.navigator.onLine) {
+            console.error("[sw] navigation fetch failed while ONLINE — server unreachable, NOT offline:", String(err));
+            return new Response(
+              "<!doctype html><meta charset=utf-8><title>Server indisponibil</title>" +
+                "<body style=\"font-family:system-ui;padding:40px;max-width:36em;margin:auto\">" +
+                "<h1>Serverul nu răspunde</h1><p>Ești online, dar serverul CoșMic nu a răspuns. " +
+                "Reîncearcă în câteva secunde.</p></body>",
+              { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
+            );
+          }
           const cached = await caches.match(req);
           if (cached) return cached;
           const offline = await caches.match(OFFLINE_URL);
           return offline ?? new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain" } });
         }
+        // Caching is an optimisation, never the difference between a page and the fallback.
+        event.waitUntil(putSafely(PAGE_CACHE, req, fresh.clone()));
+        return fresh;
       })(),
     );
     return;
@@ -72,10 +107,7 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         try {
           const fresh = await fetch(req);
-          if (fresh.ok) {
-            const cache = await caches.open(STATIC_CACHE);
-            cache.put(req, fresh.clone());
-          }
+          if (fresh.ok) event.waitUntil(putSafely(STATIC_CACHE, req, fresh.clone()));
           return fresh;
         } catch {
           return new Response("", { status: 504 });

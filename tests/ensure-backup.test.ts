@@ -25,8 +25,20 @@ describe("backup freshness — the short-circuit", () => {
   it("a snapshot inside the window short-circuits; outside it does not", () => {
     const manifest = join(process.cwd(), "backups", "manifest.json");
     if (!existsSync(manifest)) return;
-    const entries = JSON.parse(readFileSync(manifest, "utf8")) as { takenAt?: string }[];
-    const newest = Math.max(...entries.map((e) => Date.parse(e.takenAt ?? "")).filter(Number.isFinite));
+    const entries = JSON.parse(readFileSync(manifest, "utf8")) as { takenAt?: string; file?: string }[];
+    // THE SAME POPULATION THE FUNCTION USES. `newestBackupAgeMs` ignores manifest entries
+    // whose snapshot file has been pruned from disk — a record of a backup that no longer
+    // exists is not a backup. This test took the max over ALL entries, so the moment the
+    // manifest's newest entry outlived its file, the two disagreed about "newest" and the
+    // boundary assertion landed outside the window. Two definitions of one fact, in a test
+    // whose only job is checking the ±1s boundary arithmetic.
+    const newest = Math.max(
+      ...entries
+        .filter((e) => !e.file || existsSync(join(process.cwd(), "backups", e.file)))
+        .map((e) => Date.parse(e.takenAt ?? ""))
+        .filter(Number.isFinite),
+    );
+    if (!Number.isFinite(newest)) return; // every listed file pruned — nothing to bound-check
     // Just inside the window.
     expect(backupIsRecent(newest + BACKUP_MAX_AGE_MS - 1000)).toBeTruthy();
     // Just outside it.

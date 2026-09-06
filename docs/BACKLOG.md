@@ -162,3 +162,9 @@ Confirmed instances:
 read the column and ask whether they'd give the same answer on the same row. Every one of the
 fourteen was found that way — by checking output against something that did not share the
 writer's assumptions — and never by reading the code that wrote it.
+
+- `Offer.productUrl == null` — "the source publishes no deep link" (Kaufland flyer, Glovo — a
+  deliberate, honest null) and "the scraper failed to capture the link" (2 Carrefour rows after
+  the banner fix) read as the same fact, and the deep-link invariant counts both as missing.
+  Same two-kinds-of-fact shape. After the fortnight: either the invariant learns the difference
+  (e.g. a per-merchant "publishes deep links" declaration) or the null gains a reason.

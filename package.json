@@ -10,7 +10,7 @@
     "test": "tsx tests/run.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run verify:code && npm run audit:db && npm run census",
-    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover && npm run audit:search-quality",
+    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover && npm run audit:search-quality && npm run verify:offline",
     "postinstall": "prisma generate",
     "db:reset": "prisma db push --force-reset --skip-generate",
     "seed-catalog": "tsx scripts/seed-catalog.ts",
@@ -108,6 +108,7 @@
     "report:altele": "tsx scripts/report-altele-vocabulary.ts",
     "report:basket": "tsx scripts/report-basket-comparability.ts",
     "confirm:night-one": "tsx scripts/confirm-night-one.ts",
+    "verify:offline": "tsx scripts/verify-offline.ts",
     "scrape:platform": "tsx scripts/scrape-platform.ts",
     "audit:markup": "tsx scripts/audit-platform-markup.ts"
   },

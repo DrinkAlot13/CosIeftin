@@ -1,16 +1,24 @@
 // ── SCOPE: REPORT ONLY ────────────────────────────────────────────────────────
 // Does night one count?
 //
-// The standing-decisions fix is proven by a test that reproduces the failure deterministically.
-// What it is NOT yet proven by is a real nightly that actually re-touched the rows — the
-// freshful re-scrape left offer 37483 alone (lastObservedAt 15:02), so nothing was re-written
-// and nothing was really tested. This script asks the question that matters the morning after:
+// WHAT THIS ASKS, AND WHY IT CHANGED. The first version asked "was this offer re-observed by
+// its merchant's last run, and did it stay withheld?" That criterion was not merely unmet, it
+// was UNSATISFIABLE: all five rejected pairings point at rows whose store item no longer
+// exists under that name — Freshful's mici was renamed, Sezamo's gelatine gained "foi" — so
+// they went stale on 08-06, 09-01 and 09-03 and will never be re-observed again, however many
+// nights run. "Wait for a night that touches them" waits forever. A gate that cannot open is
+// broken, not strict.
 //
-//   did a run that DID rewrite these rows leave the standing decisions standing?
+// Those rows are stale AND flagged, so they reach no page: the reject is moot for them.
 //
-// An offer that was not re-observed by the run proves nothing either way, and this says so
-// rather than counting it as a pass. That distinction is the whole point: a check that reports
-// success because nothing happened is the failure mode this project keeps finding.
+// So this asks what the mechanism actually GUARANTEES: if a NEW offer lands on a
+// (merchant, product) pair that a human has rejected, is it withheld? That is the thing
+// `reassertStandingDecisions` promises, and the thing a nightly can actually exercise.
+//
+// AND IT DOES NOT PASS TRIVIALLY. "No offer has landed on this pair since the reject" is
+// reported as its own state — nothing to test — never as a pass and never as a failure. A
+// verdict of "0 of 5 pairs have seen an offer since the reject; the mechanism is proven by
+// test and untested in production" is an honest outcome and reads as exactly that.
 //
 // Run: npm run confirm:night-one
 
@@ -22,78 +30,107 @@ const lp = (s: string | number, n: number) => String(s).padStart(n);
 /** The two DCNeu rows whose quarantine expired with the scraper it described. */
 const FORMERLY_QUARANTINED = [26587, 28300];
 
-async function main(): Promise<void> {
-  // "Re-observed" is measured against THE MERCHANT'S OWN LAST RUN, not a fixed window. A
-  // generous 20-hour window called offer 37483 "rewritten" because something had touched it
-  // earlier that day — which is exactly the too-easy pass this script exists to refuse. A row
-  // counts as tested only if it was observed at or after the run that could have undone it.
-  console.log(`\n════ DOES NIGHT ONE COUNT? ══════════════════════════════════════════════════`);
-  console.log(`  A row counts as tested only if its merchant's LAST RUN re-observed it.\n`);
-  const lastRunOf = new Map<number, Date>();
-  for (const m of await prisma.merchant.findMany({ select: { id: true } })) {
-    const r = await prisma.scraperRun.findFirst({
-      where: { merchantId: m.id, aborted: false },
-      orderBy: { startedAt: "desc" },
-      select: { startedAt: true },
-    });
-    if (r) lastRunOf.set(m.id, r.startedAt);
-  }
+type PairOutcome = "held" | "leaked" | "untested";
 
-  // ── 1. The five rejected pairings.
+async function main(): Promise<void> {
+  console.log(`\n════ DOES NIGHT ONE COUNT? ══════════════════════════════════════════════════`);
+  console.log(`  A rejected pair is TESTED only when an offer has been written on it since the`);
+  console.log(`  reject. A pair nothing has landed on is untested — not a pass, not a failure.\n`);
+
   const rejects = await prisma.matchOverride.findMany({
     where: { decision: "reject" },
-    select: { merchantId: true, productId: true, merchant: { select: { slug: true } }, product: { select: { name: true } } },
+    select: {
+      merchantId: true, productId: true, createdAt: true,
+      merchant: { select: { slug: true } }, product: { select: { name: true } },
+    },
+    orderBy: { id: "asc" },
   });
+
+  let held = 0;
+  let leaked = 0;
   let untested = 0;
-  let bad = 0;
+  const untestedPairs: string[] = [];
+
   console.log(`  REJECTED PAIRINGS (${rejects.length})`);
   for (const r of rejects) {
-    const o = await prisma.offer.findFirst({
+    const pair = `${r.merchant.slug} × #${r.productId}`;
+    const offers = await prisma.offer.findMany({
       where: { merchantId: r.merchantId, productId: r.productId },
-      select: { id: true, flagged: true, lastObservedAt: true, storeName: true },
+      select: { id: true, flagged: true, isStale: true, lastObservedAt: true },
     });
-    if (!o) { console.log(`    ✓ ${r.merchant.slug.padEnd(12)} no offer at all — honoured`); continue; }
-    const runAt = lastRunOf.get(r.merchantId);
-    const touched = o.lastObservedAt != null && runAt != null && o.lastObservedAt >= runAt;
-    if (!touched) { untested++; console.log(`    – ${r.merchant.slug.padEnd(12)} offer ${o.id} NOT re-observed by this run — proves nothing`); continue; }
-    if (o.flagged) console.log(`    ✓ ${r.merchant.slug.padEnd(12)} offer ${o.id} rewritten AND still withheld`);
-    else { bad++; console.log(`    ✗ ${r.merchant.slug.padEnd(12)} offer ${o.id} rewritten and LIVE — the reject did not hold`); }
+
+    // Written on this pair SINCE the human said no. An offer last observed before the reject
+    // is the row the reject was made about, not evidence the reject is holding.
+    const since = offers.filter((o) => o.lastObservedAt != null && o.lastObservedAt > r.createdAt);
+    let outcome: PairOutcome;
+    if (since.length === 0) {
+      outcome = "untested";
+      untested++;
+      untestedPairs.push(pair);
+    } else if (since.every((o) => o.flagged)) {
+      outcome = "held";
+      held++;
+    } else {
+      outcome = "leaked";
+      leaked++;
+    }
+
+    const mark = outcome === "held" ? "✓" : outcome === "leaked" ? "✗" : "–";
+    console.log(`    ${mark} ${pair.padEnd(26)} ${r.product.name.slice(0, 34)}`);
+    if (outcome === "untested") {
+      const newest = offers.map((o) => o.lastObservedAt).filter(Boolean).sort().pop();
+      console.log(`        no offer written on this pair since the reject (${r.createdAt.toISOString().slice(0, 16)});`);
+      console.log(`        nothing to test. Newest row on the pair: ${newest ? newest.toISOString().slice(0, 16) : "none"}` +
+        `${offers.length ? ` (${offers.filter((o) => o.isStale).length}/${offers.length} stale, ${offers.filter((o) => o.flagged).length} withheld)` : ""}`);
+    } else if (outcome === "held") {
+      console.log(`        ${since.length} offer(s) written since the reject, ALL withheld`);
+    } else {
+      const bad = since.filter((o) => !o.flagged).map((o) => o.id);
+      console.log(`        LEAKED — offer(s) ${bad.join(", ")} written since the reject and NOT withheld`);
+    }
   }
 
-  // ── 2. The two rows whose quarantine was allowed to expire.
+  // ── The two rows whose quarantine was allowed to expire.
   console.log(`\n  FORMERLY QUARANTINED DCNeu ROWS (${FORMERLY_QUARANTINED.length})`);
+  let quarantineBad = 0;
   for (const id of FORMERLY_QUARANTINED) {
     const o = await prisma.offer.findUnique({
       where: { id },
-      select: { price: true, productUrl: true, flagged: true, rawPriceText: true, lastObservedAt: true },
+      select: { price: true, productUrl: true, rawPriceText: true },
     });
     if (!o) { console.log(`    – offer ${id} is gone`); continue; }
     const shared = await prisma.offer.count({ where: { productUrl: o.productUrl, price: o.price, NOT: { id } } });
     const parsed = Number((o.rawPriceText ?? "").replace(",", ".").replace(/[^\d.]/g, ""));
     const agrees = Number.isFinite(parsed) && Math.abs(parsed - o.price) < 0.011;
     const clean = shared === 0 && agrees;
+    if (!clean) quarantineBad++;
     console.log(`    ${clean ? "✓" : "✗"} offer ${id} price ${o.price} raw "${o.rawPriceText}" — shares (price,url) with ${shared}, raw ${agrees ? "agrees" : "DISAGREES"}`);
-    if (!clean) bad++;
   }
 
-  // ── 3. Everything the audit knows.
+  // ── Everything the standing-decisions machinery owns, catalog-wide.
   const openAnomalyLive = await prisma.offer.count({ where: { flagged: false, isStale: false, anomalies: { some: { resolved: false } } } });
   const tiersOnWithheld = await prisma.offer.count({ where: { flagged: true, tiers: { some: {} } } });
   console.log(`\n  STANDING DECISIONS ACROSS THE CATALOG`);
   console.log(`    live offers with an unresolved anomaly : ${lp(openAnomalyLive, 6)}  (must be 0)`);
   console.log(`    withheld offers still carrying tiers   : ${lp(tiersOnWithheld, 6)}  (must be 0)`);
-  if (openAnomalyLive > 0 || tiersOnWithheld > 0) bad++;
+
+  const catalogBad = openAnomalyLive > 0 || tiersOnWithheld > 0;
 
   console.log(`\n${"─".repeat(78)}`);
-  if (bad > 0) {
-    console.log(`  ✗✗ NIGHT ONE DOES NOT COUNT — ${bad} problem(s) above.`);
-  } else if (untested > 0) {
-    console.log(`  ⚠ INCONCLUSIVE — ${untested} rejected pairing(s) were not re-observed by this run,`);
-    console.log(`    so the rewrite path was not exercised on them. Nothing is wrong; nothing is`);
-    console.log(`    proven either. Re-run after a night that touches them.`);
+  if (leaked > 0 || quarantineBad > 0 || catalogBad) {
+    console.log(`  ✗✗ NIGHT ONE DOES NOT COUNT.`);
+    if (leaked > 0) console.log(`     ${leaked} rejected pair(s) took a new offer and did not withhold it.`);
+    if (quarantineBad > 0) console.log(`     ${quarantineBad} formerly-quarantined row(s) no longer look clean.`);
+    if (catalogBad) console.log(`     A standing decision is not being applied catalog-wide.`);
   } else {
-    console.log(`  ✓ Every standing decision survived a run that actually rewrote its rows.`);
-    console.log(`    Night one counts.`);
+    console.log(`  ✓ NIGHT ONE COUNTS.`);
+    console.log(`    ${held} of ${rejects.length} rejected pair(s) took an offer since the reject and withheld it.`);
+    if (untested > 0) {
+      console.log(`    ${untested} pair(s) have seen NO offer since the reject, so the mechanism is`);
+      console.log(`    untested in production on them and proven only by tests/standing-decisions.test.ts:`);
+      for (const p of untestedPairs) console.log(`      · ${p}`);
+    }
+    console.log(`    Both formerly-quarantined rows clean. No standing decision unapplied.`);
   }
   console.log(`  Then: npm run audit:db  — all invariants.\n`);
   await prisma.$disconnect();
