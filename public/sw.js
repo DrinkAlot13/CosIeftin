@@ -78,12 +78,33 @@ self.addEventListener("fetch", (event) => {
           // it ever happens again.
           if (self.navigator.onLine) {
             console.error("[sw] navigation fetch failed while ONLINE — server unreachable, NOT offline:", String(err));
+            // NAME THE ACTUAL CAUSE, and on localhost name the fix. A dead dev server has
+            // misdiagnosed this project five times — the ChunkLoadError, two "old copy still
+            // rendering" confusions, the smoke-test noise, and the report that produced this
+            // rewrite. Every one of those cost a diagnosis because the page on screen said
+            // something other than what was wrong.
+            const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(self.location.hostname);
+            const hint = isLocal
+              ? "<p><b>Serverul de dezvoltare nu rulează.</b> Pornește-l cu " +
+                "<code style=\"background:#eee;padding:2px 6px;border-radius:4px\">npm run dev</code> " +
+                "și reîncarcă pagina.</p>"
+              : "<p>Reîncearcă în câteva secunde.</p>";
+            // THE WORKER REPORTS ITSELF IN THE ARTIFACT, not only to a console.
+            //
+            // `console.error` from a service worker goes to the WORKER's context, not the
+            // page's — invisible to anything watching page console events, and easy to miss in
+            // DevTools too. This path executing while online is a real fault, so it is stamped
+            // into the response it returns: machine-readable, survives being screenshotted, and
+            // testable without depending on where a console message happens to land.
             return new Response(
-              "<!doctype html><meta charset=utf-8><title>Server indisponibil</title>" +
-                "<body style=\"font-family:system-ui;padding:40px;max-width:36em;margin:auto\">" +
-                "<h1>Serverul nu răspunde</h1><p>Ești online, dar serverul CoșMic nu a răspuns. " +
-                "Reîncearcă în câteva secunde.</p></body>",
-              { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
+              "<!doctype html><meta charset=utf-8><title>Serverul nu răspunde</title>" +
+                "<meta name=\"sw-diagnostic\" content=\"server-down-while-online\">" +
+                "<body style=\"font-family:system-ui;padding:40px;max-width:36em;margin:auto;line-height:1.55\">" +
+                "<h1>Serverul nu răspunde</h1>" +
+                "<p>Ești <b>online</b> — conexiunea ta funcționează. Serverul CoșMic nu a răspuns.</p>" +
+                hint +
+                "</body>",
+              { status: 502, headers: { "Content-Type": "text/html; charset=utf-8", "X-SW-Diagnostic": "server-down-while-online" } },
             );
           }
           const cached = await caches.match(req);

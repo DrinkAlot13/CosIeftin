@@ -148,6 +148,44 @@ Its first version measured against a 20-hour window and called an offer "rewritt
 withheld" when something else had touched it earlier that day. A check that answers easily is
 worse than one that answers rarely.
 
+### Bug fixes made during the soak
+
+Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
+measured input.
+
+**2026-09-06 — `confirm:night-one` could never pass.** Its criterion demanded that each
+rejected pairing be RE-OBSERVED by a run, and all five rows had gone stale: their store items
+no longer exist under those names. A gate that cannot open is broken. Rewritten to test what
+the mechanism actually guarantees — that a NEW offer landing on a rejected (merchant, product)
+pair is withheld — and to report "no offer written on this pair since the reject" as its own
+state rather than folding it into a pass.
+
+**2026-09-06 — every page rendered the offline fallback while online.** The v1 service worker
+treated "the fetch failed" and "you are offline" as one fact, so a stopped dev server showed
+"Ești offline" on every route. Rewritten: navigations are network-first, the offline page is
+served ONLY when `navigator.onLine` is false, caches are versioned and old ones deleted on
+activate, and the worker is not registered in development.
+
+**2026-09-06 — the same fix, verified against the state it was written for.** v2 had only ever
+been checked with DevTools offline mode, which is not a dead server. `verify:offline` now walks
+five states, and 4 and 5 are the point: server dead + browser online must render "Serverul nu
+răspunde", server dead + browser offline must render "Ești offline". Two findings came out of
+building it:
+
+- A service worker's `console.error` goes to the WORKER's context, not the page's, so
+  "the worker logs it" was untestable and nearly invisible in DevTools too. The worker now
+  stamps `<meta name="sw-diagnostic" content="server-down-while-online">` and an
+  `X-SW-Diagnostic` header into the response it returns — observable in the artifact itself.
+- **`fail()` calls `process.exit`, which skips `finally`**, so every failed run leaked a
+  `next start` holding the port. The next run then spawned a server that could not bind, talked
+  to the LEAKED one, and "killed the server" by killing a process that never owned the port —
+  so state 4 tested a live server and reported the v1 bug had returned. The script now owns its
+  server, kills it from `fail()`, and REFUSES to start if the port already answers.
+
+  That is the sixth time a stale dev server has produced a false diagnosis here — the
+  ChunkLoadError, two "old copy still rendering" confusions, the smoke-test noise, the report
+  that prompted the worker rewrite, and now inside the script written to prevent it.
+
 ## Rules while it runs
 
 - Do not touch the matcher.
