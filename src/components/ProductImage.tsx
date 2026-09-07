@@ -1,27 +1,42 @@
 "use client";
 // Product image with an honest failure state.
 //
-// Three ways an image can fail to arrive, and all three now end in the SAME static placeholder
+// Three ways an image can fail to arrive, and all three end in the SAME static placeholder
 // carrying the product's name:
 //
 //   1. no URL at all                 — 1 product in the catalog
-//   2. a URL that is the site's own loading spinner — 962 products; see lib/placeholder-image.
-//      These return HTTP 200 and animate forever, so `onError` never fires. They are refused
-//      before they are ever put in an `<img>`.
-//   3. a URL that 404s, or never finishes loading — caught by `onError` and by a 3s timer.
-//
-// The timer matters because "still loading" and "will never load" look identical to a visitor,
-// and the second is much more common than the first on a page of 48 remote images. After 3
-// seconds we stop claiming the image is coming.
+//   2. a URL that is the site's own loading spinner — 918 live products; see
+//      lib/placeholder-image. These return HTTP 200 and animate forever, so `onError` never
+//      fires. They are refused before they are ever put in an `<img>`.
+//   3. a URL that 404s or is blocked — caught by `onError`, and by a timer for the case where
+//      neither `load` nor `error` ever fires.
 //
 // The fallback is STATIC. An animated shimmer says "wait"; if we know the picture is not
-// coming, saying "wait" is a lie, and it is exactly what the user reported seeing forever.
+// coming, saying "wait" is a lie, and it is exactly what a user once reported seeing forever.
+//
+// ── THE TIMER WAS THE BUG, AND IT WAS A BIG ONE ──────────────────────────────────────────────
+//
+// The timer used to start on MOUNT, for every card on the page, and replace the image after
+// three seconds if it had not finished. Combined with `loading="lazy"` — which is correct and
+// stays — that is a measurement of the wrong thing: a lazy image below the fold has not started
+// loading at all, so three seconds after mount it is not late, it has not been asked for.
+//
+// Measured in a browser, before the fix: /c/branzeturi rendered 494 cards and 421 of them
+// (85%) showed initials. /c/lapte, 59 of 106. Meanwhile ZERO image requests failed — every
+// picture the browser actually asked for painted. The catalog had the URLs; the renderer was
+// throwing them away.
+//
+// It is this project's recurring defect in a new place: a value that was never observed —
+// "this image did not load" — read as though it were an observation, when the truth was "this
+// image was never requested". The fix is to make the timer measure what it claims to: it now
+// starts when the image ENTERS THE VIEWPORT, which is when the browser actually begins
+// fetching it.
 
 import { useEffect, useRef, useState } from "react";
 import { usableImageUrl } from "@/lib/placeholder-image";
 
-/** How long we are willing to claim an image is still on its way. */
-const LOAD_TIMEOUT_MS = 3000;
+/** How long we are willing to claim an image is still on its way, ONCE IT HAS BEEN ASKED FOR. */
+const LOAD_TIMEOUT_MS = 8000;
 
 function hashHue(s: string): number {
   let h = 0;
@@ -75,22 +90,38 @@ export function ProductImage({ name, brand, src }: { name: string; brand?: strin
   // Refused before render: a known spinner URL is not a "loading" state, it is a wrong value.
   const usable = usableImageUrl(src);
   const [failed, setFailed] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     if (!usable) return;
     setFailed(false);
-    setTimedOut(false);
-    // A cached image can be complete before this effect runs; do not start a timer for it.
-    if (imgRef.current?.complete) return;
-    const t = setTimeout(() => {
-      if (!imgRef.current?.complete) setTimedOut(true);
-    }, LOAD_TIMEOUT_MS);
-    return () => clearTimeout(t);
+    const el = imgRef.current;
+    if (!el) return;
+    // A cached image can already be complete before this effect runs. Nothing to wait for.
+    if (el.complete) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // No IntersectionObserver (old browser, or a test environment): fall back to no timer at
+    // all rather than to the old behaviour. `onError` still catches every real failure, and a
+    // missing safety net is far better than one that cuts down images nobody asked for yet.
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting || timer) continue;
+        // NOW the browser starts fetching it, so now the clock means something.
+        timer = setTimeout(() => {
+          if (!imgRef.current?.complete) setFailed(true);
+        }, LOAD_TIMEOUT_MS);
+        io.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    io.observe(el);
+
+    return () => { io.disconnect(); if (timer) clearTimeout(timer); };
   }, [usable]);
 
-  if (!usable || failed || timedOut) return <NamePlaceholder name={name} brand={brand} />;
+  if (!usable || failed) return <NamePlaceholder name={name} brand={brand} />;
 
   return (
     // eslint-disable-next-line @next/next/no-img-element

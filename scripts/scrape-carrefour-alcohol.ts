@@ -10,6 +10,7 @@ import { prisma } from "../src/lib/db";
 import { parsePriceLei, parsePriceDetailed } from "../src/lib/price/parsePrice";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 import { notePageCap } from "../src/lib/truncation";
+import { pickImageUrl } from "../src/lib/image-src";
 
 const BASE = "https://carrefour.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -47,11 +48,24 @@ async function main() {
         const q = (s: string) => el.querySelector(s);
         const name = (q("a[title]")?.getAttribute("title") || q('[class*="name" i] a')?.textContent || q('[class*="name" i]')?.textContent || "").replace(/\s+/g, " ").trim();
         const priceText = (q('[class*="price" i]')?.textContent || "").replace(/\s+/g, " ").trim();
-        const img = (q("img")?.getAttribute("src") || q("img")?.getAttribute("data-src") || "").trim();
+        // RAW ATTRIBUTES ONLY. Which one is the photograph is decided in Node by
+        // `pickImageUrl` (lib/image-src) — this ran `src` first, and on a lazy-loading
+        // site `src` is the spinner until JavaScript swaps it, so 851 live products
+        // stored Carrefour's AjaxLoader gif and the `data-src` fallback never ran.
+        const imgEl = q("img");
+        const imgAttrs = {
+          "data-src": imgEl?.getAttribute("data-src") ?? null,
+          "data-original": imgEl?.getAttribute("data-original") ?? null,
+          "data-lazy": imgEl?.getAttribute("data-lazy") ?? null,
+          "data-lazy-src": imgEl?.getAttribute("data-lazy-src") ?? null,
+          "data-srcset": imgEl?.getAttribute("data-srcset") ?? null,
+          srcset: imgEl?.getAttribute("srcset") ?? null,
+          src: imgEl?.getAttribute("src") ?? null,
+        };
         const brand = el.querySelector("[data-brand]")?.getAttribute("data-brand") || "";
         const dim = el.querySelector("[data-dimension10]")?.getAttribute("data-dimension10") || "available";
         const link = el.querySelector('a[href]:not([href^="javascript"])')?.getAttribute("href") || "";
-        return { id: el.getAttribute("data-product-id"), name, priceText, img, brand, available: dim !== "not available", link };
+        return { id: el.getAttribute("data-product-id"), name, priceText, imgAttrs, brand, available: dim !== "not available", link };
       }),
     );
 
@@ -71,7 +85,7 @@ async function main() {
           const key = String(r.id ?? r.name);
           if (!r.name || seen.has(key)) continue;
           seen.add(key);
-          pool.push({ name: normVol(r.name), brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: r.img ? (r.img.startsWith("http") ? r.img : BASE + r.img) : null, category: c.cat, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: c.path });
+          pool.push({ name: normVol(r.name), brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: pickImageUrl(r.imgAttrs, BASE), category: c.cat, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: c.path });
           pageAdded++;
           catAdded++;
         }

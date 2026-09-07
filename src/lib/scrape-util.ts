@@ -25,6 +25,7 @@ import { ensureBackup } from "./ensure-backup";
 import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
 import { toPriceSource, isPriceSource, type PriceSource } from "./price-source";
 import { variantConflict } from "./variant-classes";
+import { imageUrlToStore, isPlaceholderImage } from "./placeholder-image";
 import { depositFor, readPublishedDepositBani } from "./deposit";
 import { parseQuantity } from "./units/parseQuantity";
 import { exclusionReason } from "./excluded-categories";
@@ -91,6 +92,9 @@ export type PoolCompleteness = {
   withProductUrl: number;
   withEan: number;
   withImage: number;
+  /** Images we would actually store: not a spinner, not a data: URI, not a bare origin. */
+  withUsableImage: number;
+  usableImagePct: number;
   rawPriceTextPct: number;
   productUrlPct: number;
   /** items carrying the merchant's OWN category — merchant truth, not our inference */
@@ -108,6 +112,11 @@ export function poolCompleteness(pool: StoreProduct[]): PoolCompleteness {
   const withProductUrl = pool.filter((p) => nonEmpty(p.productUrl)).length;
   const withEan = pool.filter((p) => nonEmpty(p.ean)).length;
   const withImage = pool.filter((p) => nonEmpty(p.image)).length;
+  // USABLE, not merely present. `withImage` counts a Carrefour spinner and a data: URI joined
+  // onto an origin as images, because they are non-empty strings — and that is exactly how 851
+  // broken pictures looked like full coverage for months. This is the number that matters, and
+  // it is on screen every run so a merchant that starts serving placeholders is loud.
+  const withUsableImage = pool.filter((p) => imageUrlToStore(p.image) !== null).length;
   // The source payload is what makes an INDEPENDENT check possible. Kaufland's own
   // per-unit price found 25 real size bugs; ten of twelve merchants could not be checked at
   // all, because their payload was discarded here. Coverage is reported so that gap is
@@ -121,6 +130,7 @@ export function poolCompleteness(pool: StoreProduct[]): PoolCompleteness {
   const pct = (n: number): number => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
   return {
     total, withRawPriceText, withProductUrl, withEan, withImage, withSourceBlob,
+    withUsableImage, usableImagePct: pct(withUsableImage),
     withCategoryPath,
     rawPriceTextPct: pct(withRawPriceText), productUrlPct: pct(withProductUrl),
     sourceBlobPct: pct(withSourceBlob), categoryPathPct: pct(withCategoryPath),
@@ -642,7 +652,7 @@ export async function matchPoolToCatalog(
     `  pool contract: ${completeness.total} products · rawPriceText ${completeness.rawPriceTextPct}%` +
     ` · productUrl ${completeness.productUrlPct}%` +
     ` · ean ${completeness.withEan}` +
-    ` · image ${completeness.withImage}` +
+    ` · image ${completeness.withUsableImage}/${completeness.withImage} usable (${completeness.usableImagePct}%)` +
     ` · sourceBlob ${completeness.sourceBlobPct}%${completeness.sourceBlobPct === 0 ? " ⚠ no independent check possible" : ""}` +
     ` · merchantCategory ${completeness.categoryPathPct}%`,
   );
@@ -776,7 +786,16 @@ export async function matchPoolToCatalog(
     const better = !prev || (c.sp.available && !prev.available) || (c.sp.available === prev.available && c.sp.price < prev.price);
     // ownSize is the size parsed from THIS offer's own name. It is what the unit price must be
     // computed from; the catalog product's size is a different product's size.
-    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: c.sp.image, fillImage: !catImage, category: c.sp.category, score, reason, source: resolvePriceSource(c.sp.priceSource, merchant?.priceChannel), sp: c.sp });
+    // THE IMAGE IS CLEANED HERE, NOT AT THE RENDERER. A spinner or a mangled data: URI stored
+    // as a product image is worse than null, because null renders honestly and a stored spinner
+    // looks complete to every audit that counts non-null images.
+    //
+    // And a catalog image that is ITSELF a placeholder counts as no image, so a later merchant's
+    // real photograph replaces it. Without that second half, whichever shop was scraped first
+    // owns the picture forever — which is how 851 Carrefour spinners outlived the four other
+    // merchants that had a proper photo of the same product.
+    const cleanImage = imageUrlToStore(c.sp.image);
+    if (better) chosen.set(productId, { unitSize, ownSize: c.size, price: c.sp.price, available: c.sp.available, url: c.sp.url, image: cleanImage, fillImage: !catImage || isPlaceholderImage(catImage), category: c.sp.category, score, reason, source: resolvePriceSource(c.sp.priceSource, merchant?.priceChannel), sp: c.sp });
   };
   // PRODUCTS THIS MERCHANT IS FORBIDDEN FROM, keyed on the PRODUCT and not on the store name.
   //
@@ -867,7 +886,7 @@ export async function matchPoolToCatalog(
       const ean = c.item.ean || null;
       const nameNorm = `${c.item.nname} ${c.item.nbrand}`.trim();
       const prod = await prisma.product
-        .upsert({ where: { slug }, update: { categoryId: categoryId ?? undefined, nameNorm, ean: ean ?? undefined }, create: { slug, name: c.sp.name, nameNorm, brand: c.sp.brand || null, ean, section, unit, unitSize, image: c.sp.image, categoryId } })
+        .upsert({ where: { slug }, update: { categoryId: categoryId ?? undefined, nameNorm, ean: ean ?? undefined }, create: { slug, name: c.sp.name, nameNorm, brand: c.sp.brand || null, ean, section, unit, unitSize, image: imageUrlToStore(c.sp.image), categoryId } })
         .catch(() => null);
       if (!prod) continue;
       if (!existingIds.has(prod.id)) createdIds.add(prod.id);

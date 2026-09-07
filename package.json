@@ -113,7 +113,10 @@
     "audit:markup": "tsx scripts/audit-platform-markup.ts",
     "revalidate": "tsx scripts/revalidate.ts",
     "verify:perf": "tsx scripts/verify-perf.ts",
-    "verify:counters": "tsx scripts/verify-counters.ts"
+    "verify:counters": "tsx scripts/verify-counters.ts",
+    "audit:image-coverage": "tsx scripts/audit-image-coverage.ts",
+    "audit:images-rendered": "tsx scripts/audit-images-rendered.ts",
+    "verify:carrefour-images": "tsx scripts/verify-carrefour-images.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

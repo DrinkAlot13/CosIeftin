@@ -300,3 +300,47 @@ was pinned to server boot and drifted wider the longer the process stayed up. No
 Measured, production build, warm: `/oferte` 6.43 s → 0.10 s, `/search` 4.80 s → 0.77 s,
 `/necategorisate` 1.60 s → 0.44 s, `/` 0.56 s → 0.008 s, `/c/lapte` 0.65 s → 0.10 s.
 New gate: `npm run verify:perf` fails any route over 1 s.
+
+### Soak-period fix 6 — images: the renderer was throwing away pictures it had (2026-09-07)
+
+**Changes what scrapers write.** Logged here so day fourteen can be read against it.
+
+Diagnosed in two layers, and the second contradicted the first:
+
+- **Database:** 97.1% of live products carry a usable image URL. Only Carrefour (851 of 2,165,
+  39.3%) and DCNeu (67) hold placeholders. One product has no URL at all.
+- **Browser:** `/c/branzeturi` rendered 494 cards and **421 of them showed initials**, while
+  ZERO image requests failed. The catalog had the URLs; the page was discarding them.
+
+`ProductImage` started a 3-second timer on MOUNT for every card, and swapped in the placeholder
+if the image had not finished. Combined with `loading="lazy"` — correct, and kept — that
+measures the wrong thing: an image below the fold has not started loading, so three seconds
+later it is not late, it was never asked for. The more cards on a page, the more got blanked.
+This project's recurring defect, in the renderer this time. The timer now starts when the image
+enters the viewport, and runs for 8 s.
+
+Scraper changes (these alter what is written):
+
+- `pickImageUrl` (`lib/image-src`) decides which `<img>` attribute is the photograph.
+  `scrape-carrefour`, `scrape-carrefour-alcohol` and `scrape-finestore` read `src` FIRST and
+  `data-src` second, so on a lazy-loading site they stored the spinner and the fallback never
+  ran. The scrapers now collect raw attributes; the choice is made once, in Node, under test.
+- `imageUrlToStore` is the write gate: refuses spinners, data: URIs, data: URIs glued onto an
+  origin (`https://www.penny.ro/data:image/jpeg;base64,…`, observed live), non-http schemes and
+  bare origins. `usableImageUrl` now delegates to it, so the renderer refuses exactly what the
+  writer refuses.
+- A catalog image that is itself a placeholder now counts as no image, so a later merchant's
+  real photograph replaces it. Previously whichever shop was scraped first owned the picture.
+- `poolCompleteness` reports `withUsableImage` alongside `withImage`, so a merchant that starts
+  serving placeholders is loud in the run line.
+
+Verified against the live site, one page, no crawl: `verify:carrefour-images` on
+`bacanie-carrefour/alimente/lapte-si-derivate-lapte-uht` — old read 12 usable of 24, new read
+24 of 24, **12 recovered**.
+
+Verified in a browser after the fix: initials 421 → **0** on `/c/branzeturi`, 59 → 1 on
+`/c/lapte`, and **zero failed image requests on every host**.
+
+Measured and NOT built: of the 918 live products holding a placeholder, **0** are priced by any
+other shop. Cross-merchant image borrowing would fix none of them today, so `Offer.image` was
+not added. Those 918 are fixed only by re-scraping Carrefour and DCNeu, which the nightly does.

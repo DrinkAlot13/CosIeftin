@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { parsePriceLei } from "../src/lib/price/parsePrice";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { pickImageUrl, type ImageAttrs } from "../src/lib/image-src";
 import { notePageCap } from "../src/lib/truncation";
 
 const BASE = "https://www.finestore.ro";
@@ -60,7 +61,7 @@ async function main() {
     let catAdded = 0;
     for (let p = 1; p <= MAX_PAGES; p++) {
       if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
-      let raw: { priceText: string; sku: string; name: string; href: string; img: string }[] = [];
+      let raw: { priceText: string; sku: string; name: string; href: string; imgAttrs: ImageAttrs }[] = [];
       const grab = () =>
         page.$$eval(".fshr_inner", (nodes) =>
           nodes.map((card) => {
@@ -79,8 +80,20 @@ async function main() {
               if (t.length > name.length) name = t;
               if (!href) href = l.getAttribute("href") || "";
             }
-            const img = card.querySelector("img")?.getAttribute("src") || card.querySelector("img")?.getAttribute("data-src") || "";
-            return { priceText, sku, name, href, img };
+            // RAW ATTRIBUTES ONLY — `pickImageUrl` (lib/image-src) decides which is the
+            // photograph. This read `src` first, which on a lazy-loading site is the
+            // spinner, and the `data-src` fallback could therefore never run.
+            const imgEl = card.querySelector("img");
+            const imgAttrs = {
+              "data-src": imgEl?.getAttribute("data-src") ?? null,
+              "data-original": imgEl?.getAttribute("data-original") ?? null,
+              "data-lazy": imgEl?.getAttribute("data-lazy") ?? null,
+              "data-lazy-src": imgEl?.getAttribute("data-lazy-src") ?? null,
+              "data-srcset": imgEl?.getAttribute("data-srcset") ?? null,
+              srcset: imgEl?.getAttribute("srcset") ?? null,
+              src: imgEl?.getAttribute("src") ?? null,
+            };
+            return { priceText, sku, name, href, imgAttrs };
           }),
         );
       try {
@@ -112,7 +125,7 @@ async function main() {
           productUrl: r.href ? (r.href.startsWith("http") ? r.href : `${BASE}/${r.href.replace(/^\//, "")}`) : null,
           available: true,
           url: r.href ? (r.href.startsWith("http") ? r.href : `${BASE}/${r.href.replace(/^\//, "")}`) : BASE,
-          image: r.img ? (r.img.startsWith("http") ? r.img : `${BASE}/${r.img.replace(/^\//, "")}`) : null,
+          image: pickImageUrl(r.imgAttrs, BASE),
           category: c.cat,
           // KEEP THE SOURCE PAYLOAD. This is a DOM source, so there is no JSON record — the
           // extracted card fields are the closest honest equivalent, and something is better
