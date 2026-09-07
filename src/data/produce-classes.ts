@@ -54,6 +54,10 @@ const NOT_FRESH = [
   "iaurt", "prajitura", "baton", "musli", "cereale", "ciocolata", "inghetata", "bautura",
   "aroma", "gust de", "tortilla", "pizza", "salata de", "otet", "ulei", "sampon", "crema",
   "gem", "dulceata", "magiun", "jeleu", "biscuiti", "napolitane", "fulgi", "faina", "pudra",
+  // Found by audit:basket-classes: "Pulpa de rosii Cirio 400 g" (tinned) was pricing the
+  // fresh-tomato line, and "Ceapa granulata" the onion line. Both are processed forms whose
+  // names never say "conserva".
+  "granulat", "pulpa", "condiment", "praf", "rondele", "cuburi",
   // Preserved forms that the catalog files as FRESH and are not: "Naturavit Castraveți în
   // saramură" and "Răureni Spanac în saramură" both sit in a fresh leaf, and "Bonduelle Sfeclă
   // roșie rondele" is a cooked slice. Each was proposed into a fresh class on the dry run.
@@ -67,13 +71,26 @@ const NOT_FRESH = [
  */
 const LOOSE_MAX_KG = 2.5;
 
+/**
+ * …and a FLOOR, for the same reason there is a ceiling.
+ *
+ * `audit:basket-classes` caught "Ceapa granulata Kamis 20g" pricing the "ceapă galbenă, la kg"
+ * basket line — a 20 g jar of dried seasoning standing in for a kilo of onions, a 100x size
+ * spread inside one class. `maxUnitSize` could not see it because it only looks upward.
+ *
+ * 150 g is below any single piece of loose produce a shop sells (a tomato is ~200 g, a banana
+ * ~200 g) and above every spice jar. Herbs override this with their own, much lower, floor —
+ * they are genuinely sold in 20-50 g bunches.
+ */
+const LOOSE_MIN_KG = 0.15;
+
 const BIO = ["bio", "eco", "organic"];
 
 /** A conventional (non-BIO) class for a weight-sold fresh item. */
 function fresh(slug: string, label: string, require: string[], extraExclude: string[] = []): ProduceClass {
   return {
     slug, label, unit: "kg", unitSize: 1,
-    attributes: { anySize: true, maxUnitSize: LOOSE_MAX_KG, require, exclude: [...NOT_FRESH, ...BIO, ...extraExclude] },
+    attributes: { anySize: true, maxUnitSize: LOOSE_MAX_KG, minUnitSize: LOOSE_MIN_KG, require, exclude: [...NOT_FRESH, ...BIO, ...extraExclude] },
   };
 }
 
@@ -81,7 +98,7 @@ function fresh(slug: string, label: string, require: string[], extraExclude: str
 function freshBio(slug: string, label: string, require: string[], extraExclude: string[] = []): ProduceClass {
   return {
     slug, label, unit: "kg", unitSize: 1,
-    attributes: { anySize: true, maxUnitSize: LOOSE_MAX_KG, require: [...require, BIO.join("|")], exclude: [...NOT_FRESH, ...extraExclude] },
+    attributes: { anySize: true, maxUnitSize: LOOSE_MAX_KG, minUnitSize: LOOSE_MIN_KG, require: [...require, BIO.join("|")], exclude: [...NOT_FRESH, ...extraExclude] },
   };
 }
 

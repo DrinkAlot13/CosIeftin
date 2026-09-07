@@ -538,16 +538,38 @@ model ProductSpec {
 /// One row per day; the JSON keeps the per-line breakdown that produced the total.
 model IndexSnapshot {
   id        Int      @id @default(autoincrement())
-  /// YYYY-MM-DD, one snapshot per day
-  day       String   @unique
+  /// YYYY-MM-DD. Unique per (day, version), NOT per day.
+  ///
+  /// A single `@unique` on `day` meant computing v2 on the switch-over day would OVERWRITE that
+  /// day's v1 row — silently destroying a day of the history the brief says to keep. The two
+  /// versions are different measurements of the same date and both are allowed to exist.
+  day       String
   total     Float
   covered   Int
   ofItems   Int
   /// JSON [{key,label,price,storeName}] — what each line cost that day
   lines     String
+
+  /// WHICH BASKET THIS DAY PRICED. 1 = forty pinned products; 2 = forty equivalence classes.
+  ///
+  /// Two versions measure DIFFERENT BASKETS and their totals are not comparable. Without this
+  /// column a reader joining the series would draw one line across the change and read the step
+  /// as inflation, which is precisely the error v1 was created to stop — an index that cannot
+  /// tell a price change from a composition change is not an index.
+  ///
+  /// Days recorded before the column existed are v1: that is a fact about when they were
+  /// written, not a default. Backfilled explicitly rather than left to `@default`.
+  version   Int      @default(1)
+
+  /// JSON [{merchantSlug,found,of,totalBani}] — what the basket cost AT EACH SHOP. v2 only;
+  /// null for v1, where the per-shop question had no answer worth storing.
+  perShop   String?
+
   createdAt DateTime @default(now())
 
+  @@unique([day, version])
   @@index([day])
+  @@index([version, day])
 }
 
 model User {

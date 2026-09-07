@@ -36,11 +36,30 @@ async function main() {
     process.exit(1);
   }
 
+  // EVERY SECTION THAT HAS CLASSES, not just grocery.
+  //
+  // This was hard-coded to `section: "grocery"`, so the two cosmetice classes the Index basket
+  // needs — pastă de dinți, șampon — could never receive a product however well their rules
+  // matched. The basket reported both as "no shop can fill it", which reads as a catalog gap
+  // and was actually a tooling one. Those are different problems with different fixes, and the
+  // page was about to state the wrong one.
+  //
+  // Derived from the classes themselves so adding a class in a new section does not require
+  // remembering to edit this line.
+  const sections = [...new Set(classes.map((c) => c.section))];
   const products = await prisma.product.findMany({
-    where: { section: "grocery", offers: { some: { isStale: false, flagged: false } } },
-    select: { id: true, name: true, brand: true, unit: true, unitSize: true, equivalenceClassId: true },
-    take: 20000,
+    where: { section: { in: sections }, offers: { some: { isStale: false, flagged: false } } },
+    select: { id: true, name: true, brand: true, unit: true, unitSize: true, section: true, equivalenceClassId: true },
+    take: 40000,
   });
+
+  // A PRODUCT MAY ONLY JOIN A CLASS OF ITS OWN SECTION.
+  //
+  // Widening the product query above to every section that has classes made cross-section
+  // matching possible for the first time — a grocery toothpaste could join a cosmetice class.
+  // Sections are storefront groupings, not a product taxonomy, and a class quietly spanning two
+  // of them changes what the substitution engine offers on every page of both.
+  const sectionOf = new Map(products.map((p) => [p.id, p.section]));
 
   const prepared = classes.map((c) => ({
     c,
@@ -64,6 +83,8 @@ async function main() {
     let best: { classId: number; score: number } | null = null;
 
     for (const k of prepared) {
+      // Same section, always. See the note on `sectionOf` above.
+      if (k.c.section !== (sectionOf.get(p.id) ?? p.section)) continue;
       if (k.c.unit !== p.unit) continue;
       // QUANTITY IS NOT A DISCRIMINATOR FOR GOODS SOLD BY WEIGHT.
       //
@@ -157,6 +178,44 @@ async function main() {
     console.log("\nDRY RUN — nothing written. Read the table above, then re-run with --apply.");
     await prisma.$disconnect();
     return;
+  }
+
+  // ── A CORRECTION MUST BE ABLE TO REMOVE A WRONG ASSIGNMENT, not only add a right one.
+  //
+  // This step was write-only. Tightening a class did nothing: "Ceapa granulata Kamis 20g" stayed
+  // in `ceapa-galbena-kg` after `granulat` was added to the exclusions and a 150 g floor was
+  // introduced, because the product was already assigned and nothing ever re-checked it. The
+  // basket then priced "ceapă galbenă, la kg" from a 20 g jar of dried seasoning — a 100x size
+  // spread inside one class — and every subsequent run agreed with itself.
+  //
+  // `assign-categories` has carried exactly this fix for months, in almost these words. Same
+  // defect, second address, found the same way: by measuring the output instead of trusting the
+  // input.
+  //
+  // Clearing happens FIRST, and only for products whose CURRENT class no longer accepts them.
+  // A product this run simply did not propose is left alone — the assigner is conservative by
+  // design and absence of a proposal is not evidence against an existing assignment.
+  const assigned = await prisma.product.findMany({
+    where: { equivalenceClassId: { not: null } },
+    select: { id: true, name: true, unit: true, unitSize: true, equivalenceClassId: true },
+  });
+  const classById = new Map(classes.map((c) => [c.id, c]));
+  const stale: number[] = [];
+  for (const p of assigned) {
+    const cls = classById.get(p.equivalenceClassId!);
+    if (!cls) continue; // class deleted; leave it for a migration to deal with, not a heuristic
+    const rules = rulesFromAttributes(cls.attributes);
+    const nameOk = membershipOk(p.name, rules).ok;
+    const sizeOk =
+      (rules.minUnitSize == null || p.unitSize >= rules.minUnitSize) &&
+      (rules.maxUnitSize == null || p.unitSize <= rules.maxUnitSize);
+    if (!nameOk || !sizeOk) stale.push(p.id);
+  }
+  if (stale.length > 0) {
+    for (let i = 0; i < stale.length; i += 500) {
+      await prisma.product.updateMany({ where: { id: { in: stale.slice(i, i + 500) } }, data: { equivalenceClassId: null } });
+    }
+    console.log(`\n  cleared ${stale.length} assignment(s) the class no longer accepts`);
   }
 
   let written = 0;

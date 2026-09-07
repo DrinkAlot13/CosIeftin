@@ -176,6 +176,41 @@ export default async function MetodologiePage() {
       </section>
 
       <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 20 }}>Indexul CoșMic — versiunea coșului</h2>
+        <p>
+          Indexul urmărește 40 de nevoi de bază. <b>Definiția lor s-a schimbat o dată</b>, iar
+          cele două definiții nu sunt comparabile între ele:
+        </p>
+        <ul>
+          <li>
+            <b>Versiunea 1</b> (până pe 7 septembrie 2026) — 40 de <i>produse fixate</i>, fiecare
+            legat de un singur produs din catalog. Avantaj: compoziția nu se putea mișca deloc.
+            Dezavantaj: niciun magazin nu avea toate cele 40, așa că tabelul „cât costă coșul la
+            fiecare magazin” era o coloană de liniuțe.
+          </li>
+          <li>
+            <b>Versiunea 2</b> (de pe 7 septembrie 2026) — 40 de <i>clase de echivalență</i>.
+            Fiecare magazin evaluează linia cu echivalentul lui, ceea ce face întrebarea „unde e
+            mai ieftin coșul” să aibă răspuns. Fiecare clasă are o fereastră de mărime, ca să nu
+            ajungă o sticlă de 200 ml să treacă drept litru.
+          </li>
+        </ul>
+        <p>
+          <b>Nu unim cele două serii.</b> Un salt între ultima zi din v1 și prima zi din v2 este o
+          schimbare de definiție, nu de preț, iar graficul se rupe acolo tocmai ca să nu fie citit
+          altfel. Istoricul v1 rămâne stocat și nu a fost recalculat. Dacă schimbăm lista,
+          schimbăm și versiunea.
+        </p>
+        <p>
+          <b>Ce poate merge prost cu o clasă.</b> Un coș pe clase poate deveni mai ieftin pentru că
+          o clasă a ales un produs mai mic, nu pentru că au scăzut prețurile. Rulăm un audit care
+          arată, pentru fiecare din cele 40 de linii, ce a ales fiecare magazin și ce mărimi au
+          ieșit — iar liniile pe care niciun magazin nu le poate acoperi sunt scrise pe pagină, nu
+          scoase tăcut din total.
+        </p>
+      </section>
+
+      <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 20 }}>Cât de bine putem compara</h2>
         <p>
           Comparăm foarte bine coșul de zi cu zi și mult mai slab coada lungă a catalogului.
@@ -183,7 +218,7 @@ export default async function MetodologiePage() {
         </p>
         <ul>
           <li>
-            <b>Coșul de bază</b> — cele 40 de produse fixe din Indexul CoșMic (lapte, pâine, ouă,
+            <b>Coșul de bază</b> — cele 40 de linii din Indexul CoșMic (lapte, pâine, ouă,
             ulei, zahăr…): <b>{"~"}62% au preț în 2 sau mai multe magazine</b>.
           </li>
           <li>

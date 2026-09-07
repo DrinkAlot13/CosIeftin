@@ -368,3 +368,32 @@ excused there in writing rather than by silence.
 The fabrication guard was NOT touched. It was right on the input it was given — the adapter had
 been claiming a per-product URL it did not have, which is the schema's stated failure mode
 ("an absent link must be visibly null rather than silently pointing at a generic page").
+
+### Soak-period change — Indexul CoșMic switched to basket v2 (2026-09-07)
+
+**Changes what a headline number means.** Day fourteen must not read the v1 and v2 totals as one
+series; they measure different baskets. The chart breaks at the boundary and the page says so.
+
+v1: 40 pinned product slugs. v2: 40 equivalence classes, so each shop prices each line with its
+own equivalent. v1's 7 stored days are kept and were NOT recomputed; `IndexSnapshot` gained
+`version` (backfilled explicitly to 1, not by default) and its unique key moved from `day` to
+`(day, version)` so the switch-over day holds both without either overwriting the other.
+
+Also changed here, and each was found by the audit rather than reasoned about:
+
+- **`propose:equivalence` was write-only.** Tightening a class did nothing — "Ceapa granulata
+  Kamis 20g" stayed in `ceapa-galbena-kg` after `granulat` was excluded and a 150 g floor added,
+  because the product was already assigned and nothing re-checked it. `assign-categories` has
+  carried this exact fix for months. Now clears assignments the class no longer accepts.
+- **Four meat/potato classes held ZERO products** because they lacked `anySize`: fresh meat comes
+  as 0,63 / 2,5 / 4,5 kg and a 1 kg class with ±26% matched none of it. `piept-pui-1kg` 0 → 15,
+  `cartofi-1kg` 0 → 24, `carne-porc-1kg` 6 → 56.
+- **Weight-sold lines are priced per kilo, not per pack.** Summing pack prices compared a 200 g
+  banana at Sezamo against a 1 kg bag at Auchan and read Sezamo as three times cheaper.
+- **`propose:equivalence` only ever looked at the grocery section**, so two classes could never
+  be filled — reported as a catalog gap when it was a tooling one. Widened, with same-section
+  membership now enforced explicitly so classes cannot silently span sections.
+
+Result: 40/40 lines fillable by at least one shop, 0 classes with disagreeing pack sizes, 4 lines
+only one shop can fill (oua, margarina, sare, crenvursti). Per shop: Sezamo 30/40, Auchan 26/40,
+Metro 22/40, Mega Image 21/40, Freshful 19/40, Carrefour 14/40, Kaufland 2/40.
