@@ -231,6 +231,33 @@ So the rules:
 - This is a LIMIT, not a bug. Do not "fix" it by tightening thresholds — a tighter band flags
   more correct rows, not fewer wrong ones.
 
+## A SCRIPT THAT ASSIGNS MUST BE ABLE TO UNASSIGN
+
+Any script that assigns, flags, or classifies must be able to CLEAR ITS OWN PAST OUTPUT. A
+tightened rule that cannot unassign what the old rule assigned is a rule that never takes
+effect: the next run proposes the same corrected answer, writes it over rows that already have
+it, and leaves every wrong row exactly where it was. Nothing fails. The output looks like the
+new rule. It is the old one.
+
+**The order is always clear-then-write, and the clear is scoped to what the rule now refuses** —
+not to everything, and not to "whatever this run did not propose". An assigner is conservative
+by design, so the absence of a proposal is not evidence against an existing assignment; the
+evidence is that the CURRENT rule rejects the CURRENT row.
+
+**Both of this project's assigners had this bug, and the fix sat in one of them for months while
+the other silently ignored every tightening.**
+
+| script | symptom |
+|---|---|
+| `assign-categories` | adult incontinence pads stayed under Bebeluși > Scutece after the rule that put them there was removed. Fixed; the comment there says "A CORRECTION MUST BE ABLE TO REMOVE A WRONG ASSIGNMENT". |
+| `propose:equivalence` | `Ceapa granulata Kamis 20g` — a 20 g jar of dried seasoning — kept pricing the Index's "ceapă galbenă, la kg" line after `granulat` was excluded and a 150 g floor added. A 100x size spread inside one class, surviving every subsequent run. |
+
+Two scripts, one shape, and nothing connected them. So it is a rule here rather than a lesson in
+one file's comments: **when you add or tighten a membership rule, the same change must teach the
+writer how to let go.** `audit:basket-classes` and `audit:categories` exist to catch it from the
+other side — they report what each rule actually resolved to, which is the only way to see a
+correction that did not land.
+
 ## Measure the blast radius; do not assume it
 
 Every serious bug in this project was found by running the new code and the old code over the

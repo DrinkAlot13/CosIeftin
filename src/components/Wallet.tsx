@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { addCard, getCards, LOYALTY_STORES, removeCard, type WalletCard, WALLET_EVENT } from "@/lib/cards-wallet";
 
 export function Wallet() {
-  const [cards, setCards] = useState<WalletCard[]>([]);
+  /**
+   * `null` means NOT READ YET. It is not the same as "read, and there are none".
+   *
+   * This was `useState<WalletCard[]>([])`, so between mount and the effect a shopper who has
+   * saved cards was told "Niciun card salvat" — for one frame, on their own wallet page. Small,
+   * and the same shape as the 3-second image timer that blanked 421 of 494 cards: an initial
+   * value doubling as an answer. localStorage is read synchronously, so the honest state before
+   * that read is "we do not know yet", and the honest thing to render is nothing.
+   */
+  const [cards, setCards] = useState<WalletCard[] | null>(null);
   const [store, setStore] = useState(LOYALTY_STORES[0]);
   const [code, setCode] = useState("");
 
@@ -35,7 +44,7 @@ export function Wallet() {
         </button>
       </div>
 
-      {cards.length === 0 ? (
+      {cards === null ? null : cards.length === 0 ? (
         <div className="empty">Niciun card salvat. Adaugă cardurile tale de fidelitate mai sus.</div>
       ) : (
         <div className="grid-products">

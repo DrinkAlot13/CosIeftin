@@ -30,6 +30,15 @@ import { isPlaceholderImage } from "@/lib/placeholder-image";
 /** How far back the per-merchant table looks. The brief's window, and the soak's. */
 export const WINDOW_NIGHTS = 14;
 
+/**
+ * When `recordScraperRun` began deriving `aborted` from `offersWritten === 0` (commit 533fae2).
+ *
+ * Runs recorded before this could not carry the flag, so a zero-write run from then is history,
+ * not a fault. Any check on that flag must be scoped to rows that could have had it — the same
+ * rule `audit-db` follows for every backfilled column.
+ */
+export const ABORT_GUARD_LANDED = new Date("2026-09-02T00:00:00Z");
+
 // ── 1. PRICE DEPTH ────────────────────────────────────────────────────────────
 
 export type DepthBucket = { merchants: string; products: number; shareOfPriced: number };
@@ -281,9 +290,19 @@ export async function getMerchantStats(): Promise<MerchantStat[]> {
     const lastReal = runs.find((r) => !r.aborted && r.offersAttempted > 0);
     const pooled = lastReal?.offersAttempted ?? 0;
     const writtenLastRun = lastReal?.offersWritten ?? 0;
-    // A run that wrote nothing and was NOT flagged aborted is its own failure mode: Mega Image
-    // had seven in a row at the start of the window, each recorded as an ordinary run.
-    const silentZeroRuns = runs.filter((r) => !r.aborted && r.offersAttempted > 0 && r.offersWritten === 0).length;
+    // A run that wrote nothing and was NOT flagged aborted would be a real ledger gap — the
+    // Penny defect at a second address. SCOPED TO RUNS THAT COULD HAVE CARRIED THE FLAG.
+    //
+    // `recordScraperRun` has derived `aborted` from `offersWritten === 0` since 533fae2 on
+    // 2026-09-02. Every one of the 46 rows in the database with `written = 0, aborted = false`
+    // was recorded BEFORE that; zero since. Counting them as a live failure — which the first
+    // version of this column did, and reported seven against Mega Image — is treating rows
+    // written before the instrumentation as though they had been measured by it. That is the
+    // defect this project keeps meeting, in the page built to report on it, for the second time
+    // in one sitting.
+    const silentZeroRuns = runs.filter(
+      (r) => !r.aborted && r.offersAttempted > 0 && r.offersWritten === 0 && r.startedAt >= ABORT_GUARD_LANDED,
+    ).length;
     const parsed = runs.reduce((s, r) => s + r.offersParsed, 0);
     const unreadableAtMatcher = runs.reduce((s, r) => s + r.offersNull, 0);
     const aborted = runs.filter((r) => r.aborted);

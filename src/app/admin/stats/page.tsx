@@ -196,6 +196,12 @@ export default async function AdminStatsPage() {
         ajunse la matcher fără preț utilizabil. Fiecare scraper aruncă prețurile necitibile când
         își construiește pool-ul, deci nimic necitibil nu ajunge până aici. NU este „câte prețuri
         n-am putut citi” — acel număr nu se înregistrează nicăieri.
+        <br />
+        <b>„tăcute”</b> = rulări care n-au scris nimic și n-au fost marcate abandonate, numărate
+        doar de la 2 septembrie 2026 încoace — de când <code>recordScraperRun</code> deduce
+        singur steagul din <code>offersWritten</code>. Cele 46 de rânduri mai vechi n-aveau cum
+        să-l poarte; a le număra ar fi să tratăm rânduri scrise înainte de instrumentare ca și
+        cum ar fi fost măsurate de ea.
       </p>
       <div className="stat-scroll">
         <table className="ms-table stat-merchants">
