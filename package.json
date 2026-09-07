@@ -122,7 +122,8 @@
     "audit:basket-classes": "tsx scripts/audit-basket-classes.ts",
     "project:addnew": "tsx scripts/project-addnew.ts",
     "measure:comparability": "tsx scripts/measure-comparability.ts",
-    "audit:mutually-distinct": "tsx scripts/audit-mutually-distinct.ts"
+    "audit:mutually-distinct": "tsx scripts/audit-mutually-distinct.ts",
+    "discover:stores": "tsx scripts/discover-platform-stores.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
