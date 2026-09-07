@@ -50,19 +50,41 @@ export type CategoryNav = {
  */
 export async function getCategoryNav(section = "grocery"): Promise<CategoryNav> {
   const live = currentOfferWhere();
-  const hasLiveOffer = { offers: { some: live } } as const;
 
   const cats = await prisma.category.findMany({
     where: { section },
     select: { id: true, slug: true, name: true, icon: true, parentId: true },
   });
 
+  // ONE PASS, NOT ONE QUERY PER CATEGORY.
+  //
+  // This was a `product.count()` per category inside a Promise.all — 85 counts, each with a
+  // correlated `offers: { some: … }` subquery, on every category page load. It took 8.5
+  // SECONDS while the page's own product query took 93 ms, so 99% of the wait was the
+  // sidebar. Promise.all made it concurrent, not cheap: SQLite still runs 85 scans.
+  //
+  // The definition is unchanged — the same `currentOfferWhere()`, so the count still equals
+  // the list it heads. Only the arithmetic moved: fetch the live offers once and group them
+  // here, exactly as `getComparability` does in 262 ms while answering a bigger question.
+  const offerRows = await prisma.offer.findMany({
+    where: { ...live, product: { section } },
+    select: { productId: true, product: { select: { categoryId: true } } },
+  });
+
+  // Distinct PRODUCTS per category — an offer per merchant must not count the product twice.
+  const productsPerCategory = new Map<number, Set<number>>();
+  const uncategorisedProducts = new Set<number>();
+  const allProducts = new Set<number>();
+  for (const r of offerRows) {
+    allProducts.add(r.productId);
+    const cid = r.product.categoryId;
+    if (cid == null) { uncategorisedProducts.add(r.productId); continue; }
+    const set = productsPerCategory.get(cid) ?? new Set<number>();
+    set.add(r.productId);
+    productsPerCategory.set(cid, set);
+  }
   const counts = new Map<number, number>();
-  await Promise.all(
-    cats.map(async (c) => {
-      counts.set(c.id, await prisma.product.count({ where: { section, categoryId: c.id, ...hasLiveOffer } }));
-    }),
-  );
+  for (const c of cats) counts.set(c.id, productsPerCategory.get(c.id)?.size ?? 0);
 
   const departments: NavDepartment[] = cats
     .filter((c) => c.parentId === null)
@@ -92,10 +114,6 @@ export async function getCategoryNav(section = "grocery"): Promise<CategoryNav> 
     .filter((d) => d.count > 0)
     .sort((a, b) => b.count - a.count);
 
-  const [uncategorised, total] = await Promise.all([
-    prisma.product.count({ where: { section, categoryId: null, ...hasLiveOffer } }),
-    prisma.product.count({ where: { section, ...hasLiveOffer } }),
-  ]);
-
-  return { departments, uncategorised, total };
+  // From the same single pass, so these cannot drift from the per-category numbers above.
+  return { departments, uncategorised: uncategorisedProducts.size, total: allProducts.size };
 }

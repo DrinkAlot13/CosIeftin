@@ -186,6 +186,18 @@ building it:
   ChunkLoadError, two "old copy still rendering" confusions, the smoke-test noise, the report
   that prompted the worker rewrite, and now inside the script written to prevent it.
 
+**2026-09-06 — every category page took 9 seconds.** The sidebar's `getCategoryNav` ran one
+`product.count()` per category — 85 correlated `offers: { some: … }` subqueries on every page
+load. `Promise.all` made them concurrent, not cheap: SQLite still ran 85 scans. The page's own
+product query was 93 ms, so 99% of the wait was navigation furniture.
+
+Rewritten as a single pass that fetches the live offers once and groups them in memory, the way
+`getComparability` already answered a bigger question in 262 ms. **8.5 s → 0.51 s**, and the
+counts were diffed old-against-new before the change was kept: uncategorised 1895 = 1895, total
+17919 = 17919, all 74 leaves identical. Speed is worth nothing here if the numbers move, because
+the nav's whole promise is that its count equals the list it heads — still 106 = 106 on
+`/c/lapte`. Category pages now load in 0.4-0.6 s.
+
 ## Rules while it runs
 
 - Do not touch the matcher.
