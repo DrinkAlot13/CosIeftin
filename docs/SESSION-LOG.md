@@ -1186,3 +1186,105 @@ make them green:
   are for. The invariant cannot tell a correction from a corruption and should not try — a
   human looks at any day it fires. Both were looked at; both are corrections. Tuning the
   threshold to hide them would disable the check for the next real one.
+
+---
+
+# Overnight session 2026-09-08 — `overnight/2026-09-08`
+
+Written as the work happens, so that if the session dies this file says where it got to.
+
+## Ordering note, before anything else
+
+Four commits landed **on `main` before this brief arrived**, in response to an earlier
+instruction in the same conversation ("finish everything"). They are:
+
+    967930a  perf(search): build the search index once per catalog version
+    8eb9401  tools: read-only discovery for delivery-platform storefronts
+    846de15  equivalence classes for private-label staples: 30 new + the second number
+    b590c6b  fix(sezamo): every stored product link was a 404
+    381cb44  chore: untrack raw page dumps
+
+The overnight brief says branch and never merge to main. I could not retroactively unland
+them and did not rewrite published history to pretend otherwise. Everything from this point
+is on `overnight/2026-09-08`. **This is decision 1 in the morning report.**
+
+The same brief says to build the 30 classes and STOP before rendering them. **Phase 4 was
+already built and is live** — see decision 2.
+
+## Phase 1 — /search performance. DONE (committed to main before the brief).
+
+Measured first, as asked:
+
+    ROWS LOADED   products 29,166 · offer-count rows 29,166 · categories 93
+    product query        282 ms      offer groupBy   237 ms
+    build searchable       4 ms      searchCatalog   213-241 ms
+    ------------------------------------------------------------------
+    DB 520 ms + JS ~230 ms, ON EVERY REQUEST
+
+Where ranking happens: entirely in JS, over the whole catalog. What made it expensive was not
+the ranking but the three structures rebuilt before it — catalog vocabulary, head-noun
+frequency, brand set. None is per-query; all are pure functions of a catalog that changes once
+a night. We were recomputing a nightly constant per keystroke.
+
+Brand-existence separated from ranking exactly as the brief asks: `buildSearchIndex()` now
+produces the vocabulary and brand set once, and `searchCatalog(q, catalog, index)` takes it.
+The "Nu am găsit illy" answer still consults the real brand set, so the honesty guarantee is
+untouched.
+
+FTS5 considered and NOT used. It would answer "which rows match" quickly, but the expensive
+part here was never row selection — it was the derived vocabulary needed to say a brand does
+not exist. FTS5 does not provide that, so it would have added a schema and left the cost.
+
+    BEFORE  /search?q=lapte   880-919 ms
+    AFTER                     254 ms best · 275 ms first-after-purge · target was <300 ms
+            /search?q=apa     226 ms · /search?q=illy 132 ms
+
+/api/revalidate now drops AND rebuilds the index, awaited, so the ~880 ms rebuild is paid by
+the nightly rather than by the first shopper of the morning.
+
+**The 40-query fixture: 36/40, unchanged.** The four failures (`illy`, `illy capsule`,
+`ulei baneasa`, `cicolata`) are catalog-growth artefacts from the earlier addNew change — we
+now genuinely stock Illy, and "cicolata" is a real typo inside a product name, so it entered
+the vocabulary. **Quality did not regress to buy latency, and that is verified rather than
+asserted:** `npm run verify:search-identity` runs all 40 through the same ranker with and
+without the prebuilt index and compares kind, ordering and every id. **40/40 byte-identical.**
+
+## Phase 2 — private-label opportunity. DONE. (`npm run audit:private-label`)
+
+`ProductAttribute` is EMPTY — 0 rows, no keys at all. `isPrivateLabel` has never been set on
+anything, so `preferPrivateLabel` in the substitution resolver has been reading a hardcoded
+`false` for every product since it was written. Every figure below is from brand names.
+
+    live grocery products                    29,166
+    private label by brand name               3,859  (13.2%)
+      found by the brief's 14 brands          2,476
+      found ONLY by 13 brands the data named  1,383  (+56% on the brief's list)
+    single-shop AND unclassed                 3,447  <- the target
+
+Per merchant: metro 1,626/5,272 (100% single-shop), auchan 760 (100%), mega-image 750 (98%),
+carrefour 680 (100%), freshful 50 (66%), kaufland 7, sezamo 3, penny 0.
+
+Brands the brief's list missed, each appearing at exactly one merchant: ARO (432, metro),
+Carrefour Bio (136), Carrefour (221), Cosmia (98), Carrefour Sensation (81),
+Nature's Promise Bio (78), METRO PROFESSIONAL (69), Pouce (62), Filiera Auchan (48),
+RIOBA (47), World's Market (47), Din Grădină by Freshful (33), TARRINGTON HOUSE (31).
+
+Deliberately NOT added, though the single-merchant heuristic nominated them: DOVE, GILLETTE,
+Schwarzkopf, Bic, SAVEX, La Lorraine, Covalact de Tara — national brands one shop happens to
+stock. Single-merchant is what a private label looks like from outside; it is not what one IS.
+
+Grouped by head noun + unit + exact size: **1,440 groups, of which only 162 span 2+ merchants.**
+A group at one merchant cannot become a useful class, so the ranking excludes them. Top 100
+reported with every member, its size and its price.
+
+## Phase 3 — 30 classes + the outside audit. DONE.
+
+See `src/data/private-label-classes.ts` and `npm run audit:private-label-classes`. Printed in
+full in the morning report. Verdict after two rounds of fixes: **10 clean, 20 flagged on the
+>2x unit-price rule, 0 outside window, 0 single-merchant.**
+
+MILK IS NOT AMONG THE 30, and it was the brief's own headline example. Carrefour names its
+treatment; Mega Image and Freshful do not. Mega carries "Lapte de consum 3.5% 1L" at 5,49 and
+"Lapte 3.5% 1L" at 8,99 — same shop, same fat, same litre, nothing saying which is UHT and
+which is fresh. Merging UHT with fresh is forbidden and the catalog cannot separate them, so
+the class is not written.

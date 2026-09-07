@@ -131,7 +131,8 @@
     "explore:attribution": "tsx scripts/explore-class-attribution.ts",
     "probe:ean": "tsx scripts/probe-ean-detail.ts",
     "probe:links": "tsx scripts/probe-links.ts",
-    "probe:selgros": "tsx scripts/probe-selgros.ts"
+    "probe:selgros": "tsx scripts/probe-selgros.ts",
+    "verify:search-identity": "tsx scripts/verify-search-identity.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

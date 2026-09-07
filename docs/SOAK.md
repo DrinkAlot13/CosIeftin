@@ -397,3 +397,40 @@ Also changed here, and each was found by the audit rather than reasoned about:
 Result: 40/40 lines fillable by at least one shop, 0 classes with disagreeing pack sizes, 4 lines
 only one shop can fill (oua, margarina, sare, crenvursti). Per shop: Sezamo 30/40, Auchan 26/40,
 Metro 22/40, Mega Image 21/40, Freshful 19/40, Carrefour 14/40, Kaufland 2/40.
+
+---
+
+## Fix nine and ten — the search index, and 30 equivalence classes (2026-09-08)
+
+Both change what a reader of day fourteen is looking at, so both are logged here.
+
+**Nine — the search index is cached, and the nightly now pays for the rebuild.** The catalog
+vocabulary, head-noun frequency table and brand set were rebuilt on every request; they are
+pure functions of a catalog that changes once a night. `/search?q=lapte` went 880-919 ms →
+254 ms. **This changes the nightly's shape:** `/api/revalidate` now drops the index AND
+rebuilds it, awaited, adding ~880 ms to the revalidate step. A nightly that appears ~1 s
+slower from 2026-09-08 is this, not a regression.
+
+**Ten — 30 private-label equivalence classes, and the assigner was re-run.** This one alters
+what the nightly WRITES only indirectly, but it changes catalog state substantially:
+
+- `propose:equivalence --apply` had not been run since the classes were last edited. Re-running
+  it took products in a class from 820 to 1,399. **944 of the 1,148 newly-equivalent products
+  belong to classes that already existed** — re-running a stale assigner, not the new work.
+  The 30 new classes account for 204.
+- **Five classes were deleted from the database**, with their assignments cleared first:
+  `mazare-kg` and `porumb-kg` (every live member was a tin or a bag of popcorn — the catalog
+  has no fresh peas and no corn on the cob at all), and `busuioc-kg`, `marar-kg`,
+  `patrunjel-kg`, which had been deleted from the CODE months ago and whose database rows
+  survived with products still attached. 52 products unassigned in total.
+- `faina-alba-1kg` no longer swallows tip 650; `cafea-macinata-250g` no longer swallows the
+  decafs. Both were merging two different products under one price line.
+
+A day-fourteen reader comparing basket fill should know that the Index basket's per-shop fill
+jumped on this date (mega-image 21→33 lines, freshful 19→29) and that **this is the re-run
+assigner, not a change in what any scraper wrote.**
+
+**Also on this date, and not a soak fix but it moves the numbers:** Sezamo's stored product
+links were all 404 (the path carries the product id and the scraper omitted it). Re-scraping to
+repair them added 39 products and moved comparable-in-2+ from 2,449 to 2,702. That is a
+catalog change on a soak day and is attributable to the re-scrape, not to overnight drift.
