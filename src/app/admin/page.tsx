@@ -60,6 +60,7 @@ export default async function AdminPage() {
             { href: "/admin/matches", label: "Potriviri de verificat", hint: `${pendingMatches} în așteptare`, badge: pendingMatches },
             { href: "/admin/anomalies", label: "Prețuri refuzate", hint: `${openAnomalies} nerezolvate`, badge: openAnomalies },
             { href: "/admin/review", label: "Revizuire", hint: "produse semnalate" },
+            { href: "/admin/stats", label: "Statistici", hint: "adâncimea prețurilor, per magazin, unde lipsesc potrivirile" },
           ].map((t) => (
             <Link
               key={t.href}

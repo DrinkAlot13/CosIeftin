@@ -55,6 +55,32 @@ describe("pending queue — a comparison that does not exist yet outranks everyt
 });
 
 describe("pending matches are not offers", () => {
+  it("the stats library that reads them is imported only by admin routes", () => {
+    // The allowlist above lets `lib/stats/site-stats` read PendingMatch. That is only safe while
+    // nothing shopper-facing imports it, so the second half of the property is pinned here
+    // rather than assumed. Without this, adding a library to the allowlist would quietly turn a
+    // guard into a comment.
+    const fs = require("node:fs") as typeof import("node:fs");
+    const path = require("node:path") as typeof import("node:path");
+    const importers: string[] = [];
+    const walk = (dir: string): void => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) { walk(full); continue; }
+        if (!/\.tsx?$/.test(e.name)) continue;
+        const rel = full.split(path.sep).join("/");
+        if (rel.includes("/lib/stats/site-stats")) continue;
+        if (fs.readFileSync(full, "utf8").includes("stats/site-stats")) importers.push(rel.split("/src/")[1] ?? rel);
+      }
+    };
+    walk(path.join(process.cwd(), "src"));
+    const outsideAdmin = importers.filter((f) => !f.startsWith("app/admin/"));
+    if (outsideAdmin.length) {
+      throw new Error(`lib/stats/site-stats reads PendingMatch and is imported outside /admin: ${outsideAdmin.join(", ")}`);
+    }
+  });
+
+
   it("the model is never joined into an offer query", () => {
     // A PendingMatch must not reach a shopper, the optimizer, or a count. The guard is that
     // nothing outside the admin path and its own library reads the table.
@@ -74,8 +100,12 @@ describe("pending matches are not offers", () => {
         // read, and a queue nobody can find is not a queue — the sub-pages had no links at
         // all until now. The property under test is unchanged: no SHOPPER-facing route, no
         // optimizer input, no product count may read this table.
+        // `/lib/stats/site-stats` powers /admin/stats, which reports how many pairs are waiting
+        // per merchant. Allowing a LIBRARY here would weaken the guard on its own — a library
+        // can be imported from anywhere — so the next test pins where it may be imported FROM.
         const allowed = [
-          "/lib/pending-matches", "/lib/match-stats", "/admin/matches", "/admin/page", "/scrape-util",
+          "/lib/pending-matches", "/lib/match-stats", "/lib/stats/site-stats",
+          "/admin/matches", "/admin/page", "/admin/stats", "/scrape-util",
         ];
         if (allowed.some((a) => rel.includes(a))) continue;
         if (fs.readFileSync(full, "utf8").includes("pendingMatch")) offenders.push(rel.split("/src/")[1] ?? rel);
