@@ -16,7 +16,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import {
-  getGapAnalysis, getMerchantStats, getPriceDepth, WINDOW_NIGHTS,
+  getGapAnalysis, getMerchantStats, getPriceDepth, WINDOW_NIGHTS, INSTRUMENTED_SINCE,
   type DepthTable, type MerchantStat,
 } from "@/lib/stats/site-stats";
 import { BUCKETS } from "@/lib/offer-census";
@@ -242,6 +242,33 @@ export default async function AdminStatsPage() {
               <td style={{ width: "40%" }}>
                 <Bar share={grandTotal === 0 ? 0 : ((bucketTotals[b] ?? 0) / grandTotal) * 100} tone={b === "live" ? "accent" : "muted"} />
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* ── WHAT THIS PAGE CAN AND CANNOT SPEAK FOR ──────────────────────────
+          A reporting surface is the one place a wrong number looks exactly like a finding,
+          because reporting is what it is for. This page has twice reported a fault it had
+          invented. The periods below are the guard against a third time. */}
+      <h2 style={{ fontSize: 20, marginTop: 40 }}>De când poate vorbi fiecare coloană</h2>
+      <p className="muted ms-note" style={{ maxWidth: 780 }}>
+        O pagină de raportare este singurul loc unde un număr greșit arată exact ca o descoperire
+        — pentru că raportarea e treaba ei. Restul componentelor sunt verificate de ceva; cea care
+        verifică, nu. Coloanele de mai jos <b>nu pot spune nimic despre perioada de dinaintea
+        instrumentării lor</b>, iar orice verificare pe ele este limitată la rândurile care
+        puteau să o poarte.
+      </p>
+      <table className="ms-table" style={{ maxWidth: 900 }}>
+        <thead>
+          <tr><th>câmp</th><th style={{ width: 110 }}>măsurat de la</th><th>ce înseamnă înainte de această dată</th></tr>
+        </thead>
+        <tbody>
+          {INSTRUMENTED_SINCE.map((i) => (
+            <tr key={i.field}>
+              <td><code>{i.field}</code></td>
+              <td>{i.since}</td>
+              <td className="muted">{i.note}</td>
             </tr>
           ))}
         </tbody>

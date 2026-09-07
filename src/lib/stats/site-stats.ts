@@ -31,6 +31,42 @@ import { isPlaceholderImage } from "@/lib/placeholder-image";
 export const WINDOW_NIGHTS = 14;
 
 /**
+ * ── WHAT EACH COLUMN CAN SPEAK FOR, AND SINCE WHEN.
+ *
+ * A REPORTING SURFACE IS THE ONE PLACE A WRONG NUMBER LOOKS EXACTLY LIKE A FINDING. Every other
+ * component is checked against something; the thing doing the checking is not. This page has now
+ * invented the fault it reported twice in one sitting:
+ *
+ *   • "91,973 pooled, 4,395 written" — fourteen nights summed against fourteen nights summed,
+ *     printed side by side as though they were a ratio, sending a reader hunting a scraper bug
+ *     that did not exist;
+ *   • "7 tăcute" against Mega Image — rows written before the flag existed, counted as though
+ *     the flag had measured them.
+ *
+ * Both are the same shape as the defect this project keeps meeting, arriving in the tool built
+ * to watch for it. So the periods are written down here, shown on the page, and any check on one
+ * of these columns must be scoped to rows that could have carried it.
+ *
+ * The dates are the commit that introduced the field, cross-checked against the earliest row
+ * that actually holds a value — they are not always the same, and where they differ the LATER
+ * one is what the column can speak for.
+ */
+export const INSTRUMENTED_SINCE: { field: string; since: string; note: string }[] = [
+  { field: "ScraperRun.aborted (derived from offersWritten)", since: "2026-09-02",
+    note: "before this a run could write nothing and record success; 46 such rows exist, all older than this date" },
+  { field: "ScraperRun.offersWritten", since: "2026-09-02",
+    note: "counted at the write site; earlier runs report offersParsed, which is a different thing" },
+  { field: "ScraperRun.censusJson", since: "2026-08-31", note: "where each merchant's offers landed, per run" },
+  { field: "Offer.rawSourceBlob / categoryPath", since: "2026-08-31",
+    note: "provenance coverage before this date is absence of recording, not absence of data" },
+  { field: "Offer.lastObservedAt", since: "2026-09-01",
+    note: "column added then; the earliest value it holds is 2026-08-06, carried over from lastSeenAt" },
+  { field: "PendingMatch / PriceAnomaly", since: "2026-08-31", note: "the review queue and the refusal ledger" },
+  { field: "poolCompleteness.withUsableImage", since: "2026-09-07", note: "images that are not spinners or data: URIs" },
+  { field: "Product.spreadPct / dealScore / liveOfferCount", since: "2026-09-07", note: "the precomputed shelf signals" },
+];
+
+/**
  * When `recordScraperRun` began deriving `aborted` from `offersWritten === 0` (commit 533fae2).
  *
  * Runs recorded before this could not carry the flag, so a zero-write run from then is history,
