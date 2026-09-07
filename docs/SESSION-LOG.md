@@ -1288,3 +1288,85 @@ treatment; Mega Image and Freshful do not. Mega carries "Lapte de consum 3.5% 1L
 "Lapte 3.5% 1L" at 8,99 — same shop, same fat, same litre, nothing saying which is UHT and
 which is fresh. Merging UHT with fresh is forbidden and the catalog cannot separate them, so
 the class is not written.
+
+## Phase 5 — the unattended backlog. DONE, with two of the five reframed by measurement.
+
+**(a) `Offer.bulkTiers` JSON vs the `BulkTier` table.** The brief said drop the column after
+confirming nothing reads it. **Things read it, so it was not dropped** — `src/lib/substitution/
+load.ts` and `src/app/api/basket/v2/route.ts` both parse it, while the item page reads the
+table. And the two copies are not merely redundant, they DISAGREE:
+
+    offers carrying the JSON column     463
+    BulkTier rows                    12,745  across 7,826 offers
+    offers where BOTH exist             274
+    of those, the two copies agree        0      <-- zero
+    offers with JSON but no table rows  189      <-- would be lost if the column were dropped
+
+    example, offer 26486:   json  1@1255, 4@840        table  3@1290
+
+A `1@…` rung is a quantity-1 "tier", which is the base price wearing a discount's clothes and
+precisely what `validateTiers` refuses. **The optimizer was parsing the JSON with no validation
+at all** while the page ran the gate. Fixed by putting both readers through `validateTiers`
+against the offer's own base price, so an invalid ladder is dropped rather than used. Dropping
+the column is left as **decision 3** — it would discard 189 offers' data.
+
+**(b) `productUrl` null: two facts, one value.** Both 100%-null merchants turned out to be
+CORRECT and deliberate, each explained in a comment inside its own scraper — Kaufland's flyer
+JSON has no per-product link, and Glovo's category tiles have no `<a>` (pointing at the category
+URL tripped the fabrication guard at 71.7%, because it groups on `(price, productUrl)`).
+
+So this was a *reporting* gap, not a data bug: the reason lived where no check could read it.
+`src/lib/source-capabilities.ts` now declares per merchant whether the SOURCE publishes deep
+links, and `audit:two-kinds` reads that instead of guessing from the percentage. The output
+changes from "mixed — cannot be explained" to a verdict:
+
+    kaufland        655   100%  expected: flyer JSON has no per-product link
+    glovo-kaufland 2615   100%  expected: category tiles carry no <a>
+    sezamo         9867     1%  GAP — declared to have product urls, but 83 row(s) carry none
+    carrefour      5978     1%  GAP — 38 row(s)      metro 36 · mega-image 34 · freshful 14 · auchan 4
+
+**209 real gaps**, previously indistinguishable from 3,270 correct nulls.
+
+**(c) The DCNeu discovery regex.** Worse than the brief thought. It matches any two-segment
+path, and DCNeu writes categories as `/<department>/<leaf>` AND products as `/<leaf>/<slug>` —
+both two segments. Of 180 links matched on the home page today, **9 were products**
+(`/balsam-rufe/asevi-balsam-rufe-1-44l-concentrat-zen`), not the seven estimated.
+
+Fixed with a structural rule needing no extra fetch: a path's first segment is a department
+only if it never appears as somebody else's second segment. Where it does, the first segment is
+itself a leaf and what follows is a product. 180 → **171 categories, 9 products excluded**, and
+the run now prints both numbers so `discovered === scraped` means something again.
+
+**(d) `pricePerUnit = 0`.** Not 96 offers — **6,791**, and every one of them also has
+`pricePerUnitBani = NULL`. The same line of `scrape-util.ts` writes both: the bani column says
+"unknown" with a null, the float column says "unknown" with a 0. All 6,791 are products whose
+own size could not be parsed from the name ("Chec festiv Auchan, pret/kg", "Avocado, pret pe
+bucata").
+
+The card guards on `unitLowest > 0` and renders blank, so **nothing false was displayed**. But
+`Math.min(...pool.map((o) => o.pricePerUnit || 0))` let one unknown drag a whole product's
+minimum to 0, and `SortableProductGrid` SORTS on that number — so "cheapest per unit" listed
+the products whose unit price we could not compute AT THE TOP. An unknown presented as the best
+answer. Fixed: `lowestKnownPerUnit()` skips unknowns, and the sort sends them last.
+
+**(e) matchScore — the one the owner bet on, and it is ACTIVE, not latent.**
+
+    matchedBy        offers   score range
+    name+size        20,697   0.49 .. 0.85
+    new              18,483   0.50 .. 0.50   <- a constant, not a measurement
+    brand+size       10,518   0.67 .. 1.00   <- reaches 1.00
+    scraper           9,533   NULL           <- no score at all
+    ean               6,167   1.00 .. 1.00
+    catalog-master       88   1.00 .. 1.00
+
+A 1.00 from an EAN join and a 1.00 from `brand+size` are the same number meaning different
+things — one is a join, the other is a score that happened to max out. **7 EAN-derived rows are
+in the review queue**, so the queue does rank a join against a score. Small, but active.
+Reported, not fixed: changing what a score MEANS touches matching, which this brief forbids.
+It is **decision 4**.
+
+**Gate after Phase 5:** 886 tests pass · build clean · `audit:db` **43/48** (was 42/48; running
+`compute:home` cleared 20 stale `liveOfferCount` rows left by the Sezamo re-scrape). The five
+failures are all pre-existing and none is in code touched here: two are documented historical
+records (a mass-move day, the peer-relative group finding), and three are Carrefour/Auchan
+(fan-out 9 > 8, 5 Carrefour offers with no deep link, 3 Carrefour campaign-landing URLs).

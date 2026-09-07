@@ -125,7 +125,7 @@ export async function getDeals(limit = 60) {
       const summary = summarize(p.offers);
       const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
-      const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
+      const unitLowest = pool.length > 0 ? lowestKnownPerUnit(pool) : 0;
       const cheapest = [...pool].sort((a, b) => baniOf(a) - baniOf(b))[0];
       return {
         ...p,
@@ -176,7 +176,7 @@ function decorate<T extends {
   return products.map((p) => {
     const inStock = p.offers.filter((o) => isCurrent(o as never));
     const pool = inStock.length > 0 ? inStock : p.offers;
-    const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
+    const unitLowest = pool.length > 0 ? lowestKnownPerUnit(pool) : 0;
     // Best trusted ladder across this product's offers. `visibleTiers` refuses one hanging
     // off a flagged, stale or out-of-stock price, so a card cannot advertise a discount
     // against a base we are withholding.
@@ -548,7 +548,7 @@ export async function getHomeSections() {
     unitLowest: (() => {
       const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
-      return pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
+      return pool.length > 0 ? lowestKnownPerUnit(pool) : 0;
     })(),
     drop: p.dropPct ?? 0,
   });
@@ -610,6 +610,28 @@ const liveOffer = () => ({
  * "shown": one question, two spellings, and nothing to say which was right. The fix is the
  * same — one definition, used by all three.
  */
+/**
+ * The lowest unit price among offers that HAVE one — 0 when none do.
+ *
+ * `Offer.pricePerUnit` is 0 when the scraper could not read a size off the product's own name
+ * ("Chec festiv Auchan, pret/kg", "Avocado, pret pe bucata"). That is "unknown", not "free", and
+ * its twin column `pricePerUnitBani` says so honestly with a NULL — the same line of
+ * scrape-util writes both. 6,791 live offers are in that state.
+ *
+ * The old expression was `Math.min(...pool.map((o) => o.pricePerUnit || 0))`, so a single
+ * unknown dragged the minimum to 0 for the whole product. The card hides a 0, so nothing WRONG
+ * was displayed — but `SortableProductGrid` sorts on this number, and 0 sorts first, so
+ * "cheapest per unit" listed the products whose unit price we could not compute AT THE TOP.
+ * An unknown presented as the best answer.
+ *
+ * Unknowns are now skipped. If every offer is unknown the result is 0, which the card already
+ * treats as "nothing to show" and the sort now sends to the end.
+ */
+function lowestKnownPerUnit(pool: { pricePerUnit: number }[]): number {
+  const known = pool.map((o) => o.pricePerUnit).filter((v) => v > 0);
+  return known.length > 0 ? Math.min(...known) : 0;
+}
+
 export async function countStats() {
   const live = liveOffer(); // evaluated per call — see the note on liveOffer
   const [products, offers, chains, depth] = await Promise.all([

@@ -53,7 +53,11 @@ export function SortableProductGrid({ products, emptyText }: { products: Sortabl
     copy.sort((a, b) => {
       if (sort === "name") return a.name.localeCompare(b.name, "ro");
       if (sort === "price-asc") return a.summary.lowestBani - b.summary.lowestBani;
-      return a.unitLowest - b.unitLowest;
+      // 0 means "we could not compute a unit price for this product", not "it is free". Sorting
+      // it as a number put every unknown at the TOP of "cheapest per unit". Unknowns go last.
+      const au = a.unitLowest > 0 ? a.unitLowest : Infinity;
+      const bu = b.unitLowest > 0 ? b.unitLowest : Infinity;
+      return au - bu;
     });
     return copy;
   }, [products, sort]);

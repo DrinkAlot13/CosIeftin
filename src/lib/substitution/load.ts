@@ -14,6 +14,7 @@ import { leiToBaniExact } from "../price/parsePrice";
 import { parseQuantity } from "../units/parseQuantity";
 import type { OfferLike, UserContext } from "./resolve";
 import type { MerchantInfo } from "../basket/optimize";
+import { validateTiers, type RawTier } from "../price/bulkTiers";
 
 /** Offers that could serve these equivalence classes and/or these products. */
 export async function loadOffers(opts: {
@@ -48,11 +49,25 @@ export async function loadOffers(opts: {
     // Canonical pack quantity: G / ML / BUC.
     const q = parseQuantity(o.product.name);
     const packQuantity = q ? q.value : o.product.unit === "buc" ? o.product.unitSize : o.product.unitSize * 1000;
+    // ── THE LADDER IS VALIDATED BEFORE THE OPTIMIZER MAY USE IT.
+    //
+    // `Offer.bulkTiers` is a legacy JSON column and the `BulkTier` TABLE is the gated copy the
+    // item page renders. They are the same fact in two places and they DO NOT AGREE: of the 274
+    // offers carrying both, ZERO match. The JSON holds rungs like `1@1255` — a quantity-1
+    // "tier", which is the base price wearing a discount's clothes, and exactly what
+    // `validateTiers` refuses.
+    //
+    // Until the column is retired (a decision for the owner, since dropping it would lose the
+    // 189 offers that have JSON and no table rows), the optimizer runs the same gate the page
+    // runs. An unvalidated ladder produced a discount computed against nothing.
+    const basePriceBani = o.priceBani ?? leiToBaniExact(o.price);
     let tiers: { qty: number; priceBani: number }[] | undefined;
     if (o.bulkTiers) {
       try {
         const parsed = JSON.parse(o.bulkTiers) as { qty: number; price: number }[];
-        tiers = parsed.map((t) => ({ qty: t.qty, priceBani: leiToBaniExact(t.price) }));
+        const raw: RawTier[] = parsed.map((t) => ({ minQuantity: t.qty, unitPriceBani: leiToBaniExact(t.price) }));
+        const v = validateTiers(basePriceBani, raw);
+        tiers = v.ok && v.tiers.length > 0 ? v.tiers.map((t) => ({ qty: t.minQuantity, priceBani: t.unitPriceBani })) : undefined;
       } catch { /* malformed tiers are simply absent */ }
     }
     return {

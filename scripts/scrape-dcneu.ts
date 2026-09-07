@@ -261,11 +261,30 @@ async function readTiers(page: Page, basePriceBani: number): Promise<RawTier[]> 
 async function main() {
   const startedAt = new Date();
   const home = (await getHtml(`${BASE}/`)) ?? "";
-  const allCats = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
+  // ── A TWO-SEGMENT PATH IS NOT THE SAME THING AS A CATEGORY.
+  //
+  // DCNeu writes categories as /<department>/<leaf> and products as /<leaf>/<product-slug>.
+  // Both are two segments, so matching on shape alone counted PRODUCTS as leaf categories —
+  // 9 of 180 on the home page today. That inflates the discovered count, which makes
+  // `discovered === scraped` unassertable, and that assertion is the thing that catches the
+  // next silent truncation. A cap that cannot be checked is not a cap.
+  //
+  // The discriminator is structural and needs no per-URL fetch: a path's FIRST segment is a
+  // department only if it never appears as somebody else's SECOND segment. Where it does
+  // ("balsam-rufe" appears as /cosmetice/balsam-rufe), the first segment is itself a leaf and
+  // what follows it is a product, not a sub-category.
+  const twoSegment = [...new Set([...home.matchAll(/href="(https:\/\/comenzi\.dcneu\.ro\/[a-z0-9-]+\/[a-z0-9-]+)"/gi)].map((m) => m[1]))]
     .filter((u) => !/\.(jpg|png|gif|css|js|woff)/i.test(u));
+  const segs = twoSegment.map((u) => u.replace(/^https:\/\/comenzi\.dcneu\.ro\//, "").split("/"));
+  const leafSlugs = new Set(segs.map(([, b]) => b));
+  const allCats = twoSegment.filter((_, i) => !leafSlugs.has(segs[i][0]));
+  const productsMistakenForCategories = twoSegment.length - allCats.length;
+  if (productsMistakenForCategories > 0) {
+    console.log(`  ${productsMistakenForCategories} two-segment link(s) were PRODUCTS, not categories — excluded.`);
+  }
   const cats = allCats.slice(0, MAX_CATS);
   noteCap("dcneu categories", allCats.length, cats.length, MAX_CATS);
-  console.log(`Discovered ${allCats.length} leaf categories, scraping ${cats.length}.`);
+  console.log(`Discovered ${allCats.length} leaf categories (of ${twoSegment.length} two-segment links), scraping ${cats.length}.`);
 
   const pool: DcneuProduct[] = [];
   const seen = new Set<string>();

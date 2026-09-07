@@ -132,7 +132,8 @@
     "probe:ean": "tsx scripts/probe-ean-detail.ts",
     "probe:links": "tsx scripts/probe-links.ts",
     "probe:selgros": "tsx scripts/probe-selgros.ts",
-    "verify:search-identity": "tsx scripts/verify-search-identity.ts"
+    "verify:search-identity": "tsx scripts/verify-search-identity.ts",
+    "audit:two-kinds": "tsx scripts/audit-two-kinds-of-fact.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
