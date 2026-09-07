@@ -128,7 +128,10 @@
     "explore:head": "tsx scripts/explore-head.ts",
     "audit:private-label-classes": "tsx scripts/audit-private-label-classes.ts",
     "explore:coverage": "tsx scripts/explore-class-coverage.ts",
-    "explore:attribution": "tsx scripts/explore-class-attribution.ts"
+    "explore:attribution": "tsx scripts/explore-class-attribution.ts",
+    "probe:ean": "tsx scripts/probe-ean-detail.ts",
+    "probe:links": "tsx scripts/probe-links.ts",
+    "probe:selgros": "tsx scripts/probe-selgros.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

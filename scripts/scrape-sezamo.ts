@@ -77,7 +77,14 @@ async function cards(ids: number[]): Promise<Cand[]> {
       if (!p.name) continue;
       const priceNum = typeof price === "number" && price > 0 ? price : 0;
       const size = p.textualAmount ? ` ${p.textualAmount}` : "";
-      const url = p.slug ? `${BASE}/${p.slug}` : BASE;
+      // THE PRODUCT PATH CARRIES THE ID, and this line did not. `${BASE}/${p.slug}` produced
+      // https://www.sezamo.ro/zuzu-iaurt-natural-3, which is a 404 — the live path is
+      // /11269-zuzu-iaurt-natural-3, the same shape as the category paths (/c631-lactate-si-oua).
+      // Every one of Sezamo's 9,420 stored product links was dead, on our largest merchant by
+      // live products, and nothing caught it: the scraper wrote the field, the pool contract saw
+      // a non-null string, and no check ever asked whether the URL resolved. Found by opening
+      // the pages while probing for EANs. See npm run probe:links.
+      const url = p.slug && p.productId ? `${BASE}/${p.productId}-${p.slug}` : BASE;
       out.push({
         name: `${p.name}${size}`, // fold size into name so parseQuantity can read it
         brand: p.brand || "",
@@ -86,7 +93,7 @@ async function cards(ids: number[]): Promise<Cand[]> {
         available: p?.stock?.availabilityStatus === "AVAILABLE",
         url,
         // Provenance set at the READ, not at the matcher call where a map can drop it.
-        productUrl: p.slug ? url : null,
+        productUrl: p.slug && p.productId ? url : null,
         rawPriceText: String(priceNum),
         // KEEP THE SOURCE PAYLOAD — see scrape-util. Without it, no independent check on
         // our size handling is possible for this merchant.

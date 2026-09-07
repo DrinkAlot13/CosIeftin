@@ -24,7 +24,7 @@ exposure:
 | **Lidl** | ❌ **no prices published** | — | `/p/api/gridboxes/RO/ro` returns real products but **empty price objects** — Lidl RO's assortment is in-store only ("În magazin"), and its pagination is fake (same 25 items on every page). There is nothing to scrape. Lidl must come from an aggregator, Monitorul, or flyers. |
 | **Monitorul Prețurilor** | ⚠️ unreachable here | — | DNS resolution failed for every variant tried (`monitorulpreturilor.info`/`.ro`, ±`www`, `api.`) while `consiliulconcurentei.ro` resolved fine — so it's the host, not the network. `scripts/scrape-monitorul.ts` probes candidates and **writes nothing** unless a payload parses. Finish it by capturing one real request from the web/mobile app. |
 | **Glovo** | ✅ **live** (Kaufland Bucharest) | ~2,200 | Delivery address created once, stored client-side in our own cookie; nothing written to Glovo. Playwright over RSC. Prices carry a **+11.5% median markup** and are `DELIVERY_PLATFORM`, excluded from everything user-facing by default. **See "Glovo, RESOLVED" at the foot of this file — it supersedes the two recon sections below.** |
-| **Selgros** | ⚠️ selectors unresolved | — | Cards are `a.product-item[data-product-id]`, but the category listing renders client-side and category slugs aren't in the HTML. Adapter exists (`scripts/adapters/selgros.ts`); the price selector yields nothing, so the runner refuses to write. Needs one more recon pass. |
+| **Selgros** | ⚠️ adapter exists, pools 0 | never run | **Re-diagnosed 2026-09-08 — the old note was wrong.** See below. |
 | **Profi** | ❌ blocked | — | HTTP 403 to plain requests. |
 | **Douglas** | ⛔ **dropped deliberately** | — | Yielded 5 products behind aggressive anti-bot. Beating it meant residential proxies, which turns a manageable legal question into a real one. Not worth it. |
 
@@ -256,3 +256,77 @@ item pages, deals, counts, search, comparability. One definition, `deliveryPlatf
 `src/lib/platform/visibility.ts`, expressed as a `NOT` rather than an allow-list so a future
 fifth price source stays visible instead of silently vanishing. Enabled only by
 `SHOW_DELIVERY_PLATFORM=1` or a per-request `?dp=1`. **Off in production.**
+
+
+---
+
+## Selgros — why it is excused from the nightly, re-diagnosed 2026-09-08
+
+The previous note said the listing "renders client-side" and "the price selector yields
+nothing". Both halves were checked and the first is wrong.
+
+**Has it ever run?** No. There is no `Merchant` row for Selgros and no `ScraperRun`. It has
+contributed nothing, ever.
+
+**What does it pool?** Zero. `POOL_ONLY=1 npm run scrape:selgros` reports
+`0/0 prices parsed, 0 null` and refuses to touch the database — which is the correct
+behaviour, not the bug.
+
+**Why zero, precisely** (`npm run probe:selgros`, headless Chromium, the same engine the
+adapter uses):
+
+| route | cards found | verdict |
+|---|---|---|
+| `https://www.selgros.ro/` | **48** `a.product-item[data-product-id]` | the card selector is CORRECT and the cards are server-rendered — a plain curl sees 24 of them in the raw HTML |
+| `.../exploreaza-sortimentul-selgros` | 0 | genuinely empty; this route is dead weight |
+
+So the cards are found. What fails is everything after:
+
+- **The name selectors all miss.** `.product-title`, `h3`, `[class*="title"]`, `.product-name`
+  each return nothing. The name is in the card (`TRANSGOURMET QUALITY COZI CREVETI ...`) but
+  under none of them, so every card is dropped for having no name — which is why the pool is
+  0 rather than 48.
+- **The price is SPLIT ACROSS ELEMENTS.** `[class*="price"]` reads `per BUC. 39` for a product
+  priced 39,99: the lei and the bani are separate nodes. Wiring this up naively would write
+  **39 lei instead of 39,99** on every row — a fabricated price, which is worse than no
+  merchant. Any fix must read the whole price container and hand the joined string to
+  `parsePrice`, never the first numeric node.
+
+**And a reason to think it is low-value anyway.** Selgros is cash & carry (Transgourmet). The
+home-page assortment is catering packs — 750 g of shrimp, cases — carrying a validity window
+(`01/09/2026 - 30/09/2026`). Those are not the packs a household shops for, so most of what it
+would contribute cannot join a retail comparison even once it parses. Metro, the other cash &
+carry, already shows this: 1,626 of its products are own-brand and every one is single-shop.
+
+**robots.txt permits it** (`User-agent: *` with no disallow covering these paths).
+
+**Verdict: not a nightly candidate until someone fixes the name selector AND the split price.
+The work is small; the payoff is doubtful. Excusing it remains correct.**
+
+---
+
+## EAN on detail pages — per merchant, 2026-09-08 (`npm run probe:ean`)
+
+Asked because an EAN settles a match without argument. Sampled live products per merchant and
+opened each product's OWN url, looking in four places: JSON-LD, meta tags, a labelled spec row,
+and any embedded JSON payload.
+
+| merchant | offers | carry a url | already have an EAN | detail page yields one | how |
+|---|---|---|---|---|---|
+| **auchan** | 9,937 | 100% | **9,693 (98%)** | 3/3 | embedded json — but there is nothing left to gain |
+| **farmaciatei** | 2,898 | 100% | **0 (0%)** | **4/4** | **`json-ld` `gtin13`** |
+| mega-image | 8,712 | 100% | 2,675 (31%) | 0/3 | nothing in any of the four places |
+| freshful | 4,736 | 100% | 1,598 (34%) | 0/3 | nothing |
+| metro | 6,624 | 99% | 1,343 (20%) | 0/4 | nothing |
+| carrefour | 5,978 | 99% | 1,292 (22%) | 0/3 | nothing |
+| sezamo | 9,504 | 99% | 1,130 (12%) | — | every sampled url was a 404; see below |
+| dcneu | 13,005 | 100% | 0 (0%) | 0/3 | nothing |
+| penny | 81 | 100% | 23 (28%) | 0/3 | nothing |
+| kaufland | 655 | **0%** | 72 (11%) | — | stores no productUrl at all, so there is no page to open |
+
+**The answer to "what would comparable products become": nothing.** The brief's condition was
+"if two or more can supply one". Exactly one merchant can — Farmacia Tei — and Auchan, which
+also can, is already at 98%. An EAN raises comparability only when a SECOND shop can be matched
+to a FIRST by it, and no second grocery merchant publishes one. Harvesting Farmacia Tei is still
+worth doing on its own merits (2,898 offers, 0 EANs, one JSON-LD field, one page per product),
+but it is a `farmacie`-section improvement, not a grocery comparability one.
