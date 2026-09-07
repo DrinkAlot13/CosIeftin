@@ -155,7 +155,12 @@ export type MerchantStat = {
   runs: number;
   abortedRuns: number;
   abortReasons: string[];
+  /** Pool size on the MOST RECENT non-aborted run. See the note at the summation. */
   pooled: number;
+  /** Offer rows that run wrote. Comparable to `pooled` because both are one run. */
+  writtenLastRun: number;
+  /** Runs in the window that wrote nothing at all and were NOT marked aborted. */
+  silentZeroRuns: number;
   parsed: number;
   /**
    * Pool items that reached the matcher without a usable price.
@@ -259,11 +264,26 @@ export async function getMerchantStats(): Promise<MerchantStat[]> {
       orderBy: { startedAt: "desc" },
     });
 
-    // `offersAttempted` counts pool items this run; `offersWritten` counts offer ROWS written,
-    // which includes rows re-activated from an earlier run. They are not a ratio: kaufland
-    // pooled 247 and wrote 280, farmaciatei pooled 807 and wrote 1,143. Printed side by side
-    // and never divided.
-    const pooled = runs.reduce((s, r) => s + r.offersAttempted, 0);
+    // ── POOLED IS ONE RUN, NOT FOURTEEN SUMMED.
+    //
+    // This summed `offersAttempted` across the window and printed it beside the summed
+    // `offersWritten`. For Mega Image that read "91,973 pooled, 4,395 written" — a 4.8% write
+    // rate that does not exist. They are fourteen separate runs over THE SAME catalog: ~7,030
+    // pooled each time, ~741 written each time. Dividing one sum by the other invents a ratio
+    // out of two numbers that are not a ratio, and it sent a reader hunting a scraper bug that
+    // was not there.
+    //
+    // So `pooled` and `writtenLastRun` come from the most recent run that actually ran, and
+    // those two ARE comparable. `written` stays the window sum, labelled as a sum.
+    //
+    // Even within one run they are not a clean ratio: `offersWritten` counts offer ROWS,
+    // including ones re-activated from an earlier run, so kaufland pooled 247 and wrote 280.
+    const lastReal = runs.find((r) => !r.aborted && r.offersAttempted > 0);
+    const pooled = lastReal?.offersAttempted ?? 0;
+    const writtenLastRun = lastReal?.offersWritten ?? 0;
+    // A run that wrote nothing and was NOT flagged aborted is its own failure mode: Mega Image
+    // had seven in a row at the start of the window, each recorded as an ordinary run.
+    const silentZeroRuns = runs.filter((r) => !r.aborted && r.offersAttempted > 0 && r.offersWritten === 0).length;
     const parsed = runs.reduce((s, r) => s + r.offersParsed, 0);
     const unreadableAtMatcher = runs.reduce((s, r) => s + r.offersNull, 0);
     const aborted = runs.filter((r) => r.aborted);
@@ -335,7 +355,7 @@ export async function getMerchantStats(): Promise<MerchantStat[]> {
       runs: runs.length,
       abortedRuns: aborted.length,
       abortReasons: [...new Set(aborted.map((a) => a.abortReason ?? "(no reason recorded)"))].slice(0, 3),
-      pooled, parsed, unreadableAtMatcher,
+      pooled, writtenLastRun, silentZeroRuns, parsed, unreadableAtMatcher,
       written: runs.reduce((s, r) => s + r.offersWritten, 0),
       refused: runs.reduce((s, r) => s + r.offersRejected, 0),
       lastSuccessfulWrite: lastGood?.finishedAt ?? lastGood?.startedAt ?? null,

@@ -13,7 +13,15 @@ import { ensureBackup } from "../src/lib/ensure-backup";
 // Douglas was dropped deliberately: it yielded 5 products behind aggressive anti-bot, and
 // beating it would have meant residential proxies — turning a manageable legal question
 // into a real one. Kaufland/Penny replaced it with far more coverage, from public sources.
-const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny"];
+// EVERY SCRAPER THE NIGHTLY RUNS. A scraper missing from this list is not scheduled, and
+// nothing anywhere says so — `platform` (Glovo/Kaufland Bucharest) was built, verified and
+// committed, then never added here. It last ran on 2 September, by hand. The stats page showed
+// it with 0 live offers and an old abort reason, which read as "the guard is blocking it" when
+// the truth was "nothing has asked it to run for five days".
+//
+// `selgros` and `monitorul` are also absent and are deliberately left so: neither has been
+// through the acceptance the others have. Written down here rather than left as a silence.
+const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "platform"];
 
 function run(script: string): boolean {
   const r = spawnSync("npm", ["run", script], { stdio: "inherit", shell: true });

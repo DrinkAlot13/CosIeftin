@@ -344,3 +344,27 @@ Verified in a browser after the fix: initials 421 → **0** on `/c/branzeturi`, 
 Measured and NOT built: of the 918 live products holding a placeholder, **0** are priced by any
 other shop. Cross-merchant image borrowing would fix none of them today, so `Offer.image` was
 not added. Those 918 are fixed only by re-scraping Carrefour and DCNeu, which the nightly does.
+
+### Soak-period fix 7 — Glovo was never scheduled, and "dead" did not say why (2026-09-07)
+
+**Changes what the nightly runs.** Read day fourteen against it: `glovo-kaufland` contributes
+offers again from this date, all `DELIVERY_PLATFORM` and excluded from every user-facing surface
+by default, so no shown number moves.
+
+`audit:liveness` had `glovo-kaufland` red with 0 live offers, and the last thing in its run
+history was an abort on the fabrication guard. That reads as "the guard is blocking it". It was
+not: the guard fired once on 2 September at 18:57, the adapter was corrected in the same session
+(`productUrl: null`, because Glovo publishes no per-product permalink), and the three runs after
+it wrote 2,217 offers each. Then nothing for five days — because **`platform` was never added to
+`scrape-all`'s list**. The ingest was built, verified and committed, and nothing ever ran it.
+
+Verified by running it: 2,209 pooled, 2,224 written, 77.2% matched, no abort.
+
+"Dead because blocked" and "dead because unscheduled" arrived as one fact. New guard:
+`tests/nightly-covers-merchants.test.ts` fails if any `scrape:*` script is neither in
+`scrape-all` nor named in an `UNSCHEDULED` map with a reason. `selgros` and `monitorul` are now
+excused there in writing rather than by silence.
+
+The fabrication guard was NOT touched. It was right on the input it was given — the adapter had
+been claiming a per-product URL it did not have, which is the schema's stated failure mode
+("an absent link must be visibly null rather than silently pointing at a generic page").

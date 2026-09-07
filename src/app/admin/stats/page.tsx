@@ -81,6 +81,7 @@ function MerchantRow({ m }: { m: MerchantStat }) {
           {!m.active && <span className="muted"> (inactiv)</span>}
         </td>
         <td className="num">{n(m.pooled)}</td>
+        <td className="num">{n(m.writtenLastRun)}</td>
         <td className="num">{n(m.written)}</td>
         <td className="num">{n(m.refused)}</td>
         <td className="num">{n(m.unreadableAtMatcher)}</td>
@@ -89,10 +90,13 @@ function MerchantRow({ m }: { m: MerchantStat }) {
         <td className="num">{n(m.pendingUnresolved)}</td>
         <td className="num">{n(m.rejected)}</td>
         <td>{m.lastSuccessfulWrite ? formatDate(m.lastSuccessfulWrite) : <span className="stat-bad">niciodată</span>}</td>
-        <td>{m.abortedRuns > 0 ? <span className="stat-bad">{m.abortedRuns}/{m.runs}</span> : `0/${m.runs}`}</td>
+        <td>
+          {m.abortedRuns > 0 ? <span className="stat-bad">{m.abortedRuns}/{m.runs}</span> : `0/${m.runs}`}
+          {m.silentZeroRuns > 0 && <span className="stat-bad"> · {m.silentZeroRuns} tăcute</span>}
+        </td>
       </tr>
       <tr className="stat-sub">
-        <td colSpan={11}>
+        <td colSpan={12}>
           <span className="muted">provenance: </span>
           storeName {cov(p.storeName)} · ownUnitSize {cov(p.ownUnitSize)} · rawPriceText {cov(p.rawPriceText)}
           {" · "}rawSourceBlob {cov(p.rawSourceBlob)} · productUrl {cov(p.productUrl)} · imagine {cov(p.image)}
@@ -181,9 +185,12 @@ export default async function AdminStatsPage() {
         Coloanele „pooled / scrise / refuzate / necitite” însumează ultimele {WINDOW_NIGHTS} nopți
         din <code>ScraperRun</code>; restul descriu starea de acum. Un magazin care adună 7.000 de
         produse și scrie 700 este o cu totul altă problemă decât unul care adună 300 — de aceea
-        cele două numere stau alături și nu se împart unul la altul: <b>„scrise” numără rânduri
-        de ofertă</b>, inclusiv cele reactivate dintr-o rulare anterioară, așa că poate depăși
-        „pooled” (kaufland: 247 → 280).
+        „pooled” și „scrise (aceeași rulare)” vin din <b>aceeași rulare</b> — a suma paisprezece
+        rulări peste același catalog și a le împărți una la alta inventează un raport care nu
+        există (mega-image citea „91.973 / 4.395 = 4,8%”, când realitatea e ~7.030 și ~741 pe
+        rulare). Nici în aceeași rulare nu sunt un raport curat: <b>„scrise” numără rânduri de
+        ofertă</b>, inclusiv reactivări, deci poate depăși „pooled” (kaufland: 247 → 280).
+        <b>„tăcute”</b> = rulări care n-au scris nimic și n-au fost marcate abandonate.
         <br />
         <b>„necitite” este 0 peste tot, și este un zero real</b> pentru ceea ce măsoară: pool-uri
         ajunse la matcher fără preț utilizabil. Fiecare scraper aruncă prețurile necitibile când
@@ -195,8 +202,9 @@ export default async function AdminStatsPage() {
           <thead>
             <tr>
               <th>magazin</th>
-              <th className="num">pooled {WINDOW_NIGHTS}n</th>
-              <th className="num">scrise</th>
+              <th className="num">pooled (ultima rulare)</th>
+              <th className="num">scrise (aceeași rulare)</th>
+              <th className="num">scrise ({WINDOW_NIGHTS}n, sumă)</th>
               <th className="num">refuzate</th>
               <th className="num">necitite</th>
               <th className="num">live acum</th>
