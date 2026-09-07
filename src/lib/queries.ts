@@ -5,6 +5,7 @@ import { normalizeText } from "@/lib/matching";
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
 import { searchCatalog } from "@/lib/search/search";
+import { getSearchableCatalog, type SearchableProduct } from "@/lib/search/index-cache";
 import { buildDailyLowSeries, dropPercent, isCurrent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
 import { visibleTiers } from "./bulk-tiers";
 
@@ -452,39 +453,20 @@ export async function searchProducts(query: string, page = 1, perPage = SEARCH_P
   const q = query.trim();
   const live = currentOfferWhere();
 
-  // ── PHASE 1: the whole catalog, four columns of it.
+  // ── PHASE 1: the whole catalog — but built ONCE PER CATALOG VERSION, not per request.
   //
-  // ONE RETURN PATH, so the result type is inferred once. An early `return` for the empty query
-  // used to widen this into a union and every caller had to narrow it; the empty case skips the
-  // work instead of leaving through a different door.
-  const [light, offerCounts, cats] = q
-    ? await Promise.all([
-        prisma.product.findMany({
-          where: { section: "grocery", offers: { some: live } },
-          select: { id: true, name: true, brand: true, categoryId: true },
-        }),
-        // Offer is unique on (productId, merchantId), so counting live offers per product IS
-        // the distinct-merchant count. One grouped query instead of hydrating 25,676 offer rows.
-        prisma.offer.groupBy({ by: ["productId"], where: { ...live, product: { section: "grocery" } }, _count: { _all: true } }),
-        prisma.category.findMany({ where: { section: "grocery" }, select: { id: true, name: true } }),
-      ])
-    : [[], [], []] as [
-        { id: number; name: string; brand: string | null; categoryId: number | null }[],
-        { productId: number; _count: { _all: number } }[],
-        { id: number; name: string }[],
-      ];
+  // It still ranks against everything, because that is what makes "we do not stock illy" a real
+  // answer rather than a shrug. What changed is that loading 29,166 products, 29,166 offer-count
+  // rows and rebuilding the vocabulary, head-noun table and brand set is now done when the
+  // catalog changes rather than on every keystroke: 520 ms of queries and 230 ms of derivation,
+  // per request, for data that moves once a night.
+  //
+  // See lib/search/index-cache for the staleness this buys and how it is invalidated.
+  const { catalog: searchable, index } = q
+    ? await getSearchableCatalog()
+    : { catalog: [] as SearchableProduct[], index: undefined };
 
-  const catName = new Map(cats.map((c) => [c.id, c.name]));
-  const merchants = new Map(offerCounts.map((r) => [r.productId, r._count._all]));
-  const searchable = light.map((p) => ({
-    id: p.id,
-    name: p.name,
-    brand: p.brand,
-    categoryName: p.categoryId == null ? null : catName.get(p.categoryId) ?? null,
-    merchantCount: merchants.get(p.id) ?? 0,
-  }));
-
-  const outcome = searchCatalog(q, searchable);
+  const outcome = searchCatalog(q, searchable, index);
   const ranked = outcome.results.map((r) => r.item.id);
   const total = ranked.length;
   const pages = Math.max(1, Math.ceil(total / perPage));

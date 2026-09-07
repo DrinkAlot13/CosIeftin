@@ -205,16 +205,44 @@ export function scoreOne<T extends Searchable>(
  * module cannot enforce it; `searchProducts` in lib/queries.ts is the enforcing caller and
  * `tests/search-quality.test.ts` pins the rule.
  */
-export function searchCatalog<T extends Searchable>(query: string, catalog: T[]): SearchOutcome<T> {
+/**
+ * The three catalog-wide derivations `searchCatalog` needs, and the ONLY expensive part of it.
+ *
+ * Vocabulary (for typo correction and "is this word ours"), head-noun frequency, and the brand
+ * set. All three are pure functions of the catalog and change once a night; rebuilding them per
+ * request cost 213-241 ms of the 880 ms `/search` was taking. Extracted so a caller can build
+ * them once and hand them in — see lib/search/index-cache.
+ *
+ * NOTHING about the honesty guarantee moves: the index is still derived from the WHOLE catalog,
+ * so "we do not stock illy" is decided against everything we carry. What changes is how often.
+ */
+export type SearchIndex = {
+  vocab: Map<string, number>;
+  headFreq: Map<string, number>;
+  brands: Set<string>;
+};
+
+export function buildSearchIndex<T extends Searchable>(catalog: T[]): SearchIndex {
+  const vocab = catalogVocabulary(catalog);
+  const headFreq = headNounFrequency(catalog);
+  const brands = catalogBrands(catalog as BrandBearing[], headFreq);
+  return { vocab, headFreq, brands };
+}
+
+export function searchCatalog<T extends Searchable>(
+  query: string,
+  catalog: T[],
+  index?: SearchIndex,
+): SearchOutcome<T> {
   const empty = (missing: string[] = []): SearchOutcome<T> =>
     ({ kind: missing.length ? "empty" : "empty", missing, results: [], corrections: [] });
 
   const rawTokens = queryTokens(query);
   if (rawTokens.length === 0) return empty();
 
-  const vocab = catalogVocabulary(catalog);
-  const headFreq = headNounFrequency(catalog);
-  const brands = catalogBrands(catalog as BrandBearing[], headFreq);
+  // Built here when no caller supplied one, so every existing call site and every test keeps
+  // working unchanged — the cache is an optimisation, never a second code path.
+  const { vocab, brands } = index ?? buildSearchIndex(catalog);
 
   // Resolve each token to something the catalog knows, or record it as missing.
   const resolved: string[] = [];

@@ -12,6 +12,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CATALOG_TAG, REVALIDATE_PATHS } from "@/lib/cache-tags";
+import { resetSearchIndex, getSearchableCatalog, searchIndexStatus } from "@/lib/search/index-cache";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,14 +29,28 @@ export async function POST(req: NextRequest) {
   if (given !== secret) return NextResponse.json({ ok: false, error: "bad secret" }, { status: 401 });
 
   revalidateTag(CATALOG_TAG);
+  // The search index is an in-process memo, not a Next cache entry, so revalidateTag cannot
+  // reach it. Dropped here so a nightly that adds 5,800 products makes them searchable at once
+  // rather than up to ten minutes later.
+  resetSearchIndex();
   for (const p of REVALIDATE_PATHS) revalidatePath(p);
   // Every category page and every product page, by layout: these are generated on demand and
   // there are hundreds of them, so purging the whole subtree beats enumerating it.
   revalidatePath("/c/[slug]", "page");
   revalidatePath("/p/[slug]", "page");
 
+  // ── AND REBUILD IT HERE, awaited, rather than leaving the bill for the first shopper.
+  //
+  // Dropping the index is instant; rebuilding it costs about 1.3 s. Whoever triggers that
+  // rebuild waits for it, and after a purge that is whoever searches next — a real person, at
+  // the worst possible moment, on a site that just got faster everywhere else. The nightly is
+  // not in a hurry, so it pays instead.
+  await getSearchableCatalog().catch(() => { /* a failed warm-up must not fail the purge */ });
+  const idx = searchIndexStatus();
+
   return NextResponse.json({
     ok: true,
+    searchIndex: { rebuilt: idx.cached, products: idx.size, buildMs: idx.buildMs },
     tag: CATALOG_TAG,
     paths: [...REVALIDATE_PATHS, "/c/[slug]", "/p/[slug]"],
     at: new Date().toISOString(),
