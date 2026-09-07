@@ -629,7 +629,41 @@ export async function countStats() {
     prisma.offer.groupBy({ by: ["productId"], where: { ...live, product: { section: "grocery" } }, _count: { _all: true } }),
   ]);
   const comparable = depth.filter((d) => d._count._all >= 2).length;
-  return { products, offers, chains, comparable };
+
+  // ── THE FIFTH NUMBER, AND IT IS A SEPARATE NUMBER ON PURPOSE.
+  //
+  // Equivalence classes let a shopper compare Auchan's own 500 g brown sugar with Mega Image's
+  // own 500 g brown sugar. Those are DIFFERENT PRODUCTS — different brands, different names —
+  // and the matcher is right to keep them apart. So they are not "comparable" in the sense the
+  // count above measures, and folding them in would make that count jump overnight by changing
+  // what the word means. Afterwards there would be no way to tell whether the site had got
+  // better or the metric had got looser.
+  //
+  // Two numbers, both labelled. `comparable` only ever moves when a real cross-shop MATCH is
+  // made; this one also moves when a class is written. They answer different questions and the
+  // homepage prints both.
+  const classSpans = await prisma.equivalenceClass.findMany({
+    select: {
+      id: true,
+      products: {
+        where: { offers: { some: live } },
+        select: { id: true, offers: { where: live, select: { merchantId: true } } },
+      },
+    },
+  });
+  const equivalentIds = new Set<number>();
+  for (const c of classSpans) {
+    // A class earns its keep only if it reaches TWO SHOPS. One shop's products sharing a class
+    // is a tidy catalog, not a comparison, and counting it would be the same inflation again.
+    const shops = new Set(c.products.flatMap((p) => p.offers.map((o) => o.merchantId)));
+    if (shops.size < 2) continue;
+    for (const p of c.products) equivalentIds.add(p.id);
+  }
+  const comparableIds = new Set(depth.filter((d) => d._count._all >= 2).map((d) => d.productId));
+  for (const id of comparableIds) equivalentIds.add(id);
+  const comparableOrEquivalent = equivalentIds.size;
+
+  return { products, offers, chains, comparable, comparableOrEquivalent };
 }
 
 /** Alcohol storefront: products in the "alcohol" section, decorated + sorted, with

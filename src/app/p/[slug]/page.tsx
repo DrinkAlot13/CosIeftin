@@ -244,9 +244,9 @@ export default async function ItemPage({
           belong here, priced, with the shop named. */}
       {equivalents.rows.length > 1 && (
         <section className="section">
-          <div className="section-head"><h2>🔁 Același lucru, la alt magazin</h2></div>
+          <div className="section-head"><h2>🔁 Produse echivalente la alte magazine</h2></div>
           <p className="muted" style={{ marginTop: -8, marginBottom: 12 }}>
-            Produse pe care le considerăm <b>echivalente</b>{equivalents.label ? <> ({equivalents.label.toLowerCase()})</> : null} —
+            Nu sunt același produs. Sunt produse pe care le considerăm <b>echivalente</b>{equivalents.label ? <> ({equivalents.label.toLowerCase()})</> : null} —
             marcă diferită, aceeași nevoie. Sortate după prețul pe unitate.
           </p>
           <div className="card" style={{ overflowX: "auto" }}>

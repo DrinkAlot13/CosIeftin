@@ -177,8 +177,18 @@ export const PRODUCE_CLASSES: ProduceClass[] = [
   fresh("ridichi-kg", "Ridichi, la kg", ["ridichi"]),
   fresh("ciuperci-kg", "Ciuperci champignon, la kg", ["ciuperci"], ["conserva", "pleurotus", "shiitake"]),
   fresh("fasole-verde-kg", "Fasole verde, la kg", ["fasole", "verde"], ["boabe", "rosie", "alba"]),
-  fresh("mazare-kg", "Mazăre, la kg", ["mazare"], ["conserva", "boabe uscate"]),
-  fresh("porumb-kg", "Porumb, la kg", ["porumb"], ["faina", "malai", "conserva", "pufuleti", "boabe conserva"]),
+  // NO FRESH PEA OR SWEETCORN CLASS. Both existed and both were entirely wrong.
+  //
+  // `mazare-kg` held 23 live products and `porumb-kg` held 18, and EVERY ONE of them was a tin
+  // or a bag of popcorn: "Mazare cu carne de vita Auchan 300 g", "Porumb pentru floricele Andra,
+  // 200 g", "Porumb baby Auchan, 190 g". Their exclusion lists named "conserva", and none of
+  // these products says "conserva" — they say "boabe", "in vid", "in saramura". The catalog
+  // carries no fresh peas and no corn on the cob at all, so the classes could only ever fill
+  // with the processed forms that share the head noun.
+  //
+  // Same decision as the fresh herbs above: a class that is mostly wrong is worse than no class.
+  // The tinned versions now have their own classes, with sizes and forms stated, in
+  // src/data/private-label-classes.ts.
 
   // ── leaves ────────────────────────────────────────────────────────────────────
   // NO FRESH-HERB CLASSES. Pătrunjel, mărar and busuioc were written and then removed: the

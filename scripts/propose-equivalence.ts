@@ -104,6 +104,15 @@ async function main() {
         const cap = k.rules.maxUnitSize ?? Infinity;
         if (p.unitSize > cap) continue;
         if (p.unitSize < (k.rules.minUnitSize ?? 0)) continue;
+      } else if (k.rules.strictRules) {
+        // AN EXPLICIT WINDOW, NOT A PERCENTAGE.
+        //
+        // ±26% of 500 g is 370-630 g, and nothing in the class says so. Written out, the window
+        // is readable and arguable: a 400 g tin is not a 500 g tin, and whether 690 g belongs
+        // with 680 g is a decision somebody should make on purpose rather than inherit from a
+        // constant. A strict class states its own bounds and is refused below if it does not.
+        if (p.unitSize < (k.rules.minUnitSize ?? Infinity)) continue;
+        if (p.unitSize > (k.rules.maxUnitSize ?? -Infinity)) continue;
       } else {
         const sizeOk = k.c.unitSize > 0 && Math.abs(p.unitSize - k.c.unitSize) <= k.c.unitSize * SIZE_TOLERANCE;
         if (!sizeOk) continue;
@@ -151,7 +160,8 @@ async function main() {
       // Scoped to `anySize` classes — the loose-produce ones written with full require/exclude
       // lists — so the original 30, which lean on the floor, are untouched.
       const score = jaccard(k.tokens, pTokens);
-      const floor = k.rules.anySize && (k.rules.require ?? []).length > 0 ? 0 : MIN_SCORE;
+      const hasOwnRules = (k.rules.require ?? []).length > 0;
+      const floor = (k.rules.anySize || k.rules.strictRules) && hasOwnRules ? 0 : MIN_SCORE;
       if (score >= floor && (!best || score > best.score)) best = { classId: k.c.id, score };
     }
 

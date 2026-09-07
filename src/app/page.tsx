@@ -53,6 +53,14 @@ export default async function HomePage() {
             {/* The number that keeps the other two honest: of all those products, how many can
                 actually be compared. Without it "37.258 produse" reads as 37.258 comparisons. */}
             <span><b>{stats.comparable.toLocaleString("ro-RO")}</b> comparabile în 2+ magazine</span>
+            {/* TWO NUMBERS, NOT ONE MERGED ONE. The line above counts products the same in two
+                shops — a real cross-shop match. This one adds products that are only EQUIVALENT:
+                a shop's own brown sugar beside another shop's own brown sugar, different brands,
+                same trade. Folding the second into the first would make "comparabile" jump
+                overnight by redefining it, and nothing afterwards could say whether the catalog
+                improved or the word loosened. So they sit side by side and each keeps its own
+                meaning. */}
+            <span><b>{stats.comparableOrEquivalent.toLocaleString("ro-RO")}</b> comparabile sau echivalente</span>
             <span><b>{stats.chains}</b> magazine alimentare</span>
           </div>
           <div style={{ marginTop: 18 }}>

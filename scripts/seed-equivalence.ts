@@ -13,6 +13,7 @@
 
 import { prisma } from "../src/lib/db";
 import { PRODUCE_CLASSES } from "../src/data/produce-classes";
+import { PRIVATE_LABEL_CLASSES } from "../src/data/private-label-classes";
 
 type Klass = { slug: string; label: string; section?: string; unit: string; unitSize: number; attributes: Record<string, unknown> & { require?: string[]; exclude?: string[] } };
 
@@ -83,7 +84,11 @@ const CLASSES: Klass[] = [
 
   // ── bakery & staples ──
   { slug: "paine-alba-500g", label: "Pâine albă, 500 g", unit: "kg", unitSize: 0.5, attributes: { tip: "alba", feliata: null, require: ["alba"], exclude: ["pesmet|crutoane|faina|mix|toast|graham|secara|integrala"] } },
-  { slug: "faina-alba-1kg", label: "Făină albă tip 000, 1 kg", unit: "kg", unitSize: 1, attributes: { tip: "000", require: ["alba|000"], exclude: ["mix|porumb|migdale|cocos|ovaz|orez|integrala"] } },
+  // TIP 000 IS NOT TIP 650. This class required ["alba|000"], and "Faina alba 650 Auchan, 1 kg"
+  // satisfies it on the word "alba" alone — so a bread flour and a cake flour shared one class
+  // and one price line. Different flour, different bake, different price. 650 now has its own
+  // class in src/data/private-label-classes.ts and is named out of this one.
+  { slug: "faina-alba-1kg", label: "Făină albă tip 000, 1 kg", unit: "kg", unitSize: 1, attributes: { tip: "000", require: ["alba|000"], exclude: ["650|mix|porumb|migdale|cocos|ovaz|orez|integrala"] } },
   { slug: "zahar-tos-1kg", label: "Zahăr tos alb, 1 kg", unit: "kg", unitSize: 1, attributes: { tip: "tos alb", require: ["alb|tos"], exclude: ["pudra|vanilat|brun|invertit|indulcitor"] } },
   { slug: "orez-bob-lung-1kg", label: "Orez bob lung, 1 kg", unit: "kg", unitSize: 1, attributes: { tip: "bob lung", require: ["bob lung|lung"], exclude: ["basmati|risotto|arborio|pilaf|sarmale|lapte|vafe"] } },
   { slug: "paste-500g", label: "Paste făinoase, 500 g", unit: "kg", unitSize: 0.5, attributes: { tip: "grau dur", require: ["paste"], exclude: ["dinti|tomate|sos|pizza|instant|noodles"] } },
@@ -124,7 +129,10 @@ const CLASSES: Klass[] = [
   { slug: "ceapa-1kg", label: "Ceapă galbenă, 1 kg", unit: "kg", unitSize: 1, attributes: { tip: "galbena", require: ["ceapa"], exclude: ["praf|deshidratat|murat|verde|inele|congelat|legume"] } },
 
   // ── drinks ──
-  { slug: "cafea-macinata-250g", label: "Cafea măcinată, 250 g", unit: "kg", unitSize: 0.25, attributes: { forma: "macinata", require: ["macinata"], exclude: ["capsule|boabe|instant|filtru|lapte pentru|frisca"] } },
+  // Decaf is not a substitute for coffee for the person buying it, so it leaves this class and
+  // gets its own. It was silently inside: the rule is require ["macinata"], which every
+  // "Cafea macinata decafeinizata …" satisfies.
+  { slug: "cafea-macinata-250g", label: "Cafea măcinată, 250 g", unit: "kg", unitSize: 0.25, attributes: { forma: "macinata", require: ["macinata"], exclude: ["decofeinizat|decafeinizat|capsule|boabe|instant|filtru|lapte pentru|frisca"] } },
   { slug: "apa-plata-2l", label: "Apă plată, 2 L", unit: "l", unitSize: 2, attributes: { tip: "plata", require: ["plata"], exclude: ["gura|colonie|parfum|toaleta|termala|micelara|carbogazoasa|minerala carbogazificata"] } },
   { slug: "bere-blonda-500ml", label: "Bere blondă, 500 ml", unit: "l", unitSize: 0.5, attributes: { tip: "blonda", require: ["blonda"], exclude: ["fara alcool|bruna|radler"] } },
 
@@ -132,9 +140,47 @@ const CLASSES: Klass[] = [
   { slug: "hartie-igienica-8", label: "Hârtie igienică, 8 role", unit: "buc", unitSize: 8, attributes: { straturi: ["2", "3"], require: ["igienica"], exclude: ["umeda|servetele|prosoape|bucatarie"] } },
   { slug: "detergent-rufe-3l", label: "Detergent lichid rufe, 3 L", unit: "l", unitSize: 3, attributes: { forma: "lichid", require: ["rufe"], exclude: ["vase|geam|pardoseli|wc|baie|universal|masina de spalat vase"] } },
   ...PRODUCE_CLASSES,
+  ...PRIVATE_LABEL_CLASSES,
 ];
 
 async function main() {
+  // ── A CLASS THAT DECLARES STRICT RULES MUST DECLARE ITS WINDOW.
+  //
+  // `strictRules` replaces the assigner's ±26% size tolerance with the class's own min/max. A
+  // strict class that forgot them would silently admit any size — the tolerance is gone and
+  // nothing took its place. So it is refused here, loudly, before anything is written.
+  const bad = CLASSES.filter((c) => {
+    const a = c.attributes as Record<string, unknown>;
+    return a.strictRules === true && (typeof a.minUnitSize !== "number" || typeof a.maxUnitSize !== "number");
+  });
+  if (bad.length > 0) {
+    console.error(`REFUSING TO SEED. ${bad.length} class(es) set strictRules without an explicit size window:`);
+    for (const c of bad) console.error(`  ${c.slug}`);
+    process.exit(1);
+  }
+
+  // ── A SEEDER THAT ADDS MUST ALSO BE ABLE TO REMOVE. (CLAUDE.md)
+  //
+  // `mazare-kg` and `porumb-kg` were deleted from produce-classes because every live member was
+  // a tin or a bag of popcorn. Deleting the DEFINITION does nothing on its own: the row stays in
+  // the table, its 41 products stay assigned to it, and the substitution engine keeps offering
+  // tinned peas as fresh ones. The class list in code is the source of truth, so anything not
+  // in it is removed here — with its assignments cleared FIRST, because the FK forbids deleting
+  // a class that still has members and, more to the point, a dangling assignment is the bug.
+  const known = new Set(CLASSES.map((c) => c.slug));
+  const orphans = (await prisma.equivalenceClass.findMany({ select: { id: true, slug: true } }))
+    .filter((c) => !known.has(c.slug));
+  if (orphans.length > 0) {
+    const ids = orphans.map((o) => o.id);
+    const cleared = await prisma.product.updateMany({
+      where: { equivalenceClassId: { in: ids } },
+      data: { equivalenceClassId: null },
+    });
+    await prisma.equivalenceClass.deleteMany({ where: { id: { in: ids } } });
+    console.log(`Removed ${orphans.length} class(es) no longer defined in code, unassigning ${cleared.count} product(s):`);
+    for (const o of orphans) console.log(`  ${o.slug}`);
+  }
+
   let created = 0;
   let updated = 0;
   for (const c of CLASSES) {

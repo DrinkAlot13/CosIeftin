@@ -51,6 +51,25 @@ export type ClassRules = {
    * "Mărar" is DRIED seasoning, and the name says nothing to tell them apart. Weight does.
    */
   minUnitSize?: number;
+  /**
+   * MEMBERSHIP IS DECIDED BY THESE RULES ALONE — no label-overlap floor, and no percentage
+   * size tolerance.
+   *
+   * The assigner normally requires a product's name to share 34% of its tokens with the class
+   * LABEL. That floor is a proxy, and a reasonable one for a class with no discriminators of
+   * its own. But it punishes a correct member for carrying extra words: "Zahăr brun, 500 g"
+   * against "Zahar brun Diamant din trestie de zahar, usor aromat 500g" scores 0.33 and would
+   * be rejected — for naming the producer.
+   *
+   * A class carrying an explicit require/exclude list and an explicit size window has already
+   * answered the membership question completely. Re-asking it with token overlap can only
+   * produce a false NO.
+   *
+   * Opt-in, so the classes written before this existed keep the behaviour they were tuned
+   * against. With it set, `minUnitSize`/`maxUnitSize` become the size gate and they are
+   * REQUIRED — an explicit window, because a tolerance percentage hides what it admits.
+   */
+  strictRules?: boolean;
 };
 
 /** Does this product name satisfy the class's membership rules? */
@@ -92,6 +111,7 @@ export function rulesFromAttributes(attributes: string | null | undefined): Clas
       anySize: parsed.anySize === true,
       maxUnitSize: typeof parsed.maxUnitSize === "number" ? parsed.maxUnitSize : undefined,
       minUnitSize: typeof parsed.minUnitSize === "number" ? parsed.minUnitSize : undefined,
+      strictRules: parsed.strictRules === true,
     };
   } catch {
     return {};

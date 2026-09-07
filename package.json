@@ -123,7 +123,12 @@
     "project:addnew": "tsx scripts/project-addnew.ts",
     "measure:comparability": "tsx scripts/measure-comparability.ts",
     "audit:mutually-distinct": "tsx scripts/audit-mutually-distinct.ts",
-    "discover:stores": "tsx scripts/discover-platform-stores.ts"
+    "discover:stores": "tsx scripts/discover-platform-stores.ts",
+    "audit:private-label": "tsx scripts/audit-private-label.ts",
+    "explore:head": "tsx scripts/explore-head.ts",
+    "audit:private-label-classes": "tsx scripts/audit-private-label-classes.ts",
+    "explore:coverage": "tsx scripts/explore-class-coverage.ts",
+    "explore:attribution": "tsx scripts/explore-class-attribution.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
