@@ -13,6 +13,7 @@
 
 import Link from "next/link";
 import { ProductCard } from "@/components/ProductCard";
+import { Pagination } from "@/components/Pagination";
 import { searchProducts } from "@/lib/queries";
 import { isKnownBrand } from "@/lib/search/brands";
 
@@ -29,9 +30,13 @@ function joinRo(terms: string[]): string {
   return `${terms.slice(0, -1).join(", ")} și ${terms[terms.length - 1]}`;
 }
 
-export default async function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
+export default async function SearchPage({ searchParams }: { searchParams: { q?: string; page?: string } }) {
   const q = (searchParams.q ?? "").trim();
-  const { kind, missing, corrections, products } = await searchProducts(q);
+  const page = Math.max(1, Number(searchParams.page ?? 1) || 1);
+  // `total` is the number of MATCHES, from ranking the whole catalog. `products` is one page of
+  // them. The heading reports the total, never the page size — a search that says "(120)"
+  // because 120 is the page length tells the shopper nothing about what was found.
+  const { kind, missing, corrections, products, total, page: current, pages } = await searchProducts(q, page);
   const missName = joinRo(missing);
 
   return (
@@ -41,8 +46,8 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
           {q ? (
             <>
               {kind === "brand-miss" ? "Căutare pentru" : "Rezultate pentru"} „{q}”
-              {kind !== "brand-miss" && products.length > 0 && (
-                <span className="muted" style={{ fontWeight: 400, fontSize: 16 }}> ({products.length})</span>
+              {kind !== "brand-miss" && total > 0 && (
+                <span className="muted" style={{ fontWeight: 400, fontSize: 16 }}> ({total.toLocaleString("ro-RO")})</span>
               )}
             </>
           ) : (
@@ -89,7 +94,7 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
             <>
               <h2 style={{ fontSize: 17, margin: "22px 0 10px" }}>
                 Alternative din aceeași categorie{" "}
-                <span className="muted" style={{ fontWeight: 400, fontSize: 15 }}>({products.length})</span>
+                <span className="muted" style={{ fontWeight: 400, fontSize: 15 }}>({total.toLocaleString("ro-RO")})</span>
               </h2>
               <p className="muted" style={{ fontSize: 13.5, margin: "0 0 14px" }}>
                 Acestea <b>nu sunt {missName}</b>. Sunt produse asemănătoare, de la alte mărci.
@@ -97,6 +102,7 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
               <div className="grid-products">
                 {products.map((p) => <ProductCard key={p.id} p={p} />)}
               </div>
+              <Pagination page={current} pages={pages} total={total} basePath="/search" params={{ q }} />
             </>
           ) : (
             <p className="muted" style={{ marginTop: 16 }}>
@@ -108,9 +114,12 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
       ) : products.length === 0 ? (
         <div className="empty">Niciun rezultat pentru „{q}”. Încearcă alt termen.</div>
       ) : (
-        <div className="grid-products">
-          {products.map((p) => <ProductCard key={p.id} p={p} />)}
-        </div>
+        <>
+          <div className="grid-products">
+            {products.map((p) => <ProductCard key={p.id} p={p} />)}
+          </div>
+          <Pagination page={current} pages={pages} total={total} basePath="/search" params={{ q }} />
+        </>
       )}
       <div style={{ height: 32 }} />
     </div>

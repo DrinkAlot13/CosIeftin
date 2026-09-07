@@ -17,6 +17,39 @@ const activeInclude = {
 } as const;
 
 /**
+ * EVERY COLUMN A PRODUCT CARD USES, AND NOT ONE MORE.
+ *
+ * `activeInclude` above selects whole Offer rows, because `include` has no other setting. Whole
+ * Offer rows carry `rawSourceBlob` — the verbatim source record we keep so a parser change can
+ * be checked against history. It averages 1,413 bytes and totals 71 MB, which is 41% of the
+ * database, and no card has ever shown a byte of it.
+ *
+ * Measured: /search hydrated 25,676 offers and pulled roughly 34.6 MB of blob through the ORM
+ * into JavaScript objects to render product tiles; /oferte pulled about 47.7 MB. That is not a
+ * query-planning problem and no index touches it — it is asking for columns nobody reads.
+ *
+ * These are the fields `isCurrent`, `summarize`, `decorate` and `<ProductCard>` actually use.
+ * `merchantId` is here because search counts distinct shops; the merchant's NAME is not,
+ * because a card does not show it. Anything needing more (the item page's offer table) says so
+ * at its own call site.
+ */
+const cardOfferSelect = {
+  where: { merchant: { active: true } },
+  select: {
+    price: true, priceBani: true, pricePerUnit: true,
+    availability: true, isStale: true, flagged: true,
+    priceSource: true, lastObservedAt: true, merchantId: true,
+    tiers: { select: { minQuantity: true, unitPriceBani: true, discountBp: true }, orderBy: { minQuantity: "asc" } },
+  },
+} as const;
+
+/** The product columns a card renders. `nameNorm`, `ean`, `rawSourceBlob`'s siblings: not here. */
+const cardProductSelect = {
+  id: true, slug: true, name: true, brand: true, unit: true, unitSize: true,
+  image: true, section: true, categoryId: true, dropPct: true,
+} as const;
+
+/**
  * What "a price we can stand behind" means, expressed as a Prisma filter.
  *
  * The SAME rule as `isCurrent` in lib/pricing, pushed down to the database so a page does not
@@ -53,29 +86,58 @@ export async function getStoreList() {
 }
 export type StoreListItem = Awaited<ReturnType<typeof getStoreList>>[number];
 
-/** Deals hub: grocery products with the biggest price gap between stores (buy-here-save-X),
- *  plus real price drops as history accumulates. */
+/**
+ * Deals hub: the biggest between-store gaps and the real price drops.
+ *
+ * THIS USED TO LOAD THE WHOLE CATALOG. Measured: 25,610 products, 35,365 offers and 53,839
+ * price-history rows — 114,814 rows, roughly 48 MB of it `rawSourceBlob` — to render sixty
+ * cards, at 6.4 seconds a request. It is the same bug the homepage had and the same fix: the
+ * two things it needed the whole catalog for (the spread, the drop) are now columns computed
+ * once a night by `npm run compute:home`.
+ *
+ * `dealScore` is max(spread, drop) precisely so the sort is expressible in SQL. Ordering by the
+ * greater of two columns in JavaScript means loading every row first, which is the bug.
+ *
+ * The offers are still loaded for the sixty that survive, because `summary.savings` is the
+ * number on the card and it must be the live one, not a nightly snapshot of it. Sixty products'
+ * offers is about 130 rows.
+ */
 export async function getDeals(limit = 60) {
-  const products = await prisma.product.findMany({
-    where: { section: "grocery", offers: { some: {} } },
-    include: { offers: { where: { merchant: { active: true } }, include: { merchant: true, history: { orderBy: { recordedAt: "asc" } } } }, category: true },
+  const rows = await prisma.product.findMany({
+    where: {
+      section: "grocery",
+      // Two shops or it is not a comparison — the rule was a JavaScript filter over everything,
+      // and it is now part of the query.
+      liveOfferCount: { gte: 2 },
+      dealScore: { gte: 8 },
+    },
+    select: { ...cardProductSelect, spreadPct: true, dealScore: true,
+      offers: { where: cardOfferSelect.where, select: { ...cardOfferSelect.select, merchant: { select: { name: true } } } } },
+    orderBy: { dealScore: "desc" },
+    // Over-fetch a little: `summarize` re-derives the headline from the offers as they are RIGHT
+    // NOW, so a product whose last live price aged out since the nightly falls away here.
+    take: limit * 2,
   });
-  const rows = products
+
+  return rows
     .map((p) => {
       const summary = summarize(p.offers);
       const inStock = p.offers.filter((o) => isCurrent(o as never));
       const pool = inStock.length > 0 ? inStock : p.offers;
       const unitLowest = pool.length > 0 ? Math.min(...pool.map((o) => o.pricePerUnit || 0)) : 0;
-      const drop = dropPercent(buildDailyLowSeries(p.offers));
-      const savingsPct = summary.highest > 0 ? (summary.savings / summary.highest) * 100 : 0;
-      // Integer comparison: exact, and it exercises the column the migration added.
       const cheapest = [...pool].sort((a, b) => baniOf(a) - baniOf(b))[0];
-      return { ...p, summary, unitLowest, drop, savingsPct, cheapestStore: cheapest?.merchant.name ?? null, score: Math.max(savingsPct, drop) };
+      return {
+        ...p,
+        summary,
+        unitLowest,
+        drop: p.dropPct ?? 0,
+        savingsPct: summary.highest > 0 ? (summary.savings / summary.highest) * 100 : 0,
+        cheapestStore: cheapest?.merchant.name ?? null,
+        score: p.dealScore ?? 0,
+      };
     })
-    .filter((p) => p.summary.offerCount >= 2 && p.score >= 8)
-    .sort((a, b) => b.score - a.score)
+    .filter((p) => p.summary.offerCount >= 2)
     .slice(0, limit);
-  return rows;
 }
 export type DealProduct = Awaited<ReturnType<typeof getDeals>>[number];
 
@@ -128,7 +190,7 @@ export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") 
   if (!category || category.section !== "grocery") return null; // alcohol lives on /alcool
   const products = await prisma.product.findMany({
     where: { categoryId: category.id, section: "grocery" },
-    include: { offers: activeInclude, category: true },
+    select: { ...cardProductSelect, offers: cardOfferSelect },
   });
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
   decorated.sort((a, b) => {
@@ -146,10 +208,10 @@ export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") 
  * every way except that nothing has managed to classify them, and showing them through a
  * different code path would be how their prices quietly start behaving differently.
  */
-export async function getUncategorisedPage(sort: SortKey = "unit-asc") {
+export async function getUncategorisedPage(sort: SortKey = "unit-asc", page = 1, perPage = 120) {
   const products = await prisma.product.findMany({
     where: { categoryId: null, section: "grocery" },
-    include: { offers: activeInclude, category: true },
+    select: { ...cardProductSelect, offers: cardOfferSelect },
   });
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
   decorated.sort((a, b) => {
@@ -157,7 +219,14 @@ export async function getUncategorisedPage(sort: SortKey = "unit-asc") {
     if (sort === "price-asc") return a.summary.lowestBani - b.summary.lowestBani;
     return a.unitLowest - b.unitLowest;
   });
-  return { products: decorated };
+  // PAGINATED, because the page rendered all 3,729 of them: 4.4 MB of HTML and 32,709 DOM
+  // nodes, 2.7 seconds to become usable. The TOTAL stays exact and is what the page reports —
+  // the point of this listing is that the tail is visible, so its size must not be rounded off
+  // by pagination.
+  const total = decorated.length;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const current = Math.min(Math.max(1, page), pages);
+  return { products: decorated.slice((current - 1) * perPage, current * perPage), total, page: current, pages, perPage };
 }
 
 export async function getItemPage(slug: string, showDeliveryPlatform = false) {
@@ -330,34 +399,93 @@ export type ClassEquivalents = Awaited<ReturnType<typeof getClassEquivalents>>;
  * The outcome is structured, not an array: search must be able to say "we do not stock illy"
  * rather than answering with the category. See lib/search/search.ts.
  */
-export async function searchProducts(query: string) {
-  const q = query.trim();
-  const showable = { ...currentOfferWhere(), merchant: { active: true } } as const;
-  // One return path, so the result type is inferred once. An early `return []` for the empty
-  // query used to widen this to a union and every caller had to narrow it.
-  const products = q
-    ? await prisma.product.findMany({
-        where: { section: "grocery", offers: { some: showable } },
-        include: { offers: activeInclude, category: true },
-      })
-    : [];
+/**
+ * Search, in two phases: rank against everything, hydrate only what is shown.
+ *
+ * WHY IT HAS TO SEE THE WHOLE CATALOG. `searchCatalog` answers "we do not stock this" by
+ * building the catalog's vocabulary and brand set — that is the honesty guarantee the illy
+ * case exists for, and narrowing the SQL would quietly turn "we have no illy" back into
+ * "here are 208 things that are not illy". So phase one still loads every grocery product
+ * with a live price.
+ *
+ * WHAT IT DOES NOT NEED IS EVERY COLUMN. It used to load whole Product rows WITH their whole
+ * Offer rows: 17,919 products, 25,676 offers, and roughly 34.6 MB of `rawSourceBlob` that
+ * ranking never reads and a card never shows. 4.8 seconds a query. Ranking uses four fields.
+ *
+ * Phase two then hydrates one page of results with the card columns. The COUNT comes from
+ * phase one, so it is the true number of matches and not the size of the page.
+ */
+const SEARCH_PER_PAGE = 120;
 
-  const searchable = products.map((p) => ({
-    ...p,
-    categoryName: p.category?.name ?? null,
-    merchantCount: new Set(p.offers.filter((o) => isCurrent(o as never)).map((o) => o.merchantId)).size,
+export async function searchProducts(query: string, page = 1, perPage = SEARCH_PER_PAGE) {
+  const q = query.trim();
+  const live = currentOfferWhere();
+
+  // ── PHASE 1: the whole catalog, four columns of it.
+  //
+  // ONE RETURN PATH, so the result type is inferred once. An early `return` for the empty query
+  // used to widen this into a union and every caller had to narrow it; the empty case skips the
+  // work instead of leaving through a different door.
+  const [light, offerCounts, cats] = q
+    ? await Promise.all([
+        prisma.product.findMany({
+          where: { section: "grocery", offers: { some: live } },
+          select: { id: true, name: true, brand: true, categoryId: true },
+        }),
+        // Offer is unique on (productId, merchantId), so counting live offers per product IS
+        // the distinct-merchant count. One grouped query instead of hydrating 25,676 offer rows.
+        prisma.offer.groupBy({ by: ["productId"], where: { ...live, product: { section: "grocery" } }, _count: { _all: true } }),
+        prisma.category.findMany({ where: { section: "grocery" }, select: { id: true, name: true } }),
+      ])
+    : [[], [], []] as [
+        { id: number; name: string; brand: string | null; categoryId: number | null }[],
+        { productId: number; _count: { _all: number } }[],
+        { id: number; name: string }[],
+      ];
+
+  const catName = new Map(cats.map((c) => [c.id, c.name]));
+  const merchants = new Map(offerCounts.map((r) => [r.productId, r._count._all]));
+  const searchable = light.map((p) => ({
+    id: p.id,
+    name: p.name,
+    brand: p.brand,
+    categoryName: p.categoryId == null ? null : catName.get(p.categoryId) ?? null,
+    merchantCount: merchants.get(p.id) ?? 0,
   }));
 
   const outcome = searchCatalog(q, searchable);
-  const decorated = decorate(outcome.results.map((r) => r.item)).filter((p) => p.summary.offerCount > 0);
-  return { kind: outcome.kind, missing: outcome.missing, corrections: outcome.corrections, products: decorated };
+  const ranked = outcome.results.map((r) => r.item.id);
+  const total = ranked.length;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const current = Math.min(Math.max(1, page), pages);
+  const pageIds = ranked.slice((current - 1) * perPage, current * perPage);
+
+  // ── PHASE 2: card columns, for this page only, in rank order.
+  const hydrated = pageIds.length === 0 ? [] : await prisma.product.findMany({
+    where: { id: { in: pageIds } },
+    select: { ...cardProductSelect, offers: cardOfferSelect },
+  });
+  const byId = new Map(hydrated.map((h) => [h.id, h]));
+  const inOrder = pageIds.map((id) => byId.get(id)).filter((x): x is NonNullable<typeof x> => x != null);
+
+  return {
+    kind: outcome.kind,
+    missing: outcome.missing,
+    corrections: outcome.corrections,
+    products: decorate(inOrder).filter((p) => p.summary.offerCount > 0),
+    total,
+    page: current,
+    pages,
+  };
 }
 
 export type SearchResult = Awaited<ReturnType<typeof searchProducts>>;
 export type ProductCardData = SearchResult["products"][number];
 
 export async function suggestProducts(query: string, limit = 6) {
-  const { products } = await searchProducts(query);
+  // One page of `limit` results, not the whole ranking hydrated and then thrown away — this is
+  // called on every keystroke of the header autocomplete.
+  const { products } = await searchProducts(query, 1, limit);
   return products.slice(0, limit).map((p) => ({ slug: p.slug, name: p.name, brand: p.brand, lowest: p.summary.lowest }));
 }
 
@@ -377,15 +505,17 @@ export async function suggestProducts(query: string, limit = 6) {
 export async function getHomeSections() {
   const live = currentOfferWhere();
   const shelf = {
-    // No history: neither shelf renders a chart. That single omission is most of the win.
-    offers: { where: { merchant: { active: true } }, include: { merchant: true } },
-    category: true,
+    // No history: neither shelf renders a chart. That single omission was most of the win, and
+    // dropping `merchant: true` and the rest of the Offer row is the rest of it — a card shows
+    // a price and a shop count, never the merchant record or `rawSourceBlob`.
+    ...cardProductSelect,
+    offers: cardOfferSelect,
   } as const;
 
   const [featuredRows, dropRows] = await Promise.all([
     prisma.product.findMany({
       where: { section: "grocery", offers: { some: live } },
-      include: shelf,
+      select: shelf,
       orderBy: { id: "asc" },
       // Over-fetch: the offers included below are unfiltered (the card shows stale rows greyed),
       // so a product can still fall out when summarize finds nothing current.
@@ -393,7 +523,7 @@ export async function getHomeSections() {
     }),
     prisma.product.findMany({
       where: { section: "grocery", dropPct: { gt: 2 }, offers: { some: live } },
-      include: shelf,
+      select: shelf,
       orderBy: { dropPct: "desc" },
       take: 24, // over-fetch: the 2+ merchant rule below is not expressible in this query
     }),
@@ -436,10 +566,23 @@ export async function getBasketProducts(slugs: string[]) {
  * had switched OFF still counted as a store, and a price last seen months ago still counted as
  * a price. Those are not lies a visitor can check, which is exactly why they have to be right.
  */
-const liveOffer = {
+/**
+ * A FUNCTION, NOT A CONSTANT — and that is the whole point of this note.
+ *
+ * This was `const liveOffer = { ...currentOfferWhere(), … }` at module scope, so
+ * `currentOfferWhere()` ran ONCE, when the module was first imported, and its
+ * `lastObservedAt >= now − 14 days` was pinned to the moment the server booted. A server up for
+ * a week counted prices up to 21 days old as live, and the longer it stayed up the further the
+ * window drifted. Every one of the three homepage counters used it.
+ *
+ * Nothing about that is visible: the numbers stay plausible and simply get slowly wronger. It
+ * is the shape this project keeps meeting — a value captured once and read as if it were
+ * current — and the fix is the same as always: ask at the time you need the answer.
+ */
+const liveOffer = () => ({
   ...currentOfferWhere(),
   product: { section: "grocery" },
-} as const;
+}) as const;
 
 /**
  * ONE FILTER FOR ALL THREE COUNTERS.
@@ -455,10 +598,11 @@ const liveOffer = {
  * same — one definition, used by all three.
  */
 export async function countStats() {
+  const live = liveOffer(); // evaluated per call — see the note on liveOffer
   const [products, offers, chains] = await Promise.all([
-    prisma.product.count({ where: { section: "grocery", offers: { some: liveOffer } } }),
-    prisma.offer.count({ where: liveOffer }),
-    prisma.merchant.count({ where: { active: true, offers: { some: liveOffer } } }),
+    prisma.product.count({ where: { section: "grocery", offers: { some: live } } }),
+    prisma.offer.count({ where: live }),
+    prisma.merchant.count({ where: { active: true, offers: { some: live } } }),
   ]);
   return { products, offers, chains };
 }

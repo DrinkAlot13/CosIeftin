@@ -405,8 +405,23 @@ img { max-width: 100%; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .sortlinks { display: flex; gap: 6px; align-items: center; font-size: 13px; }
-.sortlinks a { padding: 5px 10px; border-radius: 8px; color: var(--muted); }
-.sortlinks a.active { background: var(--primary-050); color: var(--primary); font-weight: 600; }
+/* The sort control is a set of buttons now, not links: sorting happens in the browser so the
+   category page can be generated once instead of per visitor. Both selectors are kept — a
+   couple of listings still sort server-side. */
+.sortlinks a,
+.sortlinks button.linklike { padding: 5px 10px; border-radius: 8px; color: var(--muted); }
+.sortlinks a.active,
+.sortlinks button.linklike.active { background: var(--primary-050); color: var(--primary); font-weight: 600; }
+.sortlinks button.linklike:hover { text-decoration: none; background: var(--primary-050); }
+
+/* Pagination */
+.pagination .page-link {
+  display: inline-block; min-width: 34px; text-align: center;
+  padding: 6px 10px; border-radius: 8px; font-size: 13.5px;
+  border: 1px solid var(--border); color: var(--text); background: var(--surface);
+}
+.pagination a.page-link:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+.pagination .page-current { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
 
 .price-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .price-filter input[type="number"] { width: 110px; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; outline: none; }

@@ -103,6 +103,30 @@ model Product {
   dropPct     Float?
   dropComputedAt DateTime?
 
+  /// ── THE REST OF THE PRECOMPUTED SHELF SIGNALS. Same reason as dropPct above, same job.
+  ///
+  /// /oferte was still doing what the homepage used to: EVERY grocery product, EVERY offer and
+  /// EVERY price-history row - 114,814 rows and 6.4 seconds to render sixty cards. It needed
+  /// the between-store spread, which needs every offer, and the drop, which needs history.
+  ///
+  /// Both are answers that change once a night, so they are computed once a night.
+  ///
+  /// NULL MEANS NOT COMPUTED, and is deliberately distinct from 0 ("computed, no spread").
+  /// A product that loses its last live offer has these CLEARED rather than left at their old
+  /// value - a stale 40% spread on a product nobody sells any more is a number presented as an
+  /// observation when nothing was observed.
+
+  /// Between-store spread as a percentage of the highest live price. 0 when a product has one
+  /// live offer: one shop is not a comparison.
+  spreadPct   Float?
+  /// max(spreadPct, dropPct) - the single column /oferte orders by. Two columns cannot be
+  /// sorted by their maximum in SQL, and sorting in JavaScript means loading everything first,
+  /// which is the bug being fixed.
+  dealScore   Float?
+  /// How many merchants show a price a shopper can act on RIGHT NOW. Offer is unique on
+  /// (productId, merchantId), so this is both the offer count and the merchant count.
+  liveOfferCount Int?
+
   specs       ProductSpec[]
   createdAt  DateTime          @default(now())
 
@@ -110,6 +134,11 @@ model Product {
   @@index([nameNorm])
   @@index([equivalenceClassId])
   @@index([section, dropPct])
+  /// Every category page filters on this and there was no index, so SQLite fell back to
+  /// Product_section_dropPct_idx - which selects 59.5% of the table. An index in name only.
+  @@index([categoryId])
+  /// The /oferte sort key.
+  @@index([section, dealScore])
 }
 
 /// One chain's price for one item.

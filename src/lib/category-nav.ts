@@ -13,9 +13,11 @@
 // Delivery-platform rows are excluded by that filter, so a Glovo-only product is counted
 // nowhere — which is correct, because it renders nowhere.
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "./db";
 import { currentOfferWhere } from "./queries";
 import { isCatchAll } from "./category/tree";
+import { CATALOG_TAG } from "./cache-tags";
 
 export type NavLeaf = {
   slug: string;
@@ -48,7 +50,7 @@ export type CategoryNav = {
  * end that costs a click — and after the Bebeluși merge there should be none, but a leaf can
  * empty out again on any night when a merchant stops carrying something.
  */
-export async function getCategoryNav(section = "grocery"): Promise<CategoryNav> {
+async function buildCategoryNav(section: string): Promise<CategoryNav> {
   const live = currentOfferWhere();
 
   const cats = await prisma.category.findMany({
@@ -117,3 +119,22 @@ export async function getCategoryNav(section = "grocery"): Promise<CategoryNav> 
   // From the same single pass, so these cannot drift from the per-category numbers above.
   return { departments, uncategorised: uncategorisedProducts.size, total: allProducts.size };
 }
+
+/**
+ * The nav, cached until the prices change.
+ *
+ * It is the same on every page of a section and it moves once a night, but it was rebuilt on
+ * every single page load — one pass over all 20,348 live grocery offers, about 500 ms, on top
+ * of a category page's own 90 ms of work. Cached by tag rather than by timer, so `npm run
+ * revalidate` at the end of the nightly is what refreshes it.
+ *
+ * THE COUNT STILL COMES FROM THE SAME PLACE AS THE LIST. Caching does not introduce a second
+ * definition — `buildCategoryNav` is unchanged and still reduces to `currentOfferWhere()`. What
+ * it does introduce is a window in which the cached count could be older than the page it
+ * heads, which is why the invalidation is tied to the scrape and not left to a timer.
+ */
+export const getCategoryNav = unstable_cache(
+  buildCategoryNav,
+  ["category-nav"],
+  { tags: [CATALOG_TAG], revalidate: 86400 },
+);

@@ -10,7 +10,7 @@
     "test": "tsx tests/run.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run verify:code && npm run audit:db && npm run census",
-    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover && npm run audit:search-quality && npm run verify:offline",
+    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover && npm run audit:search-quality && npm run verify:offline && npm run verify:perf",
     "postinstall": "prisma generate",
     "db:reset": "prisma db push --force-reset --skip-generate",
     "seed-catalog": "tsx scripts/seed-catalog.ts",
@@ -40,7 +40,7 @@
     "setup": "prisma db push --force-reset --skip-generate && tsx scripts/seed-catalog.ts && tsx scripts/seed-admin.ts",
     "refresh": "npm run setup && npm run scrape:all",
     "nightly": "tsx scripts/nightly.ts",
-    "nightly:steps": "npm run backup && npm run scrape:all && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run compute:home && npm run notify:alerts",
+    "nightly:steps": "npm run backup && npm run scrape:all && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run compute:home && npm run revalidate && npm run notify:alerts",
     "soak:log": "tsx scripts/soak-log.ts",
     "soak:report": "tsx scripts/soak-report.ts",
     "backfill:namenorm": "tsx scripts/backfill-namenorm.ts",
@@ -110,7 +110,10 @@
     "confirm:night-one": "tsx scripts/confirm-night-one.ts",
     "verify:offline": "tsx scripts/verify-offline.ts",
     "scrape:platform": "tsx scripts/scrape-platform.ts",
-    "audit:markup": "tsx scripts/audit-platform-markup.ts"
+    "audit:markup": "tsx scripts/audit-platform-markup.ts",
+    "revalidate": "tsx scripts/revalidate.ts",
+    "verify:perf": "tsx scripts/verify-perf.ts",
+    "verify:counters": "tsx scripts/verify-counters.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

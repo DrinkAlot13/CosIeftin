@@ -11,6 +11,7 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/ProductCard";
 import { CategorySidebar } from "@/components/CategorySidebar";
+import { Pagination } from "@/components/Pagination";
 import { getCategoryNav } from "@/lib/category-nav";
 import { getUncategorisedPage, type SortKey } from "@/lib/queries";
 
@@ -26,11 +27,12 @@ const SORTS: { key: SortKey; label: string }[] = [
 export default async function UncategorisedPage({
   searchParams,
 }: {
-  searchParams: { sort?: string };
+  searchParams: { sort?: string; page?: string };
 }) {
   const sort = (searchParams.sort as SortKey) || "unit-asc";
-  const [{ products }, nav] = await Promise.all([
-    getUncategorisedPage(sort),
+  const page = Math.max(1, Number(searchParams.page ?? 1) || 1);
+  const [{ products, total, page: current, pages }, nav] = await Promise.all([
+    getUncategorisedPage(sort, page),
     getCategoryNav("grocery"),
   ]);
 
@@ -51,7 +53,7 @@ export default async function UncategorisedPage({
           </div>
 
           <p className="muted" style={{ maxWidth: 680, marginTop: -4 }}>
-            {products.length.toLocaleString("ro-RO")} produse cu preț azi pe care nu le-am putut
+            {total.toLocaleString("ro-RO")} produse cu preț azi pe care nu le-am putut
             încadra într-o categorie. Prețurile sunt la fel de bune ca oriunde altundeva pe site
             — doar clasificarea lipsește. Le arătăm aici ca să nu dispară din vedere.
           </p>
@@ -59,7 +61,7 @@ export default async function UncategorisedPage({
           {/* Same toolbar markup as the category page — `.sortlinks` is the class that exists;
               a bespoke `.sorts` rendered the three links with no spacing between them. */}
           <div className="toolbar">
-            <span className="muted">{products.length} produse</span>
+            <span className="muted">{total.toLocaleString("ro-RO")} produse</span>
             <div className="sortlinks">
               <span className="muted">Sortează:</span>
               {SORTS.map((s) => (
@@ -73,11 +75,14 @@ export default async function UncategorisedPage({
           {products.length === 0 ? (
             <p className="muted" style={{ marginTop: 24 }}>Nimic aici acum.</p>
           ) : (
-            <div className="grid-products" style={{ marginTop: 18 }}>
-              {products.map((p) => (
-                <ProductCard key={p.id} p={p} />
-              ))}
-            </div>
+            <>
+              <div className="grid-products" style={{ marginTop: 18 }}>
+                {products.map((p) => (
+                  <ProductCard key={p.id} p={p} />
+                ))}
+              </div>
+              <Pagination page={current} pages={pages} total={total} basePath="/necategorisate" params={{ sort }} />
+            </>
           )}
         </div>
       </div>

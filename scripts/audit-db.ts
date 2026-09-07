@@ -933,6 +933,64 @@ async function auditDerivedDataIsFresh() {
   const onWithheld = await prisma.offer.count({ where: { flagged: true, tiers: { some: {} } } });
   record("Tiers", "no bulk tier survives on a withheld offer",
     onWithheld > 0 ? [`${onWithheld} withheld offer(s) still carry bulk tiers`] : []);
+
+  // ── PRECOMPUTED SHELF SIGNALS (Product.dropPct / spreadPct / dealScore / liveOfferCount).
+  //
+  // These back /oferte and the homepage's drop shelf, and they are written by
+  // `npm run compute:home` at the end of the nightly. compute:home may not verify its own work
+  // — a script that reports its own success is reporting that it agrees with itself — so the
+  // invariants live here, in a file that imports nothing but PrismaClient.
+  //
+  // The one that matters most is the LAST: a product with no live offer must have these
+  // CLEARED. A stale 40% spread on something nobody sells any more is exactly this project's
+  // recurring defect, a value read as an observation when nothing was observed.
+
+  const negative = await prisma.product.count({
+    where: { OR: [{ spreadPct: { lt: 0 } }, { dropPct: { lt: 0 } }, { dealScore: { lt: 0 } }, { liveOfferCount: { lt: 0 } }] },
+  });
+  record("Derived", "no precomputed shelf signal is negative",
+    negative > 0 ? [`${negative} product(s) carry a negative dropPct/spreadPct/dealScore/liveOfferCount`] : []);
+
+  const over100 = await prisma.product.count({ where: { OR: [{ spreadPct: { gt: 100 } }, { dropPct: { gt: 100 } }] } });
+  record("Derived", "no spread or drop exceeds 100%",
+    over100 > 0 ? [`${over100} product(s) claim a spread or drop over 100%`] : []);
+
+  // dealScore is max(spreadPct, dropPct) by construction. If it is ever LESS than either, the
+  // column has drifted from the thing it summarises and /oferte is sorting by a stale number.
+  const drifted = await prisma.$queryRawUnsafe<{ c: bigint | number }[]>(
+    `SELECT COUNT(*) AS c FROM Product
+      WHERE dealScore IS NOT NULL
+        AND dealScore < MAX(COALESCE(spreadPct, 0), COALESCE(dropPct, 0)) - 0.001`,
+  );
+  const driftCount = Number(drifted[0]?.c ?? 0);
+  record("Derived", "dealScore equals max(spreadPct, dropPct)",
+    driftCount > 0 ? [`${driftCount} product(s) have a dealScore below the columns it summarises`] : []);
+
+  // A spread needs two prices to be a spread.
+  const spreadWithoutPeers = await prisma.product.count({
+    where: { spreadPct: { gt: 0 }, liveOfferCount: { lt: 2 } },
+  });
+  record("Derived", "no product claims a between-store spread with under two live offers",
+    spreadWithoutPeers > 0
+      ? [`${spreadWithoutPeers} product(s) carry a spread while fewer than two shops price them`]
+      : []);
+
+  // THE ONE THAT MATTERS. Signals must be cleared when the product loses its last live offer.
+  // Scoped to the section compute:home computes, and only to rows it could have written —
+  // `dropComputedAt IS NOT NULL` — because a row never touched by the job is UNKNOWN, not zero.
+  const stalePositive = await prisma.product.findMany({
+    where: {
+      section: "grocery",
+      dropComputedAt: { not: null },
+      liveOfferCount: { gte: 1 },
+      offers: { none: { isStale: false, merchant: { active: true } } },
+    },
+    select: { id: true, name: true, liveOfferCount: true },
+    take: 20,
+  });
+  record("Derived", "a product with no live offer carries no live-offer count",
+    stalePositive.map((p) => `#${p.id} ${p.name.slice(0, 44)} claims ${p.liveOfferCount} live offer(s) and has none`),
+    "cleared by the sweep at the end of compute:home; a stale signal here is the recurring 'default read as an observation' shape");
 }
 
 // ── report ────────────────────────────────────────────────────────────────────────

@@ -265,3 +265,38 @@ calm fortnight **and** what a broken one prints on a catastrophic one; the two o
 identical. A check nobody has ever seen fire is not known to work — `doseTokens` had never
 matched anything, and *"Discovered 90 leaf categories"* was true every night while hiding half
 the shop.
+
+### Soak-period fix 5 — the whole site was uncacheable, and nothing said so (2026-09-07)
+
+`revalidate = 3600` was declared on seven routes and had **never once taken effect**. `next
+build` prerendered nothing but `robots.txt` and `sitemap.xml`; all 32 routes were `ƒ (Dynamic)`.
+
+Bisected across five builds, because guessing would have been cheaper and wrong:
+
+1. a page containing literally `<p>probe</p>` with `revalidate = 3600` → dynamic
+2. the layout's `getMenuCategories()` replaced with `[]` → still dynamic
+3. layout stripped to bare `<html><body>` → **10 routes prerender**
+4. metadata and scripts restored, components removed → still 10
+5. `<Header>` + `<Footer>` restored → back to 2
+
+`Header` awaited `getCurrentUser()`, which reads a cookie. In Next 14 a `cookies()` call anywhere
+in the tree opts the WHOLE route out of static generation — and the Header is in the root
+layout, so it opted out every page in the site. The session moved to `/api/me` and a client
+`<AccountMenu>`.
+
+This is the same shape as the earlier `force-dynamic` layout bug: the fix corrected the layout's
+own segment config, the real bailout was one component deeper, and the comment left behind
+described caching that still never happened. `tests/route-config.test.ts` checks the
+DECLARATIONS agree; it cannot see whether anything is cached.
+
+**Does not touch the matcher, thresholds, or coverage.** Query SHAPES changed (fewer columns,
+bounded queries, precomputed `spreadPct`/`dealScore`/`liveOfferCount`) but every filter still
+reduces to `currentOfferWhere()` / `isCurrent`. `verify:counters` compares the numbers on the
+rendered page against the database and passes on all five.
+
+Also fixed here: `liveOffer` was a module-level `const`, so the homepage counters' 14-day window
+was pinned to server boot and drifted wider the longer the process stayed up. Now a function.
+
+Measured, production build, warm: `/oferte` 6.43 s → 0.10 s, `/search` 4.80 s → 0.77 s,
+`/necategorisate` 1.60 s → 0.44 s, `/` 0.56 s → 0.008 s, `/c/lapte` 0.65 s → 0.10 s.
+New gate: `npm run verify:perf` fails any route over 1 s.

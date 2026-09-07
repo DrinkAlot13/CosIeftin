@@ -1,33 +1,34 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ProductCard } from "@/components/ProductCard";
-import { getCategoryPage, type SortKey } from "@/lib/queries";
+import { SortableProductGrid } from "@/components/SortableProductGrid";
+import { getCategoryPage } from "@/lib/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { getCategoryNav } from "@/lib/category-nav";
 
-export const dynamic = "force-dynamic";
+/**
+ * GENERATED ONCE PER PRICE UPDATE, NOT ONCE PER VISITOR.
+ *
+ * This declared `force-dynamic` and read `?sort=` from the query string, so every visit to
+ * every category re-ran the whole page on the server — and the only thing that varied between
+ * two visitors was the order of a list already in hand. Sorting now happens in the browser
+ * (`<SortableProductGrid>`), which is both instant and the thing that makes caching possible:
+ * a page that reads `searchParams` cannot be cached in Next 14, whatever it declares.
+ *
+ * The window is a day, but it is not what actually refreshes the page: `npm run revalidate`
+ * runs at the end of the nightly and drops these by tag, so a shopper sees new prices when the
+ * prices are new rather than when a timer happens to expire. The window is the backstop for a
+ * nightly that failed to finish.
+ */
+export const revalidate = 86400;
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
   const data = await getCategoryPage(params.slug);
   return { title: data ? data.category.name : "Categorie" };
 }
 
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "unit-asc", label: "Preț/unitate" },
-  { key: "price-asc", label: "Preț" },
-  { key: "name", label: "Nume" },
-];
-
-export default async function CategoryPage({
-  params,
-  searchParams,
-}: {
-  params: { slug: string };
-  searchParams: { sort?: string };
-}) {
-  const sort = (searchParams.sort as SortKey) || "unit-asc";
+export default async function CategoryPage({ params }: { params: { slug: string } }) {
   const [data, nav] = await Promise.all([
-    getCategoryPage(params.slug, sort),
+    getCategoryPage(params.slug),
     getCategoryNav("grocery"),
   ]);
   if (!data) notFound();
@@ -39,42 +40,27 @@ export default async function CategoryPage({
   return (
     <div className="container">
       <div className="cat-layout" style={{ marginTop: 16 }}>
-      <CategorySidebar nav={nav} activeSlug={category.slug} />
-      <div>
-      <nav className="breadcrumb" aria-label="breadcrumb">
-        <Link href="/">Acasă</Link>
-        <span className="sep">/</span>
-        {parent ? (
-          <>
-            <span className="muted">{parent.name}</span>
+        <CategorySidebar nav={nav} activeSlug={category.slug} />
+        <div>
+          <nav className="breadcrumb" aria-label="breadcrumb">
+            <Link href="/">Acasă</Link>
             <span className="sep">/</span>
-          </>
-        ) : null}
-        <span>{category.name}</span>
-      </nav>
-      <div className="section-head" style={{ marginTop: 8 }}>
-        <h1 style={{ fontSize: 26 }}>{category.icon ? `${category.icon} ` : ""}{category.name}</h1>
-      </div>
-      <div className="toolbar">
-        <span className="muted">{products.length} produse</span>
-        <div className="sortlinks">
-          <span className="muted">Sortează:</span>
-          {SORTS.map((s) => (
-            <Link key={s.key} href={`/c/${category.slug}?sort=${s.key}`} className={sort === s.key ? "active" : undefined}>
-              {s.label}
-            </Link>
-          ))}
+            {parent ? (
+              <>
+                <span className="muted">{parent.name}</span>
+                <span className="sep">/</span>
+              </>
+            ) : null}
+            <span>{category.name}</span>
+          </nav>
+          <div className="section-head" style={{ marginTop: 8 }}>
+            <h1 style={{ fontSize: 26 }}>{category.icon ? `${category.icon} ` : ""}{category.name}</h1>
+          </div>
+
+          <SortableProductGrid products={products} emptyText="Niciun produs în această categorie." />
+
+          <div style={{ height: 32 }} />
         </div>
-      </div>
-      {products.length === 0 ? (
-        <div className="empty">Niciun produs în această categorie.</div>
-      ) : (
-        <div className="grid-products">
-          {products.map((p) => <ProductCard key={p.id} p={p} />)}
-        </div>
-      )}
-      <div style={{ height: 32 }} />
-      </div>
       </div>
     </div>
   );

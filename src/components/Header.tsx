@@ -1,13 +1,11 @@
 import Link from "next/link";
-import { logout } from "@/app/actions";
+import { AccountMenu } from "@/components/AccountMenu";
 import { AlertsBell } from "@/components/AlertsBell";
 import { SearchAutocomplete } from "@/components/SearchAutocomplete";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { getCurrentUser } from "@/lib/auth";
 import type { MenuCategory } from "@/lib/queries";
 
-export async function Header({ categories }: { categories: MenuCategory[] }) {
-  const user = await getCurrentUser();
+export function Header({ categories }: { categories: MenuCategory[] }) {
   return (
     <header className="site-header">
       <div className="container header-top">
@@ -20,17 +18,7 @@ export async function Header({ categories }: { categories: MenuCategory[] }) {
         <AlertsBell />
         <ThemeToggle />
         <div className="header-account">
-          {user ? (
-            <>
-              <Link href="/cont">{user.email}</Link>
-              {" · "}
-              <form action={logout} style={{ display: "inline" }}>
-                <button type="submit" className="linklike">Ieși</button>
-              </form>
-            </>
-          ) : (
-            <Link href="/login">Cont</Link>
-          )}
+          <AccountMenu />
         </div>
       </div>
 
