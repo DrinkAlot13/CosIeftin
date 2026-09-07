@@ -141,8 +141,22 @@ export async function getDeals(limit = 60) {
 }
 export type DealProduct = Awaited<ReturnType<typeof getDeals>>[number];
 
+/**
+ * The header and footer menus: DEPARTMENTS ONLY.
+ *
+ * This returned every grocery category — 93 of them once the two-level tree was populated — and
+ * the header's hover panel rendered all 93 in a grid, as did the homepage. A menu with
+ * ninety-three entries is not a menu, it is the problem the menu was meant to solve.
+ *
+ * A department is the right altitude for a top-level menu: thirteen entries, each of which
+ * opens onto its own shelves. The shelves live in the sidebar, one click in, where a shopper is
+ * already looking at that department.
+ */
 export async function getMenuCategories() {
-  return prisma.category.findMany({ where: { section: "grocery" }, orderBy: { id: "asc" } });
+  return prisma.category.findMany({
+    where: { section: "grocery", parentId: null },
+    orderBy: { id: "asc" },
+  });
 }
 export type MenuCategory = Awaited<ReturnType<typeof getMenuCategories>>[number];
 
@@ -185,11 +199,28 @@ function decorate<T extends {
 
 export type SortKey = "price-asc" | "unit-asc" | "name";
 
+/**
+ * A category page, for a SHELF or for a DEPARTMENT.
+ *
+ * Departments used to render empty. Every product sits on a leaf — that is an invariant the
+ * assigner enforces — so `categoryId = <department>` matches nothing, and /c/lactate-oua showed
+ * "Niciun produs în această categorie" for a department holding 1,367 of them.
+ *
+ * That was survivable while nothing linked to a department. The homepage grid now shows
+ * departments, and a tile that opens onto "no products" is worse than no tile. A department
+ * page is the union of its shelves, which is what a shopper reading the word expects.
+ */
 export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") {
-  const category = await prisma.category.findUnique({ where: { slug } });
+  const category = await prisma.category.findUnique({
+    where: { slug },
+    include: { children: { select: { id: true } } },
+  });
   if (!category || category.section !== "grocery") return null; // alcohol lives on /alcool
+  // A department is its leaves; a leaf is itself. Never both — a product on a department would
+  // otherwise be counted here and nowhere in the sidebar, and the two would disagree.
+  const ids = category.children.length > 0 ? category.children.map((c) => c.id) : [category.id];
   const products = await prisma.product.findMany({
-    where: { categoryId: category.id, section: "grocery" },
+    where: { categoryId: { in: ids }, section: "grocery" },
     select: { ...cardProductSelect, offers: cardOfferSelect },
   });
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);

@@ -235,7 +235,12 @@ img { max-width: 100%; }
 .section-head a { color: var(--primary); font-weight: 600; font-size: 14px; }
 
 .grid-products { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
-.grid-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+/* Eight department tiles, and eight is a deliberate number: `auto-fill` gave seven columns at
+   1440px and left the eighth stranded alone on a second row, which reads as a mistake rather
+   than a set. Fixed column counts keep it two full rows at every width. */
+.grid-cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 900px) { .grid-cats { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px) { .grid-cats { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
 
 .pcard { position: relative; display: flex; flex-direction: column; overflow: hidden; transition: box-shadow .15s, transform .15s; }
 .pcard:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
@@ -253,11 +258,37 @@ img { max-width: 100%; }
 .pcard .pprice { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .pcard .pmeta { margin-top: auto; padding-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
 
-.catcard { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 12px; gap: 8px; }
-.catcard:hover { box-shadow: var(--shadow-lg); }
-.catcard .catemoji { font-size: 30px; }
-.catcard .catname { font-weight: 700; font-size: 15px; }
-.catcard .catcount { font-size: 12.5px; color: var(--muted); }
+/* Department tiles. Every tile is the same height whatever the label wraps to — a grid of
+   tiles that shrug up and down by a line reads as unfinished, and the eye follows the ragged
+   edge instead of the names. */
+.catcard {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 18px 12px; gap: 6px; min-height: 132px;
+  transition: box-shadow .14s ease, border-color .14s ease;
+}
+.catcard:hover { box-shadow: var(--shadow-lg); border-color: var(--primary); }
+.catcard .catemoji { font-size: 30px; line-height: 1; }
+.catcard .catname { font-weight: 700; font-size: 15px; line-height: 1.25; text-wrap: balance; }
+.catcard .catcount { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* The "see all" link that sits opposite a section heading. `.section-head` already lays this
+   out (line 234) — redeclaring it here dropped its margin-bottom and silently closed up the
+   space under every section heading on the site. Only the link needs a rule. */
+.section-more { font-size: 14px; font-weight: 600; color: var(--primary); white-space: nowrap; }
+.section-more:hover { text-decoration: underline; }
+
+/* ── /categorii — the full two-level tree. */
+.cat-index { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; margin-top: 20px; }
+.cat-index__dept { padding: 14px 16px 10px; }
+.cat-index__head { display: flex; align-items: center; gap: 9px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.cat-index__head:hover .cat-index__name { color: var(--primary); }
+.cat-index__emoji { font-size: 20px; line-height: 1; }
+.cat-index__name { font-weight: 700; font-size: 15.5px; flex: 1; }
+.cat-index__count { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cat-index__leaves { list-style: none; margin: 8px 0 0; padding: 0; }
+.cat-index__leaves a { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 14px; color: var(--text); }
+.cat-index__leaves a:hover { color: var(--primary); text-decoration: none; }
+.cat-index__leaves a.is-remainder span:first-child { color: var(--muted); font-style: italic; }
 
 /* ---------- Hero ---------- */
 .hero { padding: 48px 0 8px; text-align: center; }
@@ -692,3 +723,7 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
 .sub-note.warn { color: var(--warn); }
 .sub-note.neutral { color: var(--muted); }
 .line-missing { background: var(--stale-bg); }
+
+/* "Arată mai multe" under a capped product grid. */
+.show-more { display: flex; justify-content: center; margin: 26px 0 8px; }
+.show-more .btn { padding: 10px 22px; font-size: 14.5px; }

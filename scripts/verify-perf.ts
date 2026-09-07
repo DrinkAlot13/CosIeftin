@@ -40,6 +40,8 @@ const ROUTES: { name: string; path: string }[] = [
   { name: "list", path: "/lista" },
   { name: "index", path: "/index-cosmic" },
   { name: "uncategorised", path: "/necategorisate" },
+  { name: "category index", path: "/categorii" },
+  { name: "department", path: "/c/lactate-oua" },
 ];
 
 /** The server this run owns, so a failure takes it down instead of leaking the port. */

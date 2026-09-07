@@ -96,25 +96,32 @@ async function main(): Promise<void> {
   if (sidebar !== null) check("sidebar figure for this shelf", sidebar, cards);
   else console.log(`  – sidebar figure not matched (markup changed?) — not counted either way`);
 
-  // ── 3. /necategorisate is paginated now. The TOTAL it reports must be the true total,
-  //      not the size of the page — that is the whole reason the listing exists.
-  console.log(`\n  UNCATEGORISED — paginated, so the total must still be the true total`);
-  const unc = await get("/necategorisate");
+  // ── 3. The unplaced pile is a category now, and its count must match its list.
+  console.log(`
+  NEÎNCADRATE — the unplaced pile, now a browsable leaf`);
+  const unc = await get("/c/neincadrate-produse");
   const uncCards = (unc.match(/class="card pcard"/g) ?? []).length;
-  // "produse cu preț azi" appears TWICE: once in the sidebar's section total (17,919) and once
-  // in the page's own lead paragraph. Anchor on the second half of the sentence, which only the
-  // page has — the loose pattern matched the sidebar and would have "verified" the wrong number.
-  const uncTotal = num(/<p class="muted"[^>]*>([^<]+)<!-- --> produse cu preț azi[\s\S]{0,40}pe care nu le-am putut/i.exec(unc)?.[1]);
-  const dbUnc = await prisma.product.count({
-    where: { categoryId: null, section: "grocery", offers: { some: live } },
-  });
-  check("reported total vs database", uncTotal, dbUnc,
-    "a paginated page reporting its page size instead of its total hides the tail it exists to show");
-  console.log(`    ${uncCards} cards on page one of ${uncTotal ?? "?"}`);
-  if (uncTotal !== null && uncTotal > 120 && uncCards >= uncTotal) {
-    failures++;
-    console.log(`  ✗ every product is still on one page — pagination is not in effect`);
-  }
+  const uncToolbar = num(/<span class="muted">([^<]+)<!-- --> produse<\/span>/i.exec(unc)?.[1]);
+  const leaf = await prisma.category.findUnique({ where: { slug: "neincadrate-produse" }, select: { id: true } });
+  const dbUnc = leaf
+    ? await prisma.product.count({ where: { categoryId: leaf.id, section: "grocery", offers: { some: live } } })
+    : -1;
+  // THE GRID IS CAPPED, AND THAT MUST STILL ADD UP. A category page draws at most 120 cards and
+  // offers "Arată mai multe (N rămase)" for the rest. So the invariant is no longer
+  // cards === count; it is cards + remaining === count. Checking only the first half would pass
+  // a page that had quietly lost a thousand products behind a button.
+  const remaining = num(/Arată mai multe \(<!-- -->([^<]+)<!-- --> rămase\)/i.exec(unc)?.[1]);
+  check("cards drawn + remaining vs the page's own count", uncCards + (remaining ?? 0), uncToolbar ?? -1,
+    "a capped grid must still account for every product the heading claims");
+  check("the page's count vs the database", uncToolbar, dbUnc,
+    "these are the products nothing could classify; if the page and the database disagree the tail is unmeasurable");
+
+  // The old URL must still lead somewhere. A dead link teaches a visitor the site loses things.
+  const redirect = await fetch(BASE + "/necategorisate", { redirect: "manual", signal: AbortSignal.timeout(30_000) });
+  const location = redirect.headers.get("location") ?? "";
+  const redirected = redirect.status >= 300 && redirect.status < 400 && location.includes("neincadrate-produse");
+  if (redirected) console.log(`  ✓ /necategorisate still resolves — ${redirect.status} to ${location}`);
+  else { failures++; console.log(`  ✗ /necategorisate returned ${redirect.status} to "${location}" — the old URL is broken`); }
 
   // ── 4. /oferte: every card must be a real comparison.
   console.log(`\n  DEALS — a deal needs two shops, or it is one shop changing its own price`);

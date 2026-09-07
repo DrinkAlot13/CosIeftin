@@ -861,6 +861,35 @@ async function auditCategoryPathRegression() {
  * Deliberately compares COUNTS AND SLUGS in both directions. A count check alone passes the
  * moment someone adds a thirteenth department while a legacy row still sits there.
  */
+async function auditUnplacedPile() {
+  // ── THE NEÎNCADRATE LEAF. Products the assigner looked at and could not place.
+  //
+  // They used to sit at `categoryId IS NULL`, invisible on every category page and reachable
+  // only through a link outside the tree. They are now on a leaf so a shopper can browse them —
+  // and the moment that happened, `categoryId IS NULL` stopped meaning "unclassified" and
+  // started meaning "the assigner has not seen this row yet". Two different facts; conflating
+  // them would make the tail invisible in the tooling built to watch it shrink.
+  const leaf = await prisma.category.findUnique({ where: { slug: "neincadrate-produse" }, select: { id: true, parentId: true } });
+  record("Categories", "the Neîncadrate leaf exists and hangs off its department",
+    leaf == null ? ["neincadrate-produse is missing — run `npm run assign:categories -- --apply`"]
+      : leaf.parentId == null ? ["neincadrate-produse is parentless; a department is not a place a product belongs"] : []);
+  if (!leaf) return;
+
+  // A product on the DEPARTMENT rather than the leaf would be counted by the department page and
+  // by nothing in the sidebar, so the two would disagree — the count-matches-list rule again.
+  const onDept = await prisma.product.count({ where: { categoryId: leaf.parentId! } });
+  record("Categories", "no product sits on the Neîncadrate department instead of its leaf",
+    onDept > 0 ? [`${onDept} product(s) sit on the department`] : []);
+
+  // After a sweep nothing should be left at NULL. A non-zero count here is not necessarily a
+  // fault — products created since the last assigner run legitimately have none — so this
+  // REPORTS rather than fails, and names the reason.
+  const stillNull = await prisma.product.count({ where: { section: "grocery", categoryId: null } });
+  const unplaced = await prisma.product.count({ where: { categoryId: leaf.id } });
+  record("Categories", "the unplaced tail is measurable", [],
+    `${unplaced} products on the Neîncadrate leaf; ${stillNull} grocery products never assigned (new since the last assigner run). The first number is the one that must fall.`);
+}
+
 async function auditTreeMatchesDatabase() {
   const inCode = new Set(GROCERY_TREE.map((d) => d.slug));
   const dbDepts = await prisma.category.findMany({
@@ -1006,6 +1035,7 @@ async function main() {
   await auditDeliveryPlatform();
   await auditCategoryPathRegression();
   await auditTreeMatchesDatabase();
+  await auditUnplacedPile();
   await auditProductUrlsAreProducts();
   await auditDerivedDataIsFresh();
 

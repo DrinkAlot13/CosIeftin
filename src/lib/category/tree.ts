@@ -238,6 +238,49 @@ for (const d of GROCERY_TREE) {
   d.children.push({ slug: catchAllSlugFor(d.slug), label: `Altele — ${d.label}`, match: [], avoid: [] });
 }
 
+/**
+ * ── WHERE A PRODUCT GOES WHEN WE DO NOT KNOW ITS DEPARTMENT EITHER.
+ *
+ * The twelve `-altele` leaves above hold products whose DEPARTMENT is known and whose shelf is
+ * not — the merchant said "lactate" and nothing deeper. This is the other case: nothing placed
+ * it at all. 1,895 live products, reachable only through a /necategorisate link outside the
+ * tree, which meant a shopper browsing categories could not see them and neither could we.
+ *
+ * IT IS NAMED SO THE TWO CANNOT BE CONFUSED. The department catch-alls read "Restul din
+ * Lactate și ouă" in the sidebar; this reads "Neîncadrate" — not "Altele", precisely because
+ * "Altele — X" already appears twelve times and a thirteenth would be a different fact wearing
+ * the same word. That is the shape this project keeps tripping over.
+ *
+ * A DEPARTMENT IS NOT A PLACE A PRODUCT BELONGS — the assigner clears any product sitting on
+ * one — so this department has a leaf, and the leaf is where the products go.
+ *
+ * `match: []` on purpose: no product name can ever score into it. It is reachable only from the
+ * assigner's final sweep, which is the one place that knows a product was left unplaced.
+ */
+export const UNPLACED_DEPARTMENT_SLUG = "neincadrate";
+export const UNPLACED_LEAF_SLUG = "neincadrate-produse";
+
+GROCERY_TREE.push({
+  slug: UNPLACED_DEPARTMENT_SLUG,
+  label: "Neîncadrate",
+  icon: "🗂️",
+  children: [
+    { slug: UNPLACED_LEAF_SLUG, label: "Produse neîncadrate", match: [], avoid: [] },
+  ],
+});
+
+/**
+ * Is this leaf the unplaced pile?
+ *
+ * Callers that report "how much of the catalog is still unclassified" must ask THIS, not
+ * `categoryId IS NULL`. Once the sweep runs, null stops meaning "unclassified" and starts
+ * meaning "the assigner has not seen this row yet" — two genuinely different facts, and
+ * conflating them would make the tail invisible in the very tooling built to watch it shrink.
+ */
+export function isUnplaced(leafSlug: string): boolean {
+  return leafSlug === UNPLACED_LEAF_SLUG;
+}
+
 export const ALL_LEAVES: (Leaf & { department: string })[] = GROCERY_TREE.flatMap((d) =>
   d.children.map((c) => ({ ...c, department: d.slug })),
 );

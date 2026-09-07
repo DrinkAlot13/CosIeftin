@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from "./run";
 import { assignByName, assignByMerchantPath, AUTO_THRESHOLD, REVIEW_THRESHOLD } from "../src/lib/category/assign";
-import { ALL_LEAVES, GROCERY_TREE, isCatchAll } from "../src/lib/category/tree";
+import { ALL_LEAVES, GROCERY_TREE, isCatchAll, isUnplaced, UNPLACED_DEPARTMENT_SLUG, UNPLACED_LEAF_SLUG } from "../src/lib/category/tree";
 import { recoverPath } from "../src/lib/category/recover";
 
 const leafOf = (name: string) => assignByName(name).leafSlug;
@@ -22,23 +22,40 @@ describe("category tree — structure", () => {
     const depts = new Set(GROCERY_TREE.map((d) => d.slug));
     expect(ALL_LEAVES.some((l) => depts.has(l.slug))).toBeFalsy();
   });
-  it("every leaf carries at least one match rule, EXCEPT the catch-alls", () => {
-    // A leaf with no rules can never be filled by name — which is precisely what an "Altele"
-    // leaf is for. It exists so a merchant's DEPARTMENT-level path has an honest home, and it
-    // must be reachable only that way.
-    expect(ALL_LEAVES.filter((l) => !isCatchAll(l.slug)).every((l) => l.match.length > 0)).toBeTruthy();
+  it("every leaf carries at least one match rule, EXCEPT the two rule-free kinds", () => {
+    // A leaf with no rules can never be filled by name. Two kinds are meant to be like that:
+    //   • an "Altele" catch-all — the merchant named a DEPARTMENT and nothing deeper;
+    //   • the Neîncadrate leaf — nothing placed the product at all.
+    // Both are reachable only from the assigner, never from a product name.
+    const scorable = ALL_LEAVES.filter((l) => !isCatchAll(l.slug) && !isUnplaced(l.slug));
+    expect(scorable.every((l) => l.match.length > 0)).toBeTruthy();
   });
 
   it("a catch-all has NO match rules, so no product name can score into it", () => {
     const catchAlls = ALL_LEAVES.filter((l) => isCatchAll(l.slug));
-    expect(catchAlls.length).toBe(GROCERY_TREE.length);
+    // Every department EXCEPT the unplaced pile, which holds one leaf and no catch-all: a
+    // remainder of a department with no shelves would be the same pile twice.
+    expect(catchAlls.length).toBe(GROCERY_TREE.length - 1);
     expect(catchAlls.every((l) => l.match.length === 0)).toBeTruthy();
   });
 
-  it("every department has exactly one catch-all", () => {
+  it("every real department has exactly one catch-all", () => {
     for (const d of GROCERY_TREE) {
+      if (d.slug === UNPLACED_DEPARTMENT_SLUG) continue;
       expect(d.children.filter((c) => isCatchAll(c.slug)).length).toBe(1);
     }
+  });
+
+  it("the unplaced pile is one leaf, name-proof, and not a catch-all", () => {
+    // It must not be confused with the twelve "-altele" leaves: those hold products whose
+    // DEPARTMENT is known. Conflating them would make "how much is unclassified" unanswerable.
+    const dept = GROCERY_TREE.find((d) => d.slug === UNPLACED_DEPARTMENT_SLUG);
+    expect(dept?.children.length).toBe(1);
+    expect(dept?.children[0].slug).toBe(UNPLACED_LEAF_SLUG);
+    expect(dept?.children[0].match.length).toBe(0);
+    expect(isCatchAll(UNPLACED_LEAF_SLUG)).toBeFalsy();
+    expect(isUnplaced(UNPLACED_LEAF_SLUG)).toBeTruthy();
+    expect(ALL_LEAVES.filter((l) => isUnplaced(l.slug)).length).toBe(1);
   });
 
   it("a merchant DEPARTMENT name lands in Altele, never on a shelf leaf", () => {

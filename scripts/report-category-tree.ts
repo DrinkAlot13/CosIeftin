@@ -13,7 +13,7 @@
 //      npm run report:tree -- --md    (also writes reports/category-tree.md)
 
 import { PrismaClient } from "@prisma/client";
-import { isCatchAll } from "../src/lib/category/tree";
+import { isCatchAll, UNPLACED_LEAF_SLUG } from "../src/lib/category/tree";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
@@ -56,7 +56,20 @@ async function main(): Promise<void> {
   });
   const departments = cats.filter((c) => c.parentId === null);
   const totalProducts = await prisma.product.count({ where: { section: "grocery" } });
-  const uncategorised = await prisma.product.count({ where: { section: "grocery", categoryId: null } });
+  // TWO DIFFERENT FACTS, AND THEY MUST NOT BE ADDED TOGETHER.
+  //
+  //   never-assigned — the assigner has not seen this row (a product created since the last run)
+  //   unplaced       — the assigner looked and could not place it
+  //
+  // Before the Neîncadrate leaf existed both were `categoryId IS NULL`, so the tail was one
+  // number that could shrink because categorisation improved OR because a sweep ran. Now the
+  // second one is a leaf and is the number that has to fall.
+  const neverAssigned = await prisma.product.count({ where: { section: "grocery", categoryId: null } });
+  const unplacedLeaf = await prisma.category.findUnique({ where: { slug: UNPLACED_LEAF_SLUG }, select: { id: true } });
+  const unplaced = unplacedLeaf
+    ? await prisma.product.count({ where: { section: "grocery", categoryId: unplacedLeaf.id } })
+    : 0;
+  const uncategorised = neverAssigned + unplaced;
 
   const depts: Dept[] = [];
   for (const d of departments) {
@@ -98,7 +111,9 @@ async function main(): Promise<void> {
   say("════ POPULATED GROCERY TREE ═════════════════════════════════════════════════");
   say(`  grocery products      : ${totalProducts}`);
   say(`  on a leaf             : ${assigned}  (${((assigned / totalProducts) * 100).toFixed(1)}%)`);
-  say(`  uncategorised (NULL)  : ${uncategorised}  (${((uncategorised / totalProducts) * 100).toFixed(1)}%)`);
+  say(`  never assigned (NULL) : ${neverAssigned}  (${((neverAssigned / totalProducts) * 100).toFixed(1)}%) — the assigner has not seen these`);
+  say(`  unplaced (Neîncadrate): ${unplaced}  (${((unplaced / totalProducts) * 100).toFixed(1)}%) — the assigner looked and could not place them`);
+  say(`  ─ combined tail       : ${uncategorised}  (${((uncategorised / totalProducts) * 100).toFixed(1)}%)`);
   say(`  departments in DB     : ${departments.length}   leaves in DB: ${cats.length - departments.length}`);
   say("");
 
@@ -171,7 +186,7 @@ async function main(): Promise<void> {
   if (withDirect.length === 0) {
     say("  NONE. Every categorised product sits on a leaf, so a shopper who clicks a department");
     say("  never lands on loose items — the department page is purely a list of its leaves.");
-    say(`  The ${uncategorised} uncategorised products are NOT on a department either: they carry no`);
+    say(`  The ${uncategorised} products in the tail are on the Neîncadrate leaf or carry no`);
     say("  category at all and are reachable only by search. That is the real gap in the tree.");
   } else {
     for (const d of withDirect) say(`     ${lp(d.direct, 5)}  ${d.name} (${d.slug})`);

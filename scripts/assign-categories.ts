@@ -10,7 +10,7 @@
 import { prisma } from "../src/lib/db";
 import { assignByMerchantPath, assignByName, type Assignment } from "../src/lib/category/assign";
 import { recoverPath } from "../src/lib/category/recover";
-import { GROCERY_TREE, ALL_LEAVES, isCatchAll } from "../src/lib/category/tree";
+import { GROCERY_TREE, ALL_LEAVES, isCatchAll, UNPLACED_LEAF_SLUG } from "../src/lib/category/tree";
 
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + " ".repeat(n - s.length));
 const lp = (s: string | number, n: number) => String(s).padStart(n);
@@ -183,7 +183,34 @@ async function main(): Promise<void> {
     written++;
   }
   console.log(`\n  ✓ wrote ${written} category assignments across ${ids.size} categories.`);
-  console.log(`    ${review.length} left in REVIEW and ${none.length} unassigned — neither was written.\n`);
+  console.log(`    ${review.length} left in REVIEW and ${none.length} unassigned — neither was written.`);
+
+  // ── THE SWEEP: everything this pass could not place goes somewhere a shopper can reach.
+  //
+  // Until now an unplaced product sat at `categoryId: null` and was reachable only through a
+  // /necategorisate link outside the tree. It had a price, it was in search, and it was absent
+  // from every category page — which is the one place someone browsing would look.
+  //
+  // This runs LAST, after the clearing above, so it can only ever catch what the assigner
+  // genuinely declined to place. It must not run before: the clear-then-assign order is what
+  // makes a corrected rule able to REMOVE a wrong assignment, and sweeping first would file
+  // everything under Neîncadrate and then leave it there.
+  //
+  // The pile stays measurable: it is one named leaf, so "how much is still unclassified" is a
+  // query, and `report:tree` and `audit:db` both ask it by slug rather than by NULL.
+  const unplacedLeafId = ids.get(UNPLACED_LEAF_SLUG);
+  if (!unplacedLeafId) {
+    console.log(`\n  ⚠ the ${UNPLACED_LEAF_SLUG} leaf does not exist — nothing swept. Run ensureTree.`);
+  } else {
+    const swept = await prisma.product.updateMany({
+      where: { section: "grocery", categoryId: null },
+      data: { categoryId: unplacedLeafId },
+    });
+    console.log(`\n  swept ${swept.count} unplaced product(s) into "Neîncadrate" so they are browsable.`);
+    const stillThere = await prisma.product.count({ where: { categoryId: unplacedLeafId } });
+    console.log(`  ${stillThere} products now sit there in total. THIS IS THE NUMBER THAT MUST FALL.`);
+  }
+  console.log("");
   await prisma.$disconnect();
 }
 

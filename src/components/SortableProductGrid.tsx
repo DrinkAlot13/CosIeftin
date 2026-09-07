@@ -28,8 +28,23 @@ const SORTS = [
 
 type SortKey = (typeof SORTS)[number]["key"];
 
+/**
+ * How many cards are put in the HTML at once.
+ *
+ * The Neîncadrate leaf holds 1,583 products and rendering all of them produced a 2.9 MB
+ * document — the same defect /necategorisate was paginated to fix, arriving back through the
+ * front door the moment that listing became an ordinary category. Brânzeturi was 966 KB.
+ *
+ * The remaining products are NOT dropped: they travel in the RSC payload as data, which is a
+ * fraction of the size of the same rows as markup, and "Arată mai multe" reveals them without a
+ * round trip. The COUNT above the grid is always the full count — it is what the page holds,
+ * not what it has drawn.
+ */
+const PAGE_SIZE = 120;
+
 export function SortableProductGrid({ products, emptyText }: { products: SortableProduct[]; emptyText: string }) {
   const [sort, setSort] = useState<SortKey>("unit-asc");
+  const [shown, setShown] = useState(PAGE_SIZE);
 
   const sorted = useMemo(() => {
     const copy = [...products];
@@ -43,6 +58,12 @@ export function SortableProductGrid({ products, emptyText }: { products: Sortabl
     return copy;
   }, [products, sort]);
 
+  // Re-sorting reorders the whole set, so the first 120 of the new order is a different 120.
+  // Keeping the old `shown` would silently show a slice of one ordering under the heading of
+  // another.
+  const visible = sorted.slice(0, shown);
+  const remaining = sorted.length - visible.length;
+
   return (
     <>
       <div className="toolbar">
@@ -53,7 +74,7 @@ export function SortableProductGrid({ products, emptyText }: { products: Sortabl
             <button
               key={s.key}
               type="button"
-              onClick={() => setSort(s.key)}
+              onClick={() => { setSort(s.key); setShown(PAGE_SIZE); }}
               className={`linklike${sort === s.key ? " active" : ""}`}
               aria-pressed={sort === s.key}
             >
@@ -65,9 +86,18 @@ export function SortableProductGrid({ products, emptyText }: { products: Sortabl
       {sorted.length === 0 ? (
         <div className="empty">{emptyText}</div>
       ) : (
-        <div className="grid-products">
-          {sorted.map((p) => <ProductCard key={p.id} p={p} />)}
-        </div>
+        <>
+          <div className="grid-products">
+            {visible.map((p) => <ProductCard key={p.id} p={p} />)}
+          </div>
+          {remaining > 0 && (
+            <div className="show-more">
+              <button type="button" className="btn" onClick={() => setShown((n) => n + PAGE_SIZE)}>
+                Arată mai multe ({remaining.toLocaleString("ro-RO")} rămase)
+              </button>
+            </div>
+          )}
+        </>
       )}
     </>
   );
