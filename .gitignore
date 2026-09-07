@@ -49,3 +49,8 @@ reports/
 
 # Nightly wrapper output — one file per night, runtime evidence rather than source.
 logs/nightly/
+
+# Raw page dumps fetched by the probe scripts — debugging scratch, not source.
+logs/*.html
+logs/*.json
+logs/*.txt
