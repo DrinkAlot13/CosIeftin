@@ -1370,3 +1370,78 @@ It is **decision 4**.
 failures are all pre-existing and none is in code touched here: two are documented historical
 records (a mass-move day, the peer-relative group finding), and three are Carrefour/Auchan
 (fan-out 9 > 8, 5 Carrefour offers with no deep link, 3 Carrefour campaign-landing URLs).
+
+## Phase 6 — measure and propose. DONE.
+
+**(a) The audit battery.** `audit:db` 43/48 (see MORNING-REPORT §2 for each failure).
+`verify:site` halts at `audit:db` because the chain is `&&`; the later steps were run
+individually — `audit:search-quality` 36/40, `verify:perf` all 12 routes under 1,000 ms,
+`verify:offline` clean. `audit:liveness` green except one manifest entry naming a backup file
+that is not on disk. `audit:categories` structurally clean, 5 empty Altele leaves.
+`audit:unit-oracle` 8 disagreements. `audit:comparability` 79.3% of products have at least one
+showable price.
+
+**(b) Three assumptions nothing verified.** Two hold outright, which is worth as much as a
+finding:
+
+1. **`isCurrent` (JS) vs `currentOfferWhere` (SQL) — the twin pair CLAUDE.md says "must
+   agree".** Nothing had ever compared the row SETS. They select **exactly the same 46,723
+   offers**, zero on either side. Now checkable: `npm run audit:assumptions`.
+2. **`priceBani` vs the legacy `price` float.** 65,486 offers, **0 nulls and 0 disagreements**.
+3. **`Product.unitSize` vs the size in the product's own name.** 29,203 live products, 1,508
+   with no readable size, and **exactly 2 disagreements (0.01%)** — a Colgate multipack stored
+   as 0.25 l whose name says 0.75 l (the total was never summed), and a 250 g cherry-tomato
+   punnet stored as 0.3 kg.
+
+**(c) `docs/PROPOSALS.md`** — 11 entries ranked by value per hour of the owner's attention,
+each with the measurement that justifies it, and two that say plainly they are not worth doing.
+
+**(d) A real 20-staple basket, through the real API.** `npm run audit:real-basket` POSTs to
+`/api/basket/v2` exactly as the page does, then checks every CHOSEN offer against the database.
+
+    Sezamo 8 exact/6 subst/6 missing · Freshful 6/7/7 · Mega Image 4/9/7 · Metro 4/7/9
+    Carrefour 1/5/14 · Auchan 3/7/10 · Penny 0/0/20
+    BEST SINGLE SHOP: none could fill the basket.
+
+**Every one of the 17 offers it chose passes every gate** — in stock, not stale, not flagged,
+seen within 14 days, active merchant, not a delivery-platform price, and the optimizer's price
+matches the database's to the ban. So no live bug in what it PICKED.
+
+Two findings in what it OFFERED, though:
+
+- **Kaufland (Glovo) appears as a candidate shop at 60,98 lei.** Neither `basket/v2/route.ts`
+  nor `substitution/load.ts` filters `priceSource`, though `currentOfferWhere`'s own comment
+  claims delivery-platform prices are off "everywhere — optimizer, item pages, deals, counts,
+  search, comparability". The v2 route also omits `merchant: { active: true }`, which the
+  loader applies — so the two disagree about which shops exist. **Proposal 1.**
+- **`iaurt-natural-400g` merged 3% and 5% fat**: a request for a 5% 300 g yoghurt resolved to a
+  3% 400 g one. `require: ["natural"]` with no fat discriminator, and the ±26% size tolerance
+  admitted a 300 g pack into a 400 g class. Exactly what the classes brief forbids, and it
+  predates tonight. **Proposal 8.**
+
+Deposits are absent from every total: `OfferLike` carries no deposit field, so a basket with
+bottled drinks understates the till price. Reported in the script's own output.
+
+**(e) Added but never used.** `npm run audit:never-used`.
+
+    EMPTY TABLES THAT LIVE CODE READS
+      ProductAttribute   0 rows — read by substitution/load.ts; preferPrivateLabel has NEVER
+                         done anything, it reads a hardcoded false for every product
+      ProductSpec        0 — read by the item page
+      ProductPackChange  0 — read by /shrinkflation
+      UserFavorite / UserBlocklist / PriceAlert  0 — read by the optimizer and the alerts job
+
+    Offer.currency  ONE VALUE (RON) across 65,486 rows — cannot discriminate anything
+    ScraperRun.offersNull  max 0, total 0 across 154 runs — correct for what it measures
+                           (pool items reaching the matcher with no usable price), and NOT
+                           "prices we failed to read". Printing it as a null rate would be a
+                           clean sheet measuring almost nothing.
+
+    6 EQUIVALENCE CLASSES WITH NO LIVE MEMBER
+      banane-bio-kg · mere-rosii-kg · nectarine-kg · cirese-kg · mandarine-kg · cartofi-noi-kg
+
+## Phase 7 — close out. `docs/MORNING-REPORT.md` written.
+
+Six decisions raised, two of them about work that had already landed before the brief arrived
+(commits on `main`, and Phase 4 already being live). Both are stated plainly rather than
+quietly undone.

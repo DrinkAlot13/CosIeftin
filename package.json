@@ -133,7 +133,10 @@
     "probe:links": "tsx scripts/probe-links.ts",
     "probe:selgros": "tsx scripts/probe-selgros.ts",
     "verify:search-identity": "tsx scripts/verify-search-identity.ts",
-    "audit:two-kinds": "tsx scripts/audit-two-kinds-of-fact.ts"
+    "audit:two-kinds": "tsx scripts/audit-two-kinds-of-fact.ts",
+    "audit:real-basket": "tsx scripts/audit-real-basket.ts",
+    "audit:assumptions": "tsx scripts/audit-assumptions.ts",
+    "audit:never-used": "tsx scripts/audit-never-used.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
