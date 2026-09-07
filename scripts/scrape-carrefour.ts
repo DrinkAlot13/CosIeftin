@@ -148,7 +148,10 @@ async function main() {
   // rawPriceText, productUrl and both reference-price fields — all of which the push above
   // sets correctly. Every Carrefour offer was written with no source string and no Omnibus
   // figure because of that one line.
-  const r = await matchPoolToCatalog(merchant.id, pool, { label: "carrefour" });
+  // ── addNew ON (2026-09-07). Projected: +2,903 products, single-shop 91.9% → 92.8%,
+  // 11 new duplicate groups. Inside the brief's limits; measured after, not assumed.
+  // Every gate still applies — addNew changes where a product comes from, not what it passes.
+  const r = await matchPoolToCatalog(merchant.id, pool, { label: "carrefour", addNew: true });
   console.log(`\nCarrefour: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }

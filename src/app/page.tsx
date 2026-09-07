@@ -46,10 +46,13 @@ export default async function HomePage() {
             </form>
           </div>
           <div className="hero-stats">
-            <span><b>{stats.products}</b> produse</span>
-            <span><b>{stats.offers}</b> prețuri</span>
+            <span><b>{stats.products.toLocaleString("ro-RO")}</b> produse</span>
+            <span><b>{stats.offers.toLocaleString("ro-RO")}</b> prețuri</span>
             {/* "magazine alimentare", not "magazine": this counter is grocery-scoped and always was.
                 A bare "magazine" reads as every shop on the site, which is a different number. */}
+            {/* The number that keeps the other two honest: of all those products, how many can
+                actually be compared. Without it "37.258 produse" reads as 37.258 comparisons. */}
+            <span><b>{stats.comparable.toLocaleString("ro-RO")}</b> comparabile în 2+ magazine</span>
             <span><b>{stats.chains}</b> magazine alimentare</span>
           </div>
           <div style={{ marginTop: 18 }}>

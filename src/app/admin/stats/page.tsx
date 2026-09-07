@@ -16,7 +16,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import {
-  getGapAnalysis, getMerchantStats, getPriceDepth, WINDOW_NIGHTS, INSTRUMENTED_SINCE,
+  getGapAnalysis, getMerchantStats, getPriceDepth, getOfferLadder, WINDOW_NIGHTS, INSTRUMENTED_SINCE,
   type DepthTable, type MerchantStat,
 } from "@/lib/stats/site-stats";
 import { BUCKETS } from "@/lib/offer-census";
@@ -83,6 +83,7 @@ function MerchantRow({ m }: { m: MerchantStat }) {
         <td className="num">{n(m.pooled)}</td>
         <td className="num">{n(m.writtenLastRun)}</td>
         <td className="num">{n(m.written)}</td>
+        <td className="num">{m.productsCreated > 0 ? n(m.productsCreated) : <span className="muted">—</span>}</td>
         <td className="num">{n(m.refused)}</td>
         <td className="num">{n(m.unreadableAtMatcher)}</td>
         <td className="num">{n(m.live)}</td>
@@ -96,7 +97,7 @@ function MerchantRow({ m }: { m: MerchantStat }) {
         </td>
       </tr>
       <tr className="stat-sub">
-        <td colSpan={12}>
+        <td colSpan={13}>
           <span className="muted">provenance: </span>
           storeName {cov(p.storeName)} · ownUnitSize {cov(p.ownUnitSize)} · rawPriceText {cov(p.rawPriceText)}
           {" · "}rawSourceBlob {cov(p.rawSourceBlob)} · productUrl {cov(p.productUrl)} · imagine {cov(p.image)}
@@ -124,10 +125,11 @@ export default async function AdminStatsPage() {
     );
   }
 
-  const [depth, merchants, gaps] = await Promise.all([
+  const [depth, merchants, gaps, ladder] = await Promise.all([
     getPriceDepth(),
     getMerchantStats(),
     getGapAnalysis(),
+    getOfferLadder(),
   ]);
 
   const bucketTotals: Record<string, number> = {};
@@ -179,6 +181,29 @@ export default async function AdminStatsPage() {
         <p className="muted ms-note">Clase fără produse: {depth.recipeClassesEmpty.join(", ")}</p>
       )}
 
+      {/* ── THE LADDER ───────────────────────────────────────────────────────── */}
+      <h2 style={{ fontSize: 20, marginTop: 34 }}>De la toate ofertele la numărul de pe prima pagină</h2>
+      <p className="muted ms-note" style={{ maxWidth: 780 }}>
+        Recensământul numără toate ofertele; prima pagină numără doar alimentarele vizibile
+        azi. Cele două arată ca o contradicție și nu sunt — fiecare treaptă de mai jos este
+        <b> un singur filtru</b>, cu ce a scos lângă el.
+      </p>
+      <table className="ms-table" style={{ maxWidth: 780 }}>
+        <thead>
+          <tr><th>treaptă</th><th className="num">oferte</th><th className="num">scoase</th><th>de ce</th></tr>
+        </thead>
+        <tbody>
+          {ladder.map((step) => (
+            <tr key={step.label}>
+              <td>{step.label}</td>
+              <td className="num">{n(step.offers)}</td>
+              <td className="num">{step.removed > 0 ? `−${n(step.removed)}` : ""}</td>
+              <td className="muted">{step.why}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
       {/* ── 2. MERCHANTS ─────────────────────────────────────────────────────── */}
       <h2 style={{ fontSize: 20, marginTop: 40 }}>2 · Ce aduce fiecare magazin</h2>
       <p className="muted ms-note" style={{ maxWidth: 760 }}>
@@ -197,6 +222,11 @@ export default async function AdminStatsPage() {
         își construiește pool-ul, deci nimic necitibil nu ajunge până aici. NU este „câte prețuri
         n-am putut citi” — acel număr nu se înregistrează nicăieri.
         <br />
+        <b>„produse create”</b> = produse pe care magazinul le-a adăugat în catalog, nu doar
+        prețuri puse pe produse existente. Asta e diferența care făcea Auchan să pară mare și
+        Mega Image mic: Auchan avea voie să creeze produse, celelalte trei nu. Se înregistrează
+        de pe 8 septembrie 2026; rulările mai vechi arată „—”, nu zero.
+        <br />
         <b>„tăcute”</b> = rulări care n-au scris nimic și n-au fost marcate abandonate, numărate
         doar de la 2 septembrie 2026 încoace — de când <code>recordScraperRun</code> deduce
         singur steagul din <code>offersWritten</code>. Cele 46 de rânduri mai vechi n-aveau cum
@@ -211,6 +241,7 @@ export default async function AdminStatsPage() {
               <th className="num">pooled (ultima rulare)</th>
               <th className="num">scrise (aceeași rulare)</th>
               <th className="num">scrise ({WINDOW_NIGHTS}n, sumă)</th>
+              <th className="num">produse create</th>
               <th className="num">refuzate</th>
               <th className="num">necitite</th>
               <th className="num">live acum</th>

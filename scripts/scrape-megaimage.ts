@@ -9,7 +9,6 @@
 
 import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
-import { writeFileSync } from "node:fs";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
@@ -130,32 +129,8 @@ async function main() {
   await browser.close();
   console.log(`Pooled ${pool.length} Mega Image products.`);
 
-  // ── POOL_ONLY: build the pool, write nothing, and dump it for inspection.
-  //
-  // The stats page reported "91,973 pooled, 4,395 written" for this merchant, which is the SUM
-  // over fourteen nightly runs of the same catalog placed beside the sum of what they wrote —
-  // a ratio of two numbers that are not a ratio. Per run it is ~7,030 pooled and ~741 written,
-  // and the question that actually matters is what the other ~6,300 are.
-  //
-  // That cannot be answered from the database: an item that matched nothing leaves no row
-  // anywhere. So this mode exists to look at the pool itself, without a write and without a
-  // second copy of the pool-building code to disagree with the real one.
-  if (process.env.POOL_ONLY === "1") {
-    const out = process.env.POOL_OUT ?? "tmp-pools/megaimage-pool.json";
-    writeFileSync(out, JSON.stringify(pool, null, 1), "utf8");
-    const codes = new Set(pool.map((p) => p.sourceId ?? ""));
-    const names = new Set(pool.map((p) => p.name));
-    const urls = new Set(pool.map((p) => p.productUrl ?? ""));
-    console.log(`
-  POOL_ONLY — nothing written.`);
-    console.log(`    pooled rows        ${pool.length}`);
-    console.log(`    distinct sourceId  ${codes.size}`);
-    console.log(`    distinct name      ${names.size}`);
-    console.log(`    distinct productUrl${urls.size}`);
-    console.log(`    written to ${out}`);
-    await prisma.$disconnect();
-    return;
-  }
+  // POOL_ONLY lives in `matchPoolToCatalog` now, so every merchant has it and none can be
+  // left out. The bespoke copy that stood here was a second definition of the same thing.
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: "mega-image" },
@@ -164,7 +139,16 @@ async function main() {
   });
   // Unmapped. The map that stood here listed the fields by hand, which is exactly how
   // productUrl and rawPriceText went missing the first time — the pool had them.
-  const r = await matchPoolToCatalog(merchant.id, pool, { label: "mega-image" });
+  // ── addNew ON (2026-09-07). Match-only discarded 5,830 of 7,233 pooled products a night.
+  //
+  // Projected before turning it on: +5,809 products, single-shop share 89.3% → 91.9%, 21 new
+  // duplicate groups. Both inside the brief's limits (93% and 200). Measured after, not
+  // assumed — `npm run measure:comparability` logs every step to logs/comparability.jsonl.
+  //
+  // A product created here is NOT held to a lower bar: every gate — variant block, size,
+  // price sanity, provenance — runs exactly as it does for a matched offer. addNew changes
+  // where a product comes from, never what it has to pass.
+  const r = await matchPoolToCatalog(merchant.id, pool, { label: "mega-image", addNew: true });
   console.log(`\nMega Image: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }

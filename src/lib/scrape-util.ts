@@ -642,6 +642,27 @@ export async function matchPoolToCatalog(
   const addNew = opts.addNew ?? false;
   const startedAt = new Date();
 
+  // ── POOL_ONLY=1: dump what the scraper found and write NOTHING.
+  //
+  // Put here rather than in each scraper so no merchant can be left out of it — and so there is
+  // one definition of "what the pool was", not thirteen. A per-scraper copy of this block is how
+  // `productUrl` and `rawPriceText` went missing at Metro and Mega Image.
+  //
+  // It exists to answer questions that cannot be answered from the database: an item a
+  // match-only merchant discarded leaves no row anywhere, so the only way to see the 5,822
+  // products Mega Image drops every night is to look at the pool before the matcher touches it.
+  //
+  // Returns BEFORE the backup, the contract check and every write, so running it is free of
+  // side effects — a projection must not change the thing it is projecting.
+  if (process.env.POOL_ONLY === "1") {
+    const dir = process.env.POOL_OUT_DIR ?? "tmp-pools";
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `${opts.label ?? `merchant-${merchantId}`}-pool.json`);
+    writeFileSync(file, JSON.stringify(pool, null, 1), "utf8");
+    console.log(`  POOL_ONLY — ${pool.length} items written to ${file}. Nothing else ran.`);
+    return { offers: 0, created: 0, flagged: 0, aborted: true, reason: "POOL_ONLY: no write attempted" };
+  }
+
   // A snapshot before anything writes. Short-circuits if one is under an hour old, so twelve
   // scrapers in one session produce one snapshot, not twelve.
   ensureBackup(`${opts.label ?? "merchant " + merchantId} scrape`);
@@ -1219,6 +1240,8 @@ export async function matchPoolToCatalog(
     tally: { label: "", attempted: pool.length, parsed: prepared.length, nulls: pool.length - prepared.length, nullRate: pool.length ? (pool.length - prepared.length) / pool.length : 0, samples: [], exceedsThreshold: false, unavailable: 0, unavailableRate: 0, unavailableExceedsThreshold: false },
     offersRejected: flaggedCount,
     offersWritten: chosen.size,
+    // Counted at the write site, like offersWritten — never reported by the scraper.
+    productsCreated: createdIds.size,
     previousRunCount: merchant?.lastOfferCount ?? 0,
     censusJson,
   });

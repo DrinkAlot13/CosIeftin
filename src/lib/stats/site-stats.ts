@@ -64,6 +64,8 @@ export const INSTRUMENTED_SINCE: { field: string; since: string; note: string }[
   { field: "PendingMatch / PriceAnomaly", since: "2026-08-31", note: "the review queue and the refusal ledger" },
   { field: "poolCompleteness.withUsableImage", since: "2026-09-07", note: "images that are not spinners or data: URIs" },
   { field: "Product.spreadPct / dealScore / liveOfferCount", since: "2026-09-07", note: "the precomputed shelf signals" },
+  { field: "ScraperRun.productsCreated", since: "2026-09-08",
+    note: "products a run CREATED rather than matched; earlier runs read 0 because the column did not exist, not because they created nothing" },
 ];
 
 /**
@@ -179,6 +181,44 @@ export async function getPriceDepth(): Promise<PriceDepth> {
   return { overall, bySection, basket, recipes, basketVersion: BASKET_VERSION, basketMissing, recipeClassesEmpty };
 }
 
+/**
+ * THE LADDER FROM "every offer row" TO THE NUMBER ON THE HOMEPAGE.
+ *
+ * The census counts 53,285 offers; the homepage says 20,348 prețuri. Both are right and they
+ * look like a contradiction, which cost a round of "can we increase those numbers" before anyone
+ * could say where the difference went. Every step is one filter, with what it removed beside it,
+ * so the two numbers can never look like a disagreement again.
+ */
+export type LadderStep = { label: string; offers: number; removed: number; why: string };
+
+export async function getOfferLadder(): Promise<LadderStep[]> {
+  const base = { merchant: { active: true } } as const;
+  const notStale = { ...base, isStale: false } as const;
+  const inStock = { ...notStale, availability: "in stock" } as const;
+  const notFlagged = { ...inStock, flagged: false } as const;
+  const notPlatform = { ...notFlagged, NOT: { priceSource: "DELIVERY_PLATFORM" }, lastObservedAt: { gte: new Date(Date.now() - 14 * 86_400_000) } } as const;
+
+  const [all, a, b, c, d, e, f] = await Promise.all([
+    prisma.offer.count(),
+    prisma.offer.count({ where: base }),
+    prisma.offer.count({ where: notStale }),
+    prisma.offer.count({ where: inStock }),
+    prisma.offer.count({ where: notFlagged }),
+    prisma.offer.count({ where: notPlatform }),
+    prisma.offer.count({ where: { ...notPlatform, product: { section: "grocery" } } }),
+  ]);
+
+  return [
+    { label: "every offer row", offers: all, removed: 0, why: "" },
+    { label: "…at an active merchant", offers: a, removed: all - a, why: "merchant switched off" },
+    { label: "…not stale", offers: b, removed: a - b, why: "not seen in the merchant's last feed" },
+    { label: "…in stock", offers: c, removed: b - c, why: "the shop says it is out of stock" },
+    { label: "…not withheld by a gate", offers: d, removed: c - d, why: "a sanity gate refused it" },
+    { label: "…not a delivery platform, seen in 14 days", offers: e, removed: d - e, why: "platform markup, or too old to show" },
+    { label: "…in the GROCERY section = the homepage", offers: f, removed: e - f, why: "dcneu, alcohol, farmacie, cosmetice" },
+  ];
+}
+
 // ── 2. PER-MERCHANT ───────────────────────────────────────────────────────────
 
 export type ProvenanceCoverage = {
@@ -221,6 +261,8 @@ export type MerchantStat = {
    */
   unreadableAtMatcher: number;
   written: number;
+  /** Catalog products this merchant CREATED in the window. See INSTRUMENTED_SINCE. */
+  productsCreated: number;
   refused: number;
   lastSuccessfulWrite: Date | null;
   // ── right now
@@ -304,7 +346,7 @@ export async function getMerchantStats(): Promise<MerchantStat[]> {
       where: { merchantId: m.id, startedAt: { gte: since } },
       select: {
         offersAttempted: true, offersParsed: true, offersNull: true, offersRejected: true,
-        offersWritten: true, aborted: true, abortReason: true, finishedAt: true, startedAt: true,
+        offersWritten: true, productsCreated: true, aborted: true, abortReason: true, finishedAt: true, startedAt: true,
       },
       orderBy: { startedAt: "desc" },
     });
@@ -412,6 +454,7 @@ export async function getMerchantStats(): Promise<MerchantStat[]> {
       abortReasons: [...new Set(aborted.map((a) => a.abortReason ?? "(no reason recorded)"))].slice(0, 3),
       pooled, writtenLastRun, silentZeroRuns, parsed, unreadableAtMatcher,
       written: runs.reduce((s, r) => s + r.offersWritten, 0),
+      productsCreated: runs.reduce((s, r) => s + r.productsCreated, 0),
       refused: runs.reduce((s, r) => s + r.offersRejected, 0),
       lastSuccessfulWrite: lastGood?.finishedAt ?? lastGood?.startedAt ?? null,
       offersTotal: offers.length,

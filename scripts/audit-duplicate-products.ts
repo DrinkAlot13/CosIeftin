@@ -28,16 +28,10 @@ const prisma = new PrismaClient();
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + " ".repeat(n - s.length));
 const lp = (s: string | number, n: number) => String(s).padStart(n);
 
-const NOISE = new Set(["de", "cu", "la", "si", "din", "fara", "pentru", "sau", "un", "o", "g", "gr", "kg", "ml", "l", "buc"]);
-function norm(s: string): string {
-  return s.toLowerCase()
-    .split("ș").join("s").split("ş").join("s").split("ț").join("t").split("ţ").join("t")
-    .split("ă").join("a").split("â").join("a").split("î").join("i")
-    .replace(/[^a-z0-9]+/g, " ").trim();
-}
-function bag(name: string): string {
-  return [...new Set(norm(name).split(" ").filter((t) => t && !NOISE.has(t)))].sort().join("|");
-}
+// The key lives in lib/duplicate-key so the projection of what `addNew` would create can count
+// duplicates the SAME WAY this audit does. It was private here, which made the brief's
+// "no more than 200 new duplicate groups" uncheckable: two definitions, one threshold.
+import { duplicateKey } from "../src/lib/duplicate-key";
 
 type P = {
   id: number; name: string; slug: string; section: string; brand: string | null;
@@ -57,7 +51,7 @@ async function main(): Promise<void> {
 
   const groups = new Map<string, P[]>();
   for (const p of products) {
-    const k = `${p.section}::${bag(p.name)}::${p.unit}:${p.unitSize}`;
+    const k = duplicateKey(p);
     (groups.get(k) ?? groups.set(k, []).get(k)!).push(p);
   }
   const dupes = [...groups.values()].filter((g) => g.length > 1);

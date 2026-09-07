@@ -630,12 +630,24 @@ const liveOffer = () => ({
  */
 export async function countStats() {
   const live = liveOffer(); // evaluated per call — see the note on liveOffer
-  const [products, offers, chains] = await Promise.all([
+  const [products, offers, chains, depth] = await Promise.all([
     prisma.product.count({ where: { section: "grocery", offers: { some: live } } }),
     prisma.offer.count({ where: live }),
     prisma.merchant.count({ where: { active: true, offers: { some: live } } }),
+    // ── THE FOURTH NUMBER, AND THE ONLY HONEST ONE OF THE FOUR.
+    //
+    // "37.258 produse" is true and, on its own, misleading: 91.6% of them are priced by exactly
+    // one shop, so most of that catalog cannot be compared at all. Turning on `addNew` for three
+    // merchants grew the priced catalog 63% in a day, and a headline that grows with it while
+    // saying nothing about comparability is a claim the site cannot support.
+    //
+    // So the count of products a shopper can actually COMPARE sits beside the others. It went
+    // 1,917 → 2,449 across the same change, which is the number that says the change was worth
+    // making — and if it had fallen, this line is where that would have shown.
+    prisma.offer.groupBy({ by: ["productId"], where: { ...live, product: { section: "grocery" } }, _count: { _all: true } }),
   ]);
-  return { products, offers, chains };
+  const comparable = depth.filter((d) => d._count._all >= 2).length;
+  return { products, offers, chains, comparable };
 }
 
 /** Alcohol storefront: products in the "alcohol" section, decorated + sorted, with

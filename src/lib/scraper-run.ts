@@ -20,6 +20,8 @@ export type RunOutcome = {
    * successful run, whatever it says about itself.
    */
   offersWritten?: number;
+  /** Catalog products this run CREATED (addNew), as opposed to matched onto. */
+  productsCreated?: number;
   previousRunCount?: number;
   aborted?: boolean;
   abortReason?: string | null;
@@ -38,6 +40,7 @@ export async function recordScraperRun(o: RunOutcome): Promise<void> {
         offersNull: o.tally?.nulls ?? 0,
         offersRejected: o.offersRejected ?? 0,
         offersWritten: o.offersWritten ?? 0,
+        productsCreated: o.productsCreated ?? 0,
         previousRunCount: o.previousRunCount ?? 0,
         // A run that wrote NO offer rows is not a success, whatever it reported about
         // itself. Deriving this here rather than trusting the caller means no scraper can

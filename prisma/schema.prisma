@@ -379,6 +379,17 @@ model ScraperRun {
   abortReason       String?
   /// JSON array of up to 20 raw strings that failed to parse
   nullSamples       String?
+  /// PRODUCTS THIS RUN CREATED, as opposed to matched onto the existing catalog.
+  ///
+  /// The distinction is why Auchan looked large and Mega Image looked small for months: Auchan
+  /// was allowed to create catalog entries and Mega Image was not, and nothing on any page said
+  /// so. A merchant that creates 5,800 products and one that matches 700 onto products someone
+  /// else created are contributing different things, and "offers written" hides that.
+  ///
+  /// Recorded from 2026-09-08. Runs before that date have 0 because the column did not exist —
+  /// not because they created nothing.
+  productsCreated   Int       @default(0)
+
   /// JSON census of THIS merchant's offers immediately after the run: how many ended up
   /// live, and how many landed in each non-live bucket. Recorded per run so a future drop
   /// can be attributed on the spot instead of reconstructed from a backup weeks later —

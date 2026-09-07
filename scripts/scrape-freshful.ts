@@ -132,7 +132,11 @@ async function main() {
     await sleep(DELAY_MS);
   }
 
-  const r = await matchPoolToCatalog(merchant.id, pool, { label: "freshful" });
+  // ── addNew ON (2026-09-08). Re-projected AFTER mega-image and carrefour, not before:
+  // the first projection put this step at 93.4% and over the brief's line, but Carrefour
+  // matched onto 155 products Mega Image had just created, so the line moved. 92.9% projected,
+  // 175 new duplicate groups. Measured after, and the measurement decides.
+  const r = await matchPoolToCatalog(merchant.id, pool, { label: "freshful", addNew: true });
   console.log(`\nFreshful: ${r.offers} offers matched (pool ${pool.length}).`);
   await prisma.$disconnect();
 }

@@ -119,7 +119,10 @@
     "verify:carrefour-images": "tsx scripts/verify-carrefour-images.ts",
     "audit:megaimage-gap": "tsx scripts/audit-megaimage-gap.ts",
     "audit:absence": "tsx scripts/audit-absence-vs-failure.ts",
-    "audit:basket-classes": "tsx scripts/audit-basket-classes.ts"
+    "audit:basket-classes": "tsx scripts/audit-basket-classes.ts",
+    "project:addnew": "tsx scripts/project-addnew.ts",
+    "measure:comparability": "tsx scripts/measure-comparability.ts",
+    "audit:mutually-distinct": "tsx scripts/audit-mutually-distinct.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
