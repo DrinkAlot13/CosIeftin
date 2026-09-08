@@ -387,3 +387,65 @@ add("alcohol", "cross-store", "SHOULD_MATCH", zarea.iceAlb, L("Vin spumant Zarea
 add("alcohol", "cross-store", "SHOULD_MATCH", otherWines.explicitMerlot, L("Vin rosu Explicit Merlot DOC sec 0,75 l", "", "l", 0.75));
 add("cosmetice", "cross-store", "SHOULD_MATCH", cosm("Crema hidratanta Nivea Soft 50 ml", "Nivea", 50), cosm("Nivea Soft crema hidratanta 50ml", "Nivea", 50));
 add("farmacie", "cross-store", "SHOULD_MATCH", ph("Nurofen 200 mg, 24 comprimate", 24), ph("Nurofen 200mg 24 comprimate filmate", 24));
+
+// ── DESCRIPTOR ASYMMETRY (added 2026-09-08, BEFORE the fix that addresses it) ──────────────
+//
+// Two merchants describing ONE product in two vocabularies. Each side carries a token the other
+// lacks, so `mutually-distinct` fires — correctly by its own definition, and wrongly in effect,
+// because "UHT" and "de consum integral" are two ways of saying the same thing about the same
+// milk, not two different milks.
+//
+// These are added BEFORE the descriptor exemption is written, so the fix is GRADED against them
+// rather than tuned to them. Every SHOULD_MATCH here is a pair I have read and would accept as
+// the same product at a different shop.
+//
+// The Freshful cases are the commonest shape by a wide margin: Freshful omits the brand from its
+// product names, so the catalog side carries a brand token and the store side carries a
+// descriptor, and each has something unique. That is a naming convention, not a difference.
+//
+// The SHOULD_NOT_MATCH cases are the guard-rail: a descriptor that CONTRADICTS one on the other
+// side must still block. `uht` against silence is not a difference; `uht` against `proaspat` is.
+const desc = (n: string, brand: string | null, unit: string, size: number): Side =>
+  ({ name: n, brand, unit, unitSize: size });
+
+// Napolact — the case that started this: 11 catalog rows for one product.
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Lapte de consum integral Napolact, 3.5% grasime, 1 l", "Napolact", "l", 1),
+  desc("Lapte UHT Napolact 3.5% grasime 1L", "Napolact", "l", 1));
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Lapte de consum integral Napolact, 3.5% grasime, 1.5 l", "Napolact", "l", 1.5),
+  desc("Napolact Lapte 3,5% Grasime 1,5 L", "Napolact", "l", 1.5));
+
+// Lăptăria cu Caimac — same shape, different brand.
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Lapte de vaca integral Laptaria cu caimac, 3.8 - 4.1% grasime, 1 l", "Laptaria cu caimac", "l", 1),
+  desc("Lapte de vaca 3.8-4.1% grasime 1L", "Laptaria cu caimac", "l", 1));
+
+// Almette — brand-leading against description-leading.
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Crema de branza cu smantana Almette, 250 g", "Almette", "kg", 0.25),
+  desc("Crema de branza proaspata cu smantana 250g", "Almette", "kg", 0.25));
+
+// Freshful's brand omission — the pattern behind nearly all 2,097 recoverable pairs.
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Salam de Sibiu Agricola, 120 g", "Agricola", "kg", 0.12),
+  desc("Salam de Sibiu, feliat 120g", "Agricola", "kg", 0.12));
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Sunca de Carpati Reinert, 100 g", "Reinert", "kg", 0.1),
+  desc("Suncă de Carpați feliată 100g", "Reinert", "kg", 0.1));
+add("grocery", "cross-store", "SHOULD_MATCH",
+  desc("Iaurt cremos Covalact, 900 g", "Covalact", "kg", 0.9),
+  desc("Iaurt cremos 5% grăsime, 900g", "Covalact", "kg", 0.9));
+
+// ── THE GUARD-RAIL. A descriptor that CONTRADICTS still blocks. ──
+// If the exemption is written too loosely these start passing, and that is the failure mode
+// worth catching: fresh milk quoted at UHT's price is a wrong price, not a lost comparison.
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  desc("Lapte UHT Zuzu 3.5% grasime 1 l", "Zuzu", "l", 1),
+  desc("Lapte proaspat Zuzu 3.5% grasime 1 l", "Zuzu", "l", 1));
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  desc("Lapte de consum integral Napolact 3.5% 1 l", "Napolact", "l", 1),
+  desc("Lapte de consum degresat Napolact 0.1% 1 l", "Napolact", "l", 1));
+add("grocery", "pack-size", "SHOULD_NOT_MATCH",
+  desc("Iaurt cremos Covalact, 900 g", "Covalact", "kg", 0.9),
+  desc("Iaurt cremos 5% grăsime, 400g", "Covalact", "kg", 0.4));

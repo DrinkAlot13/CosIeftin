@@ -31,6 +31,7 @@ import { parseQuantity } from "./units/parseQuantity";
 import { exclusionReason } from "./excluded-categories";
 import { recordScraperRun } from "./scraper-run";
 import { rejectedPairs, reassertStandingDecisions } from "./standing-decisions";
+import { descriptorConflict, isDescriptor } from "./matching/descriptors";
 
 /**
  * THE contract between a scraper and the matcher. Every scraper builds `StoreProduct[]`
@@ -440,6 +441,11 @@ export const DECISION_REASONS = [
   // hard blocks: a disagreement inside a variant class, or a different pack shape
   "variant-flavour", "variant-qualifier", "variant-fat", "variant-format", "pack-shape",
   "mutually-distinct", "variant-mismatch", "dose-mismatch", "low-overlap",
+  // A descriptor on one side CONTRADICTING one on the other — uht against proaspat.
+  // Distinct from `mutually-distinct` on purpose: that rule is about any two unique
+  // tokens, this one is about two values of the SAME attribute, and the difference
+  // matters when reading why a pair was refused.
+  "descriptor-conflict",
 ] as const;
 export type DecisionReason = (typeof DECISION_REASONS)[number];
 
@@ -544,9 +550,34 @@ export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number 
   const catOnly = difference(cat.over, st.over);
   const stOnly = difference(st.over, cat.over);
   if (catOnly.size > 0 && stOnly.size > 0) {
-    // A near-miss on mutual distinction is exactly the case that should be reviewed rather
-    // than discarded — it is where the lost Freshful/Mega coverage lives.
-    return { ok: false, band: jac >= REVIEW_THRESHOLD ? "REVIEW" : "REJECT", score: jac, reason: "mutually-distinct" };
+    // ── DESCRIPTOR ASYMMETRY IS NOT DISTINCTION.
+    //
+    // Two merchants describing ONE product in two vocabularies trip this rule:
+    //
+    //   "Lapte de consum integral Napolact, 3.5% grasime, 1 l"  catalog-only: consum, integral
+    //   "Lapte UHT Napolact 3.5% grasime 1L"                    store-only:   uht
+    //
+    // Both name the same carton. Eleven catalog rows exist for Napolact because of this, and
+    // Freshful — which omits the brand from its product names, leaving the catalog side holding
+    // a brand token and the store side a descriptor — produces about two thousand more.
+    //
+    // A descriptor against SILENCE is a naming difference. A descriptor against a CONTRADICTING
+    // one is a real difference and still blocks: fresh milk quoted at UHT's price is a wrong
+    // price, not a lost comparison. See lib/matching/descriptors.ts for the list, the dimensions
+    // and the words deliberately kept OUT of it.
+    const conflict = descriptorConflict(catOnly, stOnly);
+    if (conflict) {
+      return { ok: false, band: jac >= REVIEW_THRESHOLD ? "REVIEW" : "REJECT", score: jac, reason: "descriptor-conflict" };
+    }
+    const catReal = [...catOnly].filter((t) => !isDescriptor(t));
+    const stReal = [...stOnly].filter((t) => !isDescriptor(t));
+    // Only when a side has NOTHING left but descriptors does the distinction dissolve. If both
+    // sides still carry a real token, they are still making different claims and still block.
+    if (catReal.length > 0 && stReal.length > 0) {
+      // A near-miss on mutual distinction is exactly the case that should be reviewed rather
+      // than discarded — it is where the lost Freshful/Mega coverage lives.
+      return { ok: false, band: jac >= REVIEW_THRESHOLD ? "REVIEW" : "REJECT", score: jac, reason: "mutually-distinct" };
+    }
   }
 
   // One-sided extras are still disqualifying when the extra word is a VARIANT marker

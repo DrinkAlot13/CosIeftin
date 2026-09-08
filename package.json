@@ -154,7 +154,8 @@
     "audit:catalog-duplicates": "tsx scripts/audit-catalog-duplicates.ts",
     "audit:descriptors": "tsx scripts/audit-descriptor-tokens.ts",
     "mine:block-tokens": "tsx scripts/mine-block-tokens.ts",
-    "simulate:descriptors": "tsx scripts/simulate-descriptor-fix.ts"
+    "simulate:descriptors": "tsx scripts/simulate-descriptor-fix.ts",
+    "diff:descriptors": "tsx scripts/diff-descriptor-fix.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
