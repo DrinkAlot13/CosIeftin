@@ -157,7 +157,8 @@
     "simulate:descriptors": "tsx scripts/simulate-descriptor-fix.ts",
     "diff:descriptors": "tsx scripts/diff-descriptor-fix.ts",
     "audit:brand-in-name": "tsx scripts/audit-brand-in-name.ts",
-    "audit:descriptor-gap": "tsx scripts/audit-descriptor-gap.ts"
+    "audit:descriptor-gap": "tsx scripts/audit-descriptor-gap.ts",
+    "audit:brand-gap": "tsx scripts/audit-brand-gap.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
