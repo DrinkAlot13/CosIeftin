@@ -164,7 +164,11 @@
     "verify:push": "tsx scripts/verify-push.ts",
     "audit:rate-limit": "tsx scripts/audit-rate-limit.ts",
     "probe:sitemap": "tsx scripts/probe-sitemap.ts",
-    "audit:deploy": "tsx scripts/audit-deploy.ts"
+    "audit:deploy": "tsx scripts/audit-deploy.ts",
+    "probe:live-prices": "tsx scripts/probe-live-prices.ts",
+    "audit:variable-weight": "tsx scripts/audit-variable-weight.ts",
+    "audit:slug-size": "tsx scripts/audit-slug-size.ts",
+    "audit:unit-price-sanity": "tsx scripts/audit-unit-price-sanity.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
