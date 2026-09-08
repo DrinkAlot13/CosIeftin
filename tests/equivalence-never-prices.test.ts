@@ -84,9 +84,22 @@ describe("equivalence never prices another product", () => {
     expect(body.includes("depth.filter((d) => d._count._all >= 2).length")).toBe(true);
   });
 
-  it("the homepage prints both numbers with different labels", () => {
+  it("the homepage prints the INCLUSIVE number, and says what it includes", () => {
+    // Two counts side by side read as a contradiction to a shopper. The homepage carries the
+    // broader one with its meaning attached; the strict one moved to where the distinction is
+    // explained. What must never happen is the strict number disappearing — see the next test.
     const home = readFileSync(join(process.cwd(), "src/app/page.tsx"), "utf8");
-    expect(home.includes("comparabile în 2+ magazine")).toBe(true);
-    expect(home.includes("comparabile sau echivalente")).toBe(true);
+    expect(home.includes("stats.comparableOrEquivalent")).toBe(true);
+    expect(home.includes("de comparat între magazine")).toBe(true);
+    expect(home.includes("echivalente")).toBe(true); // the title explains the word
+  });
+
+  it("the STRICT number still exists, on the pages that explain the difference", () => {
+    // It is how we tell whether the catalog improved or the metric loosened. Deleting it
+    // everywhere would make the headline unfalsifiable.
+    const method = readFileSync(join(process.cwd(), "src/app/metodologie/page.tsx"), "utf8");
+    const stats = readFileSync(join(process.cwd(), "src/app/admin/stats/page.tsx"), "utf8");
+    expect(method.includes("comparable")).toBe(true);
+    expect(stats.includes("comparable")).toBe(true);
   });
 });

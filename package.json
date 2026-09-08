@@ -139,7 +139,13 @@
     "audit:never-used": "tsx scripts/audit-never-used.ts",
     "audit:discriminator": "tsx scripts/audit-class-discriminator.ts",
     "audit:class-health": "tsx scripts/audit-class-health.ts",
-    "audit:pool-history": "tsx scripts/audit-pool-history.ts"
+    "audit:pool-history": "tsx scripts/audit-pool-history.ts",
+    "probe:page": "tsx scripts/probe-page-errors.ts",
+    "serve": "tsx scripts/serve.ts",
+    "probe:cold": "tsx scripts/probe-cold-click.ts",
+    "audit:wide-spread": "tsx scripts/audit-wide-spread.ts",
+    "withhold": "tsx scripts/withhold-mismatch.ts",
+    "audit:pending-queue": "tsx scripts/audit-pending-queue.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

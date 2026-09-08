@@ -20,6 +20,7 @@ import {
   type DepthTable, type MerchantStat,
 } from "@/lib/stats/site-stats";
 import { BUCKETS } from "@/lib/offer-census";
+import { countStats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Statistici", robots: { index: false } };
@@ -125,11 +126,12 @@ export default async function AdminStatsPage() {
     );
   }
 
-  const [depth, merchants, gaps, ladder] = await Promise.all([
+  const [depth, merchants, gaps, ladder, counts] = await Promise.all([
     getPriceDepth(),
     getMerchantStats(),
     getGapAnalysis(),
     getOfferLadder(),
+    countStats(),
   ]);
 
   const bucketTotals: Record<string, number> = {};
@@ -143,6 +145,40 @@ export default async function AdminStatsPage() {
         <span className="sep">/</span>
         <span>Statistici</span>
       </nav>
+
+      {/* ── THE TWO COMPARABILITY NUMBERS, SIDE BY SIDE, WHICH IS WHY THEY LIVE HERE.
+          The homepage shows only the inclusive one, because two counts side by side read as a
+          contradiction to a shopper. This page is for the person who needs to know whether the
+          catalog improved or the definition loosened, and only the STRICT count can answer that:
+          it moves solely when a real cross-shop match is made. Never fold them together. */}
+      <section className="card" style={{ padding: 16, marginTop: 16 }}>
+        <h2 style={{ fontSize: 18, marginTop: 0 }}>Comparabilitate — două numere, niciodată unul</h2>
+        <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginTop: 10 }}>
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 700 }}>{counts.comparable.toLocaleString("ro-RO")}</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              <b>strict</b> — acelaşi produs în 2+ magazine
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 700 }}>{counts.comparableOrEquivalent.toLocaleString("ro-RO")}</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              comparabile <b>sau echivalente</b> — cifra de pe prima pagină
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 700 }}>
+              +{(counts.comparableOrEquivalent - counts.comparable).toLocaleString("ro-RO")}
+            </div>
+            <div className="muted" style={{ fontSize: 13 }}>adăugate de clasele de echivalenţă</div>
+          </div>
+        </div>
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 12, marginBottom: 0 }}>
+          Numărul strict creşte doar când chiar potrivim un produs între magazine. Cel inclusiv
+          creşte şi când scriem o clasă de echivalenţă. Dacă ar exista un singur număr, n-am mai
+          putea spune care dintre cele două s-a întâmplat.
+        </p>
+      </section>
       <h1 style={{ fontSize: 26, marginTop: 8 }}>Statistici</h1>
       <p className="muted" style={{ maxWidth: 720, marginTop: -4 }}>
         Doar citire. Fiecare procent de aici are numitorul lângă el: <b>„cu preț azi”</b> este

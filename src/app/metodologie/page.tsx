@@ -8,6 +8,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
 import { sectionKind } from "@/lib/section-type";
+import { countStats } from "@/lib/queries";
 
 export const revalidate = 3600;
 export const metadata = {
@@ -23,6 +24,7 @@ const CHANNEL_LABEL: Record<string, string> = {
 };
 
 export default async function MetodologiePage() {
+  const stats = await countStats();
   const merchants = await prisma.merchant.findMany({
     where: { active: true },
     select: { name: true, slug: true, websiteUrl: true, priceChannel: true, storeType: true, lastScrapeAt: true },
@@ -172,6 +174,33 @@ export default async function MetodologiePage() {
           Dacă vezi o pagină care amestecă două produse diferite, sau un preț care nu e cel
           din magazin, spune-ne. Fiecare pagină de produs are un link{" "}
           <b>„raportează un preț greșit”</b>. E cel mai util lucru pe care ni-l poți trimite.
+        </p>
+      </section>
+
+      <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 20 }}>Ce înseamnă „de comparat între magazine”</h2>
+        <p>
+          Pe prima pagină scrie un singur număr. Aici sunt amândouă, pentru că diferența dintre
+          ele contează:
+        </p>
+        <ul>
+          <li>
+            <b>{stats.comparable.toLocaleString("ro-RO")} produse comparabile</b> — <i>același</i>{" "}
+            produs, găsit în 2 sau mai multe magazine. Numărul strict. Crește doar când chiar
+            reușim să potrivim un produs între magazine.
+          </li>
+          <li>
+            <b>{stats.comparableOrEquivalent.toLocaleString("ro-RO")} de comparat între magazine</b>{" "}
+            — include și produsele <i>echivalente</i>: marcă diferită, aceeași nevoie, aceeași
+            mărime. Zahărul brun de 500 g al fiecărui magazin nu e același produs, dar e aceeași
+            cumpărătură.
+          </li>
+        </ul>
+        <p>
+          <b>Nu le adunăm într-un singur număr și nu îl ștergem pe primul.</b> Dacă am fi contopit
+          echivalențele în „comparabile”, cifra ar fi sărit peste noapte pentru că am schimbat
+          înțelesul cuvântului, nu pentru că site-ul ar fi devenit mai bun — și pe urmă nimeni nu
+          ar mai fi putut spune care dintre cele două s-a întâmplat.
         </p>
       </section>
 

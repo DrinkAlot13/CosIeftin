@@ -52,15 +52,15 @@ export default async function HomePage() {
                 A bare "magazine" reads as every shop on the site, which is a different number. */}
             {/* The number that keeps the other two honest: of all those products, how many can
                 actually be compared. Without it "37.258 produse" reads as 37.258 comparisons. */}
-            <span><b>{stats.comparable.toLocaleString("ro-RO")}</b> comparabile în 2+ magazine</span>
-            {/* TWO NUMBERS, NOT ONE MERGED ONE. The line above counts products the same in two
-                shops — a real cross-shop match. This one adds products that are only EQUIVALENT:
-                a shop's own brown sugar beside another shop's own brown sugar, different brands,
-                same trade. Folding the second into the first would make "comparabile" jump
-                overnight by redefining it, and nothing afterwards could say whether the catalog
-                improved or the word loosened. So they sit side by side and each keeps its own
-                meaning. */}
-            <span><b>{stats.comparableOrEquivalent.toLocaleString("ro-RO")}</b> comparabile sau echivalente</span>
+            {/* ── ONE NUMBER ON THE HOMEPAGE, THE BROADER ONE, WITH ITS MEANING ATTACHED.
+                Two counts side by side read as a contradiction to anyone who has not been told
+                the difference. So the shopper-facing figure is the inclusive one and the title
+                says what "equivalent" means; the STRICT count still exists and is printed on
+                /metodologie and /admin/stats, because it is the only number that can tell us
+                whether the catalog improved or the definition loosened. It is never deleted. */}
+            <span title="Produse pe care le poți compara între magazine: fie același produs în 2+ magazine, fie produse echivalente — marcă diferită, aceeași nevoie, aceeași mărime (de exemplu zahărul brun de 500 g al fiecărui magazin).">
+              <b>{stats.comparableOrEquivalent.toLocaleString("ro-RO")}</b> de comparat între magazine
+            </span>
             <span><b>{stats.chains}</b> magazine alimentare</span>
           </div>
           <div style={{ marginTop: 18 }}>
