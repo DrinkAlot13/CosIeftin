@@ -212,6 +212,13 @@ async function main(): Promise<void> {
   // red line in a fortnight's summary is worth more than one failure among 742.
   const poolContract = runStep("pool-contract", "tests/run.ts pool-contract", false);
   const census = runStep("census", "scripts/offer-census.ts");
+  // 8 — THE EXTERNAL ORACLE. Every check above this line asks our own system whether it agrees
+  // with itself. This one asks the WORLD, and it is here because nothing above it could ever
+  // have found Sezamo's 9,420 dead product links: the database was internally consistent and
+  // the URL scheme had changed underneath it. Sampled and rotating, so a scheme that breaks
+  // shows up within days rather than by accident. See CLAUDE.md, "SOME FACTS CAN ONLY BE
+  // CHECKED AGAINST THE WORLD".
+  const links = runStep("probe:links", "scripts/probe-links.ts");
 
   const merchants = await merchantNight(new Date(`${date}T00:00:00`));
 
@@ -245,7 +252,7 @@ async function main(): Promise<void> {
       ? null
       : `liveness FAILED (${dead.join(", ") || "see step"}); the checks after it describe data whose source is not answering`,
     verifySite,
-    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census].map((s) => ({
+    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links].map((s) => ({
       name: s.name, ok: s.ok, exitCode: s.exitCode, durationMs: s.durationMs, ...(s.tail ? { tail: s.tail } : {}),
     })),
     liveness: liveness.data,
@@ -254,6 +261,8 @@ async function main(): Promise<void> {
       "audit:displayed": displayed.data,
       "audit:cutover": { pass: cutover.ok },
       "pool-contract": { pass: poolContract.ok },
+      // The only invariant here answered by the outside world rather than by ourselves.
+      "probe:links": links.data,
       "verify:code": { pass: code.ok },
     },
     comparability: comparability.data,

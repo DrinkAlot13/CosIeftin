@@ -51,26 +51,6 @@ async function main(): Promise<void> {
   const all = process.argv.includes("--all");
   const cutoff = new Date(Date.now() - MAX_DISPLAY_AGE_DAYS * 86_400_000);
 
-  // ── THE CATALOG'S OWN BRAND VOCABULARY, read from the brand column.
-  //
-  // A 2x unit-price spread does NOT by itself mean a class merged two products. Romanian
-  // grocery carries Evian beside a shop's own spring water and Sanovita oats beside K-Classic
-  // at three times the price — same product, same size, real brand premium, and a comparison
-  // a shopper actively wants to see.
-  //
-  // What separates that from a genuine merge is WHICH WORDS divide the cheap half from the
-  // dear half. If they are brand names and pack sizes, the class is consistent. If a
-  // product-defining word appears on one side only — `masline` against `floarea-soarelui`,
-  // `gura` against `izvor` — the class merged two different things and the price gap is the
-  // symptom, not the finding.
-  //
-  // So the discriminating tokens are checked against the brand column, which is evidence that
-  // exists independently of both the class rules and the prices.
-  const brandRows = await prisma.product.findMany({
-    where: { brand: { not: null } }, select: { brand: true }, distinct: ["brand"],
-  });
-  const brandWords = new Set(brandRows.flatMap((b) => toks(b.brand!)));
-
   const classes = await prisma.equivalenceClass.findMany({ orderBy: { slug: "asc" } });
   const products = await prisma.product.findMany({
     where: { equivalenceClassId: { not: null } },
@@ -165,20 +145,24 @@ async function main(): Promise<void> {
       const onlyDear = [...dearToks].filter((t) => !cheapToks.has(t));
       // A size number is not a product word either — "320" separating a 320 g jar from a 300 g
       // one says the packs differ, which the window already governs.
-      const productish = (t: string) => !brandWords.has(t) && !/^\d/.test(t);
-      const cheapProd = onlyCheap.filter(productish);
-      const dearProd = onlyDear.filter(productish);
-      console.log(`      tokens only in the CHEAPER half: ${onlyCheap.slice(0, 14).join(" ") || "—"}`);
-      console.log(`      tokens only in the DEARER  half: ${onlyDear.slice(0, 14).join(" ") || "—"}`);
-      if (cheapProd.length === 0 && dearProd.length === 0) {
-        console.log(`      ⇒ every separating token is a BRAND or a SIZE. Consistent class, brand premium.`);
-        summary.push(`${c.slug}: spread ${spread.toFixed(2)}x — brand premium, class consistent`);
-      } else {
-        console.log(`      ⇒ PRODUCT WORDS separate the halves — cheap:[${cheapProd.slice(0, 10).join(" ")}] dear:[${dearProd.slice(0, 10).join(" ")}]`);
-        console.log(`        This is what a MERGED class looks like. Read the names above.`);
-        summary.push(`${c.slug}: SPREAD ${spread.toFixed(2)}x + product words: ${[...cheapProd, ...dearProd].slice(0, 8).join(" ")}`);
-      }
+      // ── A READING AID, NOT A SECOND VERDICT.
+      //
+      // These word lists are printed to make the member list above faster to read: when a group's
+      // prices disagree, the cheapest discriminator is whether the two halves use different
+      // WORDS, and that test does not look at the prices at all. Reading them is how the seven
+      // real merges in this set were found (necarbogazoasă inside the SPARKLING water class,
+      // pickled mushrooms among the tinned, `capsuni` where the rule said `capsune`).
+      //
+      // They are DELIBERATELY NOT a verdict. Measured as an automatic classifier
+      // (`npm run audit:discriminator`) the token test flags 29 of 30 classes — worse than the
+      // spread rule it was meant to replace — because it cannot tell a product-defining word
+      // (`masline`, `murate`) from a merely descriptive one (`coapte`, `fin`, `extra`), and it
+      // even flags a class on its own require-words. One verdict per class, from the spread; the
+      // words are here to be read.
+      console.log(`      words only in the CHEAPER half: ${onlyCheap.slice(0, 14).join(" ") || "—"}`);
+      console.log(`      words only in the DEARER  half: ${onlyDear.slice(0, 14).join(" ") || "—"}`);
       console.log(`      (a group, not a culprit — resolve it against the names, not the prices)`);
+      summary.push(`${c.slug}: SPREAD ${spread.toFixed(2)}x`);
     } else if (merchants.size < 2) {
       summary.push(`${c.slug}: ONE MERCHANT (${[...merchants].join(",") || "none"})`);
     } else if (outOfWindow.length) {

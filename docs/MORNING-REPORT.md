@@ -60,8 +60,13 @@ hold across the 30 new classes.
 ## 3. The 30 classes, in full, for your review
 
 `npm run audit:private-label-classes` prints every member of every class with its own price,
-its own size and its own unit price. Summary — **10 clean, 20 flagged on the >2x unit-price
-rule, 0 outside their window, 0 resolving to a single merchant**:
+its own size and its own unit price. Summary — **9 clean, 20 flagged on the >2x unit-price rule,
+0 outside their window, 1 resolving to a single merchant**.
+
+The single-merchant one is `sos-salsa-branza-300g`, and it changed WHILE THIS REPORT WAS BEING
+WRITTEN: Auchan's *Sos salsa cu branza 300 g* aged out of the live window, leaving only Mega
+Image. That is the audit working — a class that stops being a comparison says so the same day —
+but it means the table below is a snapshot of a live catalog, not a fixed set.
 
 | class | prod | shops | lei/unit range | flag |
 |---|---|---|---|---|
@@ -105,13 +110,17 @@ premium routinely exceeds 2x. `apa-plata-05l` spans 2,38 lei/l (a shop's own spr
 12,10 (Evian). Every member is genuinely 0,5 l still water. That is not a merge error; it is
 the comparison a shopper wants.
 
-CLAUDE.md says not to fix a peer-relative check by tightening the threshold. So instead the
-audit asks a question that does not depend on price at all: **which WORDS separate the cheap
-half from the dear half**, checked against the catalog's own brand column. If they are brands
-and pack sizes, the class is consistent. If a product-defining word appears on one side only,
-the class merged two things.
+CLAUDE.md says not to fix a peer-relative check by tightening the threshold. So the audit also
+prints a question that does not depend on price at all: **which WORDS separate the cheap half
+from the dear half.** Reading those lists is how seven real merges were found.
 
-**That found seven real merges, all now fixed:**
+**Read section 8 before trusting that as a rule.** I first wrote it up as a better instrument
+than the spread threshold; measured properly it flags 29 of 30 classes and is worse. It is a
+READING AID and the audit now labels it as one, with a single verdict per class.
+
+**The seven real merges, all now fixed** — `npm run audit:discriminator --demo` reproduces each
+one from the live catalog by stripping the fix's added exclusions and listing what the old rule
+admitted (26 products in total):
 
 - **`necarbogazoasă` admitted to the SPARKLING water class** — `carbogaz` is a substring match,
   so the token that DEFINES the class also matched its negation. A still water in the fizzy class.
@@ -121,8 +130,10 @@ the class merged two things.
 - other croissant fillings — **I wrote `capsune`; the catalog writes `capsuni`**
 - Manitoba flour in the tip-650 class; ground oat FLOUR in the oat-flake class
 
-After the fixes: 0 outside window, 0 single-merchant, and every remaining spread verified as
-brand premium by its own tokens.
+After the fixes: 0 outside the window, and no class merging two products that I can find by
+reading them. The remaining spreads are brand premium — Evian beside an own-brand spring water,
+Sanovita oats beside K-Classic — which is the comparison the site exists to show. That
+judgement is mine from reading the member lists, not a verdict any rule produced.
 
 ### Milk is not among the 30, and it was your headline example
 
@@ -270,12 +281,43 @@ way* is not a check. Same family as everything above.
 
 ## 8. Where I think you are wrong
 
-**The 2x unit-price spread threshold.** It is the right instinct and the wrong instrument for
-classes that admit national brands, and it fires on 20 of 30 correct classes. Reading them one
-by one is not sustainable at 60 or 200 classes. **The token test is the better gate** — do
-product-defining words separate the cheap half from the dear half — and it found all seven real
-merges while clearing the thirteen false alarms. I would make the token test the flag and keep
-the spread as context, not the reverse.
+**The 2x unit-price spread threshold — I was half right, and the half I was wrong about is the
+half I stated most confidently.** ~~The token test is the better instrument.~~ **It is not.**
+Measured as an automatic classifier (`npm run audit:discriminator`) it flags **29 of 30**
+classes, against the spread rule's 20. It calls `sos-salsa-branza-300g` — spread 1.00x, a
+perfect class — a merge, on the strength of its own require-words `sos salsa branza`. It cannot
+tell a product-defining word (`masline`, `murate`) from a merely descriptive one (`coapte`,
+`fin`, `extra`, `din`), because both appear beside dozens of brands. So it has NOT replaced the
+spread rule, and the class audit now prints the word lists explicitly labelled as a reading aid
+with **one verdict per class**, not two.
+
+What I got right is the criticism of the spread rule, and it is now measured rather than
+asserted: **fixing all seven real merges changed the flag set by nothing.**
+
+    class                        spread BEFORE the fix   AFTER   still flagged?
+    apa-plata-05l                        5.08x           5.08x   yes — unchanged
+    fulgi-ovaz-500g                      6.28x           6.28x   yes — unchanged
+    croissant-cacao-85g                  2.42x           2.42x   yes — unchanged
+    ciuperci-intregi-conserva-280g       2.08x           2.08x   yes — unchanged
+    faina-alba-650-1kg                   4.87x           4.24x   yes
+    apa-carbogazoasa-05l                 4.33x           3.10x   yes
+    zahar-brun-500g                      3.22x           2.87x   yes
+
+Twenty flagged before, twenty after. Four of the seven did not move the number **at all**. The
+spread was always brand premium; the merges were hiding inside a flag that was already red for
+another reason. **A flag that stays lit after every defect it was meant to catch has been fixed
+is not tracking those defects.** `npm run audit:discriminator --demo` reproduces this from the
+live catalog: it strips each fix's added exclusions, re-runs membership, and lists the 26
+products the old rules admitted — `Apa de izvor necarbogazoasa`, `Zahar brun Muscovado`,
+`Bonduelle Ciuperci intregi, in otet cu marar`, `Panzani Faina 650 Manitoba`, `Yutto Fulgi de
+ovaz macinati fin`, eight wrong croissant fillings.
+
+**So what actually found the seven?** Reading the member list, with the word lists as a prompt.
+That is a person, not a rule — and I should have said so the first time instead of promoting my
+reading aid to an instrument. The honest recommendation is a **review gate**: the audit prints
+every member, records that a human signed the class off, and flags a class whose rules have
+changed since. Spread stays as printed context. I have not built that — it is a design decision
+and it is yours.
 
 **"Drop the JSON column after confirming nothing reads it."** The framing assumed redundancy.
 The real finding was disagreement — 0 of 274 agreeing, with the optimizer on the unvalidated
@@ -293,3 +335,55 @@ merchant or one section, that scoping is still somewhere.
 Bucharest** — six slug variants all return "Această pagină nu există" and it appears on no
 listing page. That lever is two stores, not three, and the marked-up-price objection in proposal
 11 applies to both.
+
+---
+
+## 9. Two follow-ups completed after the first draft
+
+### 9.1 `probe:links` generalised — the second external oracle, now a standing check
+
+**Run once across every merchant: 501 links, 11 merchants, ZERO dead.** Sezamo is clean after
+the fix, and no other merchant has the problem — so it was one scheme, not a pattern.
+
+    merchant        live  checked   ok   404  soft  dead%
+    auchan          4908       50   50     0     0   0.0%
+    carrefour       5206       50   50     0     0   0.0%
+    dcneu          10785       50   50     0     0   0.0%
+    farmaciatei     2040       50   50     0     0   0.0%
+    finestore        280       50   50     0     0   0.0%
+    freshful        3083       50   50     0     0   0.0%
+    lemanoir          94       22   22     0     0   0.0%
+    mega-image      6752       50   50     0     0   0.0%
+    metro           5384       50   50     0     0   0.0%
+    penny             29       29   29     0     0   0.0%
+    sezamo          7520       50   50     0     0   0.0%
+    glovo-kaufland     0        —                          no product urls — EXPECTED, declared
+    kaufland           0        —                          no product urls — EXPECTED, declared
+
+What it does now: 50 links per merchant, **rotating by date** so a scheme that breaks only some
+URLs surfaces within days; per-merchant 200 / redirect / 404 / soft-404 / 5xx counts; and a
+**soft-404 detector**, because a redirect landing on the home page is a 404 wearing a 200. A
+merchant over 4% dead fails the run. Wired into `soak:log` as step 8 and into `soak:report`
+**one line per merchant** — an aggregate is exactly how Sezamo hid.
+
+**It caught itself first, and that is worth recording.** The initial version parsed
+`--json <path>` by treating anything without a leading dash as a merchant name, so it filtered
+every merchant out, checked ZERO links, and printed a green tick with exit 0. It now refuses an
+unknown merchant name (exit 2) and **fails a run that checked nothing**. A check that can
+silently do nothing is worse than no check, because it also removes the suspicion that would
+have made someone look.
+
+`CLAUDE.md` gained a section, **"SOME FACTS CAN ONLY BE CHECKED AGAINST THE WORLD"**, naming the
+class, listing the two oracles we own (`audit:unit-oracle` on Kaufland's `formattedBasePrice`,
+and `probe:links`), the four rules for building one, and three candidates for a third.
+
+### 9.2 The 2x threshold — I made the case and the data went against me
+
+Full write-up in section 8. Short version: **the criticism of the spread rule holds and is now
+measured** (fixing all seven merges left the flag set at twenty, four of them unmoved to two
+decimal places), but **my proposed replacement is worse** — 29 of 30 versus 20 of 30, flagging a
+perfect class on its own require-words. So the spread rule stays, the token lists are labelled a
+reading aid, and `audit:private-label-classes` reports **one verdict per class**, as you asked.
+
+`npm run audit:discriminator` prints both instruments side by side for all 30; `--demo` strips
+each fix's added exclusions and lists the 26 products the old rules admitted.

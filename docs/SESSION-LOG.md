@@ -1445,3 +1445,46 @@ bottled drinks understates the till price. Reported in the script's own output.
 Six decisions raised, two of them about work that had already landed before the brief arrived
 (commits on `main`, and Phase 4 already being live). Both are stated plainly rather than
 quietly undone.
+
+## Follow-up A — probe:links generalised into a standing external oracle
+
+Ran once across every merchant: **501 links, 11 merchants, 0 dead.** Sezamo clean after the fix;
+no other merchant shares the problem, so it was one scheme rather than a pattern.
+
+Now: 50 per merchant, rotating by date; per-merchant 200/redirect/404/soft-404/5xx; a soft-404
+detector (a redirect landing on the home page is a 404 wearing a 200); fails a merchant over 4%
+dead. Wired into `soak:log` as step 8 and surfaced in `soak:report` **one line per merchant**.
+
+It caught itself first: the initial version treated `--json <path>`'s PATH as a merchant name,
+filtered every merchant out, checked zero links and printed a green tick with exit 0. It now
+refuses an unknown merchant name and fails a zero-check run.
+
+`CLAUDE.md` gained "SOME FACTS CAN ONLY BE CHECKED AGAINST THE WORLD" — the class, the two
+oracles we own, four rules for building one, three candidates for a third.
+
+## Follow-up B — the 2x threshold, tested and my own claim withdrawn
+
+`npm run audit:discriminator` puts both instruments side by side.
+
+**The criticism of the spread rule holds, and is now measured rather than asserted:** fixing all
+seven real merges changed the flag set from twenty to twenty, and four of the seven did not move
+the spread figure at all. It was always brand premium; the merges hid inside a flag already red
+for another reason.
+
+**My proposed replacement does not hold.** The token test flags 29 of 30 — worse than the 20 it
+was meant to replace — because it cannot separate a product-defining word (`masline`, `murate`)
+from a merely descriptive one (`coapte`, `fin`, `din`), and it flags `sos-salsa-branza-300g`
+(spread 1.00x, a perfect class) on its own require-words.
+
+So: spread rule kept, token output demoted to a labelled reading aid, **one verdict per class**.
+The unused brand-vocabulary query it depended on was deleted rather than left computing something
+nothing reads.
+
+`--demo` reproduces the seven from the live catalog by stripping each fix's added exclusions:
+26 products the old rules admitted, including `Apa de izvor necarbogazoasa`, `Zahar brun
+Muscovado`, `Bonduelle Ciuperci intregi in otet cu marar`, `Panzani Faina 650 Manitoba` and
+eight wrong croissant fillings.
+
+Noted in passing: `sos-salsa-branza-300g` dropped to ONE merchant during the session — Auchan's
+member aged out of the live window. The audit said so the same day, which is the behaviour
+wanted.

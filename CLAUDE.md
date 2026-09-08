@@ -304,3 +304,65 @@ currency word**. Never reintroduce a bare "smallest number in the block" rule.
 - Short tokens carry the variant (`Brut` vs `Rose`, `Cuvée I` vs `IX`), so the overlap
   score must NOT drop tokens under 3 characters. Blocking uses long tokens; **scoring uses
   short ones too**.
+
+## SOME FACTS CAN ONLY BE CHECKED AGAINST THE WORLD
+
+Every rule above this line, and every audit in `scripts/`, catches the same shape of defect:
+**internal inconsistency.** Two parts of our own system disagree, and the check makes them
+disagree out loud. `audit:db` compares rows against rules. `verify:counters` compares a page
+against the database behind it. `audit:private-label-classes` compares an assigner's output
+against evidence the assigner did not use. The peer-median section above is about the limits of
+one such comparison. All eighteen catalogued defects were found this way.
+
+**There is a second class, and we had exactly one instrument for it.**
+
+Some facts are not about us at all. Whether a URL resolves, what a pack really weighs, what the
+shop's own shelf label says — these live in the world, and no amount of checking one part of our
+system against another can reach them, **because both parts can be perfectly consistent and both
+wrong.**
+
+**The worked example — Sezamo, 9,420 dead product links.** The scraper built
+`${BASE}/${slug}`. The live path is `${BASE}/${id}-${slug}`, the same shape as the category
+paths. Every "vezi în magazin" button on our largest merchant by live products led to a 404, for
+weeks. Nothing caught it and nothing *could*:
+
+| check | what it saw |
+|---|---|
+| the scraper | wrote the field it meant to write |
+| `tests/pool-contract` | a non-null string — the contract was satisfied |
+| `audit:db` | the database, which was not wrong |
+| `audit:staleness` | rows freshly re-observed that same night |
+
+It was found **by accident**, while probing detail pages for EANs. That is not a process.
+
+So: **when a column's meaning depends on the outside world, an internal check can only ever
+confirm we are self-consistent about it.** Ask the world.
+
+### The external oracles we own
+
+| oracle | what it independently establishes | covers |
+|---|---|---|
+| `audit:unit-oracle` | Kaufland publishes `formattedBasePrice` — "(=1 kg 17.22)" — the per-unit price computed by the MERCHANT from the real pack size, with no involvement from us | our size and unit-price maths. Found 33 disagreements in 453 comparisons on its first run, every one a real defect: promo packs not expanded, multipacks counted as one, sizes living in a subtitle we never read |
+| `probe:links` | whether a stored `productUrl` still resolves, fetched over the network | every merchant's URL scheme. 50 links per merchant per night, **rotating by date**, so a scheme that breaks surfaces within days instead of by accident. Wired into `soak:log` and reported **per merchant** in `soak:report` — an aggregate would hide one merchant breaking while eleven stay fine, which is exactly how Sezamo survived |
+
+**Two is not enough.** Candidates worth building, each of which needs a source that does not
+share our assumptions: the merchant's own published stock status against ours; a shop's shelf
+price for a product we hold, from a receipt; EAN agreement between two merchants who both
+publish one (today only Auchan and Farmacia Tei do, and never for the same product).
+
+### Rules for an external oracle
+
+- **Sample and rotate; do not fetch everything.** A scheme-wide break shows in fifty links as
+  clearly as in fifty thousand, and fetching fifty thousand nightly is rude. Rotating the sample
+  is what turns "we happened not to check that one" into "we will check it this week".
+- **A run that checked nothing is a FAILURE, not a pass.** The first version of `probe:links`
+  mis-parsed `--json <path>` as a merchant name, filtered every merchant out, checked zero links
+  and printed a green tick. It now refuses an unknown merchant name and fails on a zero-check
+  run. A check that can silently do nothing is worse than no check, because it also removes the
+  suspicion that would have led someone to look.
+- **Report per subject, never as one number.** The failure an oracle exists to catch is usually
+  one source changing while the rest hold.
+- **Distinguish "the source has none" from "we lost them".** `lib/source-capabilities.ts`
+  declares which merchants publish deep links at all, so a legitimate absence (Kaufland's flyer,
+  Glovo's tiles) is never counted as a gap, and 209 real gaps stop hiding among 3,270 correct
+  nulls.

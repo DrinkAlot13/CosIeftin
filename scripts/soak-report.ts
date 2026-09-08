@@ -63,6 +63,11 @@ type Entry = {
     "audit:cutover"?: { pass: boolean };
     "pool-contract"?: { pass: boolean };
     "verify:code"?: { pass: boolean };
+    /** The external oracle: our stored links, checked against the world. */
+    "probe:links"?: {
+      pass: boolean; totalChecked: number; broken: string[];
+      merchants?: { merchant: string; live: number; checked: number; deadRate: number }[];
+    } | null;
   };
   comparability: {
     comparison?: { products: number; comparable: number; share: number };
@@ -96,6 +101,16 @@ function invariantMap(e: Entry): Map<string, boolean> {
   if (e.invariants["audit:cutover"]) m.set("cutover", e.invariants["audit:cutover"].pass);
   if (e.invariants["pool-contract"]) m.set("pool-contract", e.invariants["pool-contract"].pass);
   if (e.invariants["verify:code"]) m.set("verify:code", e.invariants["verify:code"].pass);
+  // ONE LINE PER MERCHANT, not one line for the check. A single "links ok" would hide the
+  // failure this exists to catch: one merchant's URL scheme changing while eleven stay fine.
+  // That is precisely how Sezamo's 9,420 dead links survived — invisible inside an aggregate.
+  const links = e.invariants["probe:links"];
+  if (links) {
+    m.set("links · checked something", links.totalChecked > 0);
+    for (const lm of links.merchants ?? []) {
+      if (lm.checked > 0) m.set(`links · ${lm.merchant}`, lm.deadRate <= 0.04);
+    }
+  }
   return m;
 }
 
