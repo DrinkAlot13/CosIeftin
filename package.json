@@ -152,7 +152,9 @@
     "audit:price-truth": "tsx scripts/audit-price-truth.ts",
     "trace": "tsx scripts/trace-product.ts",
     "audit:catalog-duplicates": "tsx scripts/audit-catalog-duplicates.ts",
-    "audit:descriptors": "tsx scripts/audit-descriptor-tokens.ts"
+    "audit:descriptors": "tsx scripts/audit-descriptor-tokens.ts",
+    "mine:block-tokens": "tsx scripts/mine-block-tokens.ts",
+    "simulate:descriptors": "tsx scripts/simulate-descriptor-fix.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

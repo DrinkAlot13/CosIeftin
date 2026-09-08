@@ -239,3 +239,92 @@ visible only when somebody drives to a shop.
    upper bound, which is currently meaningless.
 
 Nothing in steps 1–4 lets a model write an offer, a match, or a price.
+
+---
+
+# Phase 1c — I mined the candidates, and the measurement says DO NOT BUILD THE MODEL
+
+Step 1 was commissioned and done. Step 2 should not be, and the reason is a number.
+
+## The mining works
+
+`npm run mine:block-tokens`, over all 70,593 blocked pairs, using the matcher's own tokeniser:
+
+    distinct tokens doing the blocking      7,098
+    top 100 cover                            28.4% of block incidences
+    top 400 cover                            54.3%
+
+A ~30,000-word vocabulary does reduce to a few hundred deciding tokens, as expected.
+
+## But the descriptors are not where the blocking is
+
+    uht        rank 305   150 blocks       integral   rank 130   306 blocks
+    grasime    rank  78   390 blocks       proaspat   rank 411   114 blocks
+    pet        rank 363   130 blocks       consum, cutie, degresat — not in the top 500
+
+    those 7 together: 1,090 incidences out of 134,146 in the top 500  =  0.8%
+
+The actual top blockers are `fresh`, `original`, `lamaie`, `men`, `aroma`, `lavanda`, `white`,
+`fructe`, `vanilie`, `sensitive`, `care`, `cacao` — flavours, cosmetics lines and variants. Those
+are **correct** blocks. A lemon product is not a vanilla one; Nivea Men Fresh is not Nivea Men
+Sensitive.
+
+## The ceiling, measured in PAIRS rather than incidences
+
+`npm run simulate:descriptors` applies a **deliberately generous** descriptor list — every word
+either of us proposed plus obvious siblings, 50 tokens — to every blocked pair, and counts the
+pairs where one side's unique set becomes empty:
+
+    pairs blocked by mutually-distinct     70,593
+    pairs that would UNBLOCK                2,097   (3.0%)
+    pairs still blocked                    68,496
+
+**3%, and that is a ceiling.** A real classification would mark some of those 50 tokens as
+identity tokens and unblock fewer.
+
+## So the model has nothing left to do
+
+The generous hand-written list **already reaches the ceiling**. A language model asked to
+classify these tokens could at best reproduce it and at worst undershoot it. There is no version
+of the classification that unblocks more than 3% of the queue, because the other 97% is blocked
+by words that genuinely name different products.
+
+**Recommendation: do not build the classifier.** Not because a model would do it badly — the
+scoping was sound — but because the job it would do turns out to be worth 3%, and 50 hand-written
+words already do it.
+
+## What IS worth doing, and it needs no model
+
+The 2,097 unblocked pairs are not junk. They look like exactly the matches we have been missing:
+
+    freshful  "Salam de Sibiu, feliat 120g"          ↔  "Salam de Sibiu Agricola, 120 g"
+    freshful  "Șuncă de Carpați feliată 100g"        ↔  "Sunca de Carpati Reinert, 100 g"
+    freshful  "Iaurt cremos 5% grăsime, 900g"        ↔  "Iaurt cremos Covalact, 900 g"
+    freshful  "Lapte proaspăt de vacă 3.5%, 1l"      ↔  "Lapte de vaca integral Artesana, 1 l"
+
+Nearly all are **Freshful**, and the pattern is one thing: Freshful omits the brand from its
+product names, so the catalog side carries a brand token (`covalact`, `agricola`, `reinert`) and
+the store side carries a descriptor (`grasime`, `feliat`, `proaspat`). Each side has something
+unique, and mutual distinction fires on what is really a naming-convention difference.
+
+**The measured impact:**
+
+    products touched by an unblocked pair         1,345
+    …that would gain a NEW merchant                 678
+    …that would CROSS from <2 shops to 2+           359
+
+**+359 comparable products, against 2,830 today — a 12.7% increase**, from fifty hand-written
+words and no model.
+
+## Revised recommendation
+
+1. **Apply the descriptor exemption**, with the full protocol already specified: Napolact,
+   Almette and Caimac into the golden set FIRST; precision, recall and false-matches reported
+   before and after; a full-catalog diff with a 100-pair sample to read. Expected: +359
+   comparable, 2,097 pairs unblocked, queue 70,593 → 68,496.
+2. **Do not build the LLM classifier.** 3% ceiling, already reached by hand.
+3. **The queue stays large and that is now explained rather than a mystery** — 68,496 pairs are
+   blocked by flavour, variant and product-line words, which is the rule working. Whether that
+   queue is worth a person's time is a separate question from whether it is correct.
+4. The staleness concern is real and cheap to cover: an audit reporting how many blocked pairs
+   involve a token absent from the descriptor list, so the gap is visible as the catalog grows.
