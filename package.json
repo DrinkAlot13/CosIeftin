@@ -145,7 +145,11 @@
     "probe:cold": "tsx scripts/probe-cold-click.ts",
     "audit:wide-spread": "tsx scripts/audit-wide-spread.ts",
     "withhold": "tsx scripts/withhold-mismatch.ts",
-    "audit:pending-queue": "tsx scripts/audit-pending-queue.ts"
+    "audit:pending-queue": "tsx scripts/audit-pending-queue.ts",
+    "audit:crawl": "tsx scripts/audit-crawl.ts",
+    "audit:api": "tsx scripts/audit-api-surface.ts",
+    "audit:sitemap": "tsx scripts/audit-sitemap-truth.ts",
+    "audit:price-truth": "tsx scripts/audit-price-truth.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
