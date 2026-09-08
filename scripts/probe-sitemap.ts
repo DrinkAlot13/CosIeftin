@@ -36,9 +36,9 @@
 //     checked zero links and printed a green tick. This refuses an unknown argument and exits
 //     non-zero on a zero-check run.
 //
-//   npm run verify:site
-//   npm run verify:site -- --n=50 --base=http://localhost:3000
-//   npm run verify:site -- --json logs/site.json
+//   npm run probe:sitemap
+//   npm run probe:sitemap -- --n=50 --base=http://localhost:3000
+//   npm run probe:sitemap -- --json logs/site.json
 
 import { emitJson } from "../src/lib/audit-json";
 
@@ -97,20 +97,22 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   let sample = DEFAULT_SAMPLE;
   let base = process.env.SITE_BASE ?? "http://localhost:3000";
+  let rewriteOrigin = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith("--n=")) { sample = Number(a.slice(4)); continue; }
     if (a.startsWith("--base=")) { base = a.slice(7); continue; }
+    if (a === "--rewrite-origin") { rewriteOrigin = true; continue; }
     if (a === "--json") { i++; continue; }
     if (a.startsWith("--json=")) continue;
-    console.error(`verify:site — unrecognised argument ${JSON.stringify(a)}. Refusing to run.`);
+    console.error(`probe:sitemap — unrecognised argument ${JSON.stringify(a)}. Refusing to run.`);
     console.error(`A check that silently ignores its own arguments can check nothing and still pass.`);
     process.exit(2);
   }
   base = base.replace(/\/+$/, "");
 
   console.log("═".repeat(100));
-  console.log(`VERIFY SITE — does the sitemap advertise pages that actually resolve?`);
+  console.log(`PROBE SITEMAP — does what we advertise to Google actually resolve?`);
   console.log(`base ${base}`);
   console.log("═".repeat(100));
 
@@ -119,8 +121,16 @@ async function main(): Promise<void> {
   const urls: string[] = [];
   const indexes: string[] = [];
 
+  const baseOriginEarly = new URL(base).origin;
+  /** Under --rewrite-origin, follow a child sitemap on the base origin rather than the one the
+   *  index published — otherwise a stale SITE_URL makes the whole run fetch nothing. */
+  const fetchable = (u: string): string => {
+    if (!rewriteOrigin) return u;
+    try { const p = new URL(u); return `${baseOriginEarly}${p.pathname}${p.search}`; } catch { return u; }
+  };
+
   const load = async (u: string, depth: number): Promise<void> => {
-    const res = await fetch(u, { headers: { "user-agent": UA } }).catch(() => null);
+    const res = await fetch(fetchable(u), { headers: { "user-agent": UA } }).catch(() => null);
     if (!res || !res.ok) {
       console.error(`  CANNOT FETCH ${u} — ${res ? res.status : "network error"}`);
       return;
@@ -140,6 +150,29 @@ async function main(): Promise<void> {
 
   if (indexes.length > 0) console.log(`  sitemap index with ${indexes.length} child sitemaps`);
   console.log(`  URLs advertised   ${urls.length}`);
+
+  // ── DOES THE SITEMAP AGREE WITH ITSELF ABOUT WHERE THE SITE IS?
+  //
+  // Every `<loc>` is built from SITE_URL, which is a DIFFERENT setting from the port the server
+  // happens to listen on. When they disagree, the sitemap advertises an origin nothing serves —
+  // and in production that is published to Google, which is slow to forgive. Locally it is
+  // usually just a stale .env, so `--rewrite-origin` lets the URL SHAPES still be tested.
+  const baseOrigin = new URL(base).origin;
+  const advertisedOrigins = new Set<string>();
+  for (const u of urls) { try { advertisedOrigins.add(new URL(u).origin); } catch { /* reported below as an unparseable URL */ } }
+  const foreign = [...advertisedOrigins].filter((o) => o !== baseOrigin);
+  if (foreign.length > 0) {
+    console.log(`\n  ORIGIN MISMATCH — the sitemap advertises ${foreign.join(", ")}`);
+    console.log(`  but this run is probing ${baseOrigin}. SITE_URL and the listening port disagree.`);
+    console.log(rewriteOrigin
+      ? `  --rewrite-origin given: probing the paths against ${baseOrigin} anyway, which tests the\n  URL SHAPES but NOT the origin. The mismatch above is still a real finding.`
+      : `  Probing them as published, which is the honest oracle: a URL that does not resolve\n  where it claims to live does not resolve. Pass --rewrite-origin to test shapes locally.`);
+  }
+  if (rewriteOrigin) {
+    for (let i = 0; i < urls.length; i++) {
+      try { const u = new URL(urls[i]); urls[i] = `${baseOrigin}${u.pathname}${u.search}`; } catch { /* leave as-is */ }
+    }
+  }
 
   if (urls.length === 0) {
     console.error(`\n  ZERO URLS READ. That is a FAILURE, not a pass — a check that can silently`);

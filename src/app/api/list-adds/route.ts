@@ -10,6 +10,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { recordListAdd } from "@/lib/list-adds";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,20 @@ export const dynamic = "force-dynamic";
  * adding a dependency without asking. One field, checked.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // STILL 204 WHEN RATE-LIMITED, and deliberately so. Everywhere else a 429 tells the caller to
+  // back off; here the caller is a shopper whose item is already in their cart, and the contract
+  // at the top of this file is that this endpoint's failure is never their problem. Returning an
+  // error would surface a red toast for something they did not do wrong. The counter simply does
+  // not move — which is exactly what the limit is for.
+  const ip = clientIp(req.headers);
+  if (!rateLimit("listAdd", ip).ok) return new NextResponse(null, { status: 204 });
+
   const raw = await req.json().catch(() => null);
   if (typeof raw === "object" && raw !== null) {
     const productId = Number((raw as Record<string, unknown>).productId);
-    if (Number.isInteger(productId) && productId > 0) await recordListAdd(productId);
+    // The IP is passed through, never stored: `recordListAdd` hashes it with a per-process salt
+    // to cap one caller's contribution to one product. See `lib/list-adds.ts`.
+    if (Number.isInteger(productId) && productId > 0) await recordListAdd(productId, ip);
   }
   return new NextResponse(null, { status: 204 });
 }

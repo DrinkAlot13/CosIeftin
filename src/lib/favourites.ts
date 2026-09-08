@@ -19,6 +19,23 @@ import { prisma } from "./db";
 /** Adds before a product becomes an inferred favourite. */
 export const INFERRED_AFTER_ADDS = 3;
 
+/**
+ * ── DISTINCT DAYS, NOT RAW VOLUME.
+ *
+ * Promotion used to read `count`, which is incremented on every add. So three clicks in three
+ * seconds — a double-submit, an impatient shopper, a stuck button — created an INFERRED
+ * favourite, and `resolveLine` ranks those above everything except the heart. That is a
+ * preference invented out of one decision.
+ *
+ * Three adds on three DIFFERENT days is a habit. Same threshold, better evidence.
+ *
+ * `count` is still kept and still shown to the shopper ("l-ai adăugat de 4 ori"), because it is
+ * the true answer to a different question.
+ */
+export function utcDay(at: Date): string {
+  return at.toISOString().slice(0, 10);
+}
+
 export type FavouriteSource = "EXPLICIT" | "INFERRED";
 
 /** Both favourite sets for the resolver's UserContext. */
@@ -66,24 +83,45 @@ export async function toggleFavourite(userId: number, productId: number): Promis
  * Idempotent in the sense that matters: the favourite row is created at most once, and an
  * EXPLICIT favourite is never overwritten by an INFERRED one.
  */
-export async function recordAdd(userId: number, productId: number): Promise<{ count: number; promoted: boolean }> {
-  const row = await prisma.userProductAdd.upsert({
+export async function recordAdd(userId: number, productId: number, at = new Date()): Promise<{ count: number; days: number | null; promoted: boolean }> {
+  const today = utcDay(at);
+  const before = await prisma.userProductAdd.findUnique({
     where: { userId_productId: { userId, productId } },
-    update: { count: { increment: 1 }, lastAddedAt: new Date() },
-    create: { userId, productId, count: 1 },
-    select: { count: true },
+    select: { distinctDays: true, lastAddDay: true },
   });
 
-  if (row.count < INFERRED_AFTER_ADDS) return { count: row.count, promoted: false };
+  // A new day for this row advances the day counter; a second add on the same day does not.
+  // A row that predates these columns carries NULL, which means "not recorded" — it starts
+  // counting from this add rather than pretending to know its history.
+  const isNewDay = before?.lastAddDay !== today;
+  const nextDays = isNewDay ? (before?.distinctDays ?? 0) + 1 : before?.distinctDays ?? null;
+
+  const row = await prisma.userProductAdd.upsert({
+    where: { userId_productId: { userId, productId } },
+    update: {
+      count: { increment: 1 },
+      lastAddedAt: at,
+      ...(isNewDay ? { distinctDays: nextDays, lastAddDay: today } : {}),
+    },
+    create: { userId, productId, count: 1, lastAddedAt: at, distinctDays: 1, lastAddDay: today },
+    select: { count: true, distinctDays: true },
+  });
+
+  // THE FALLBACK, and why it is `count` rather than a refusal. A row written before these
+  // columns existed has no day history and never will. Refusing to promote it would silently
+  // freeze every pre-existing favourite; reading `count` reproduces exactly the old behaviour
+  // for exactly those rows, and every row from here on is judged on days.
+  const evidence = row.distinctDays ?? row.count;
+  if (evidence < INFERRED_AFTER_ADDS) return { count: row.count, days: row.distinctDays, promoted: false };
 
   const existing = await prisma.userFavorite.findUnique({
     where: { userId_productId: { userId, productId } },
     select: { id: true },
   });
-  if (existing) return { count: row.count, promoted: false };
+  if (existing) return { count: row.count, days: row.distinctDays, promoted: false };
 
   await prisma.userFavorite.create({ data: { userId, productId, source: "INFERRED" } });
-  return { count: row.count, promoted: true };
+  return { count: row.count, days: row.distinctDays, promoted: true };
 }
 
 export type FavouriteRow = {

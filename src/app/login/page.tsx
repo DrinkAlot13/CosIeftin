@@ -9,6 +9,9 @@ const ERRORS: Record<string, string> = {
   invalid: "Email invalid sau parolă prea scurtă (minim 6 caractere).",
   exists: "Există deja un cont cu acest email — autentifică-te.",
   bad: "Email sau parolă greșite.",
+  // Rate limit reached. Deliberately vague about WHY: naming the limit tells someone probing
+  // for accounts exactly how fast they may probe.
+  slow: "Prea multe încercări. Așteaptă câteva minute și încearcă din nou.",
 };
 
 export default async function LoginPage({ searchParams }: { searchParams: { e?: string; next?: string } }) {

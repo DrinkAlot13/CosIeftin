@@ -13,11 +13,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CATALOG_TAG, REVALIDATE_PATHS } from "@/lib/cache-tags";
 import { resetSearchIndex, getSearchableCatalog, searchIndexStatus } from "@/lib/search/index-cache";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  // Rate-limited even though it is secret-gated: without this the secret can be brute-forced
+  // at line speed, and a cache purge on every guess is its own denial of service.
+  const limited = guard("write", req);
+  if (limited) return limited;
   const secret = process.env.REVALIDATE_SECRET;
   if (!secret) {
     return NextResponse.json(

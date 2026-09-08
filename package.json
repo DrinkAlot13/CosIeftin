@@ -10,7 +10,7 @@
     "test": "tsx tests/run.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run verify:code && npm run audit:db && npm run census",
-    "verify:site": "tsx scripts/verify-site.ts",
+    "verify:site": "npm run verify:code && npm run audit:liveness && npm run audit:displayed && npm run audit:db && npm run audit:cutover && npm run audit:search-quality && npm run verify:offline && npm run verify:perf",
     "postinstall": "prisma generate",
     "db:reset": "prisma db push --force-reset --skip-generate",
     "seed-catalog": "tsx scripts/seed-catalog.ts",
@@ -160,7 +160,10 @@
     "audit:descriptor-gap": "tsx scripts/audit-descriptor-gap.ts",
     "audit:brand-gap": "tsx scripts/audit-brand-gap.ts",
     "audit:candidate-reach": "tsx scripts/audit-candidate-reach.ts",
-    "audit:brand-substring": "tsx scripts/audit-brand-substring.ts"
+    "audit:brand-substring": "tsx scripts/audit-brand-substring.ts",
+    "verify:push": "tsx scripts/verify-push.ts",
+    "audit:rate-limit": "tsx scripts/audit-rate-limit.ts",
+    "probe:sitemap": "tsx scripts/probe-sitemap.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

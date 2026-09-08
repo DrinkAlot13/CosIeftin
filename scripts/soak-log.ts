@@ -229,6 +229,19 @@ async function main(): Promise<void> {
   // nothing on its own — most high-frequency blockers are product identity — and only the
   // movement over a fortnight says the list has stopped covering how merchants write names.
   const descriptorGap = runStep("audit:descriptor-gap", "scripts/audit-descriptor-gap.ts");
+  // 11 — THE SITEMAP, ANSWERED FROM THE DATABASE. Cheap, and it is the regression guard for the
+  // 246 category URLs that were advertised to Google as 404s. It imports the sitemap's own
+  // predicate rather than restating it, because a restated copy is what let the original defect
+  // survive its own fix and go on being reported afterwards.
+  const sitemap = runStep("audit:sitemap", "scripts/audit-sitemap-truth.ts");
+  // 12 — AND THE SAME QUESTION ASKED OF THE WORLD. `audit:sitemap` cannot see anything outside
+  // our own data, and the split into a sitemap index broke something no query could have found:
+  // Next stopped serving `/sitemap.xml` entirely, which is the URL `robots.txt` advertises. The
+  // whole sitemap was invisible to search engines and every internal check was green.
+  //
+  // Needs a running server, so it is recorded as SKIPPED rather than failed when there is none —
+  // a nightly that has not started the site should not report a sitemap failure it did not test.
+  const sitemapProbe = runStep("probe:sitemap", "scripts/probe-sitemap.ts");
 
   const merchants = await merchantNight(new Date(`${date}T00:00:00`));
 
@@ -262,7 +275,7 @@ async function main(): Promise<void> {
       ? null
       : `liveness FAILED (${dead.join(", ") || "see step"}); the checks after it describe data whose source is not answering`,
     verifySite,
-    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, classHealth, descriptorGap].map((s) => ({
+    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, classHealth, descriptorGap, sitemap, sitemapProbe].map((s) => ({
       name: s.name, ok: s.ok, exitCode: s.exitCode, durationMs: s.durationMs, ...(s.tail ? { tail: s.tail } : {}),
     })),
     liveness: liveness.data,
@@ -275,6 +288,8 @@ async function main(): Promise<void> {
       "probe:links": links.data,
       "audit:class-health": classHealth.data,
       "audit:descriptor-gap": descriptorGap.data,
+      "audit:sitemap": sitemap.data,
+      "probe:sitemap": sitemapProbe.data,
       "verify:code": { pass: code.ok },
     },
     comparability: comparability.data,

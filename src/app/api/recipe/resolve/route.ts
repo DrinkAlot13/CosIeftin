@@ -18,10 +18,13 @@ import { RECIPES } from "@/data/recipes";
 import { explainPick } from "@/lib/substitution/explain";
 import { loadOffers, loadUserContext } from "@/lib/substitution/load";
 import { pickForClass } from "@/lib/substitution/pick";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const body = (await req.json().catch(() => null)) as { slug?: unknown; preferPrivateLabel?: unknown } | null;
   const slug = typeof body?.slug === "string" ? body.slug : "";
   const recipe = RECIPES.find((r) => r.slug === slug);

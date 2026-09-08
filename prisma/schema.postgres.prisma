@@ -801,6 +801,23 @@ model UserProductAdd {
   count     Int      @default(1)
   lastAddedAt DateTime @default(now())
 
+  /// ── HOW MANY DISTINCT DAYS THIS WAS ADDED ON, which is what "three times" was always
+  ///    meant to mean.
+  ///
+  /// `count` is raw volume: three clicks in three seconds, a double-submit, or a stuck button
+  /// all promote a product to an INFERRED favourite, and an inferred favourite outranks
+  /// everything but the heart in `resolveLine`. Three adds on three DIFFERENT days is a habit;
+  /// three adds in one minute is one decision.
+  ///
+  /// NULL MEANS NOT RECORDED, never zero. Rows written before this column existed genuinely do
+  /// not know how many days they span, and inventing a number for them would be this project's
+  /// most-repeated defect — a value never observed read as an observation. `recordAdd` falls
+  /// back to `count` for those rows and starts tracking days from the next add.
+  distinctDays Int?
+  /// The last day counted, as YYYY-MM-DD in UTC. Compared as a string on purpose: a date
+  /// column invites a timezone question that a day-boundary counter should not have to answer.
+  lastAddDay   String?
+
   @@unique([userId, productId])
   @@index([userId])
 }

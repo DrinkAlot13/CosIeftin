@@ -10,6 +10,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { listFavourites, recordAdd, toggleFavourite } from "@/lib/favourites";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Trebuie să fii autentificat." }, { status: 401 });
 

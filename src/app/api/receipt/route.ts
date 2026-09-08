@@ -12,10 +12,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { parseReceiptText, receiptBalances } from "@/lib/receipt";
 import { normalizeText } from "@/lib/matching";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const body = (await req.json().catch(() => null)) as { text?: string } | null;
   const text = String(body?.text ?? "");
   if (text.trim().length < 10) {

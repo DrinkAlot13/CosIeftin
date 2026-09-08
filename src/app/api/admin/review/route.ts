@@ -4,10 +4,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { slugify } from "@/lib/scrape-util";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const user = await getCurrentUser();
   if (!user?.isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 

@@ -22,6 +22,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { explainResolution } from "@/lib/substitution/explain";
 import { loadMerchants, loadOfferExtras, loadOffers, loadUserContext } from "@/lib/substitution/load";
 import { resolveLine, type ListLine, type SubstitutionMode } from "@/lib/substitution/resolve";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,8 @@ function parseItems(raw: unknown): InItem[] {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const items = parseItems(body?.items);
   const merchantSlug = String(body?.merchantSlug ?? "");

@@ -15,12 +15,15 @@ import { leiToBaniExact } from "@/lib/price/parsePrice";
 import { parseQuantity } from "@/lib/units/parseQuantity";
 import { getCurrentUser } from "@/lib/auth";
 import { validateTiers, type RawTier } from "@/lib/price/bulkTiers";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 const MODES: SubstitutionMode[] = ["EXACT", "SAME_BRAND", "EQUIVALENT", "CHEAPEST"];
 
 export async function POST(req: NextRequest) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const body = await req.json().catch(() => ({}));
   const raw = Array.isArray(body.items) ? body.items : [];
   const wanted = raw

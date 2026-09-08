@@ -344,11 +344,24 @@ confirm we are self-consistent about it.** Ask the world.
 |---|---|---|
 | `audit:unit-oracle` | Kaufland publishes `formattedBasePrice` — "(=1 kg 17.22)" — the per-unit price computed by the MERCHANT from the real pack size, with no involvement from us | our size and unit-price maths. Found 33 disagreements in 453 comparisons on its first run, every one a real defect: promo packs not expanded, multipacks counted as one, sizes living in a subtitle we never read |
 | `probe:links` | whether a stored `productUrl` still resolves, fetched over the network | every merchant's URL scheme. 50 links per merchant per night, **rotating by date**, so a scheme that breaks surfaces within days instead of by accident. Wired into `soak:log` and reported **per merchant** in `soak:report` — an aggregate would hide one merchant breaking while eleven stay fine, which is exactly how Sezamo survived |
+| `probe:sitemap` | whether the URLs we publish to Google resolve, fetched from the running server | our own routing. It earned its place on the day it was written: splitting the sitemap into an index moved it off `/sitemap.xml`, which is the URL `robots.txt` advertises, and **Next served a 404 there**. The whole sitemap was invisible to search engines, every internal check was green, and no query could have known. Samples 50 per URL SHAPE so `/c/` cannot vanish under 45,000 `/p/` URLs |
+| `audit:rate-limit` | whether a limit actually fires over HTTP, and whether the deployment can tell callers apart | the rate limiter. Unit tests prove the arithmetic; they cannot prove a request reaches the limiter or that a 429 comes back. It also reports which MODE the deployment is in, because a per-IP limiter that cannot see an IP is a global one wearing a per-IP name |
 
-**Two is not enough.** Candidates worth building, each of which needs a source that does not
-share our assumptions: the merchant's own published stock status against ours; a shop's shelf
-price for a product we hold, from a receipt; EAN agreement between two merchants who both
-publish one (today only Auchan and Farmacia Tei do, and never for the same product).
+**Three is still not enough**, and note what these three have in common: each asks a running
+system a question our own tables cannot answer. Candidates still worth building, each needing a
+source that does not share our assumptions: the merchant's own published stock status against
+ours; a shop's shelf price for a product we hold, from a receipt; EAN agreement between two
+merchants who both publish one (today only Auchan and Farmacia Tei do, and never for the same
+product).
+
+**An oracle can be wrong about its own subject, and it will be confident.** `audit:rate-limit`
+reported "NO LIMIT FIRED" on its first run. The limiter was fine; the AUDIT had recomputed the
+budget instead of importing it, missed that an unidentified caller gets a larger shared one, and
+sent 65 requests at a threshold of 3,000. So: **an oracle must DERIVE its expectation from the
+code under test, never restate it** — and when it cannot reach the threshold it must say
+INCONCLUSIVE, which is neither a pass nor a failure. The same restatement bug had already
+happened in `audit:sitemap`, whose copy of the sitemap's predicate went stale the moment the
+sitemap was fixed, leaving it reporting 246 dead URLs that no longer existed.
 
 ### Rules for an external oracle
 

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAlternatives, type Strictness } from "@/lib/queries";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic";
 // The top similar item (same type + size) for each cart item, so single-shop items get
 // a suggested substitute the shopper can buy elsewhere.
 export async function POST(req: NextRequest) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const body = await req.json().catch(() => ({ slugs: [] }));
   const slugs = (Array.isArray(body.slugs) ? body.slugs : []).map(String).slice(0, 60);
   // the shopper decides how far we may substitute (brand loyalty is real)

@@ -1,11 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { optimizeBasket, type ProductForBasket } from "@/lib/basket";
 import { getBasketProducts } from "@/lib/queries";
+import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 // POST { items: [{ slug, qty }] } -> full basket optimization.
 export async function POST(req: NextRequest) {
+  const limited = guard("write", req);
+  if (limited) return limited;
   const body = await req.json().catch(() => ({ items: [] }));
   const raw = Array.isArray(body.items) ? body.items : [];
   const items = raw

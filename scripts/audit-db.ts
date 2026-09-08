@@ -1056,6 +1056,63 @@ async function auditDerivedDataIsFresh() {
     "cleared by the sweep at the end of compute:home; a stale signal here is the recurring 'default read as an observation' shape");
 }
 
+// ── FAVOURITES ────────────────────────────────────────────────────────────────────
+//
+// The invariants for `UserProductAdd.distinctDays` / `lastAddDay`, added when inferred
+// favourites moved from raw volume to distinct days. CLAUDE.md: "A migration or backfill script
+// may not verify its own work… any new backfill must ship with an invariant here."
+//
+// The columns are NULLABLE ON PURPOSE. Rows written before they existed do not know how many
+// days they span, and NULL is that question left open — writing 0 or 1 would be the project's
+// most-repeated defect, a value never observed read as an observation. So every check below
+// treats NULL as "not recorded" and never as a number.
+async function auditFavourites() {
+  const adds = await prisma.userProductAdd.findMany({
+    select: { id: true, userId: true, productId: true, count: true, distinctDays: true, lastAddDay: true },
+  });
+
+  record("Favourites", "distinctDays is null or at least 1, never 0",
+    adds.filter((a) => a.distinctDays !== null && a.distinctDays < 1)
+      .map((a) => `add #${a.id} user ${a.userId} product ${a.productId}: distinctDays=${a.distinctDays}`),
+    "zero would mean 'added on no days', which cannot be true of a row that exists");
+
+  record("Favourites", "distinctDays and lastAddDay are both set or both null",
+    adds.filter((a) => (a.distinctDays === null) !== (a.lastAddDay === null))
+      .map((a) => `add #${a.id}: distinctDays=${a.distinctDays} lastAddDay=${a.lastAddDay}`),
+    "one without the other means the day counter cannot advance correctly on the next add");
+
+  record("Favourites", "distinctDays never exceeds count",
+    adds.filter((a) => a.distinctDays !== null && a.distinctDays > a.count)
+      .map((a) => `add #${a.id}: ${a.distinctDays} days from ${a.count} adds`),
+    "you cannot add a product on more distinct days than the number of times you added it");
+
+  record("Favourites", "lastAddDay is a YYYY-MM-DD date",
+    adds.filter((a) => a.lastAddDay !== null && !/^\d{4}-\d{2}-\d{2}$/.test(a.lastAddDay))
+      .map((a) => `add #${a.id}: lastAddDay=${JSON.stringify(a.lastAddDay)}`));
+
+  // THE ONE THAT MATTERS: the promotion rule's output must match its input. An INFERRED
+  // favourite is a claim about evidence, and this is where that claim is checked against the
+  // evidence itself rather than against the code that wrote it.
+  const inferred = await prisma.userFavorite.findMany({
+    where: { source: "INFERRED" },
+    select: { userId: true, productId: true },
+  });
+  const addBy = new Map(adds.map((a) => [`${a.userId}:${a.productId}`, a]));
+  record("Favourites", "every INFERRED favourite has the evidence that promotes one",
+    inferred.filter((f) => {
+      const a = addBy.get(`${f.userId}:${f.productId}`);
+      if (!a) return true; // promoted with no add row at all
+      // Same fallback the writer uses: days when recorded, count for rows that predate it.
+      return (a.distinctDays ?? a.count) < 3;
+    }).map((f) => {
+      const a = addBy.get(`${f.userId}:${f.productId}`);
+      return a
+        ? `user ${f.userId} product ${f.productId}: distinctDays=${a.distinctDays} count=${a.count}`
+        : `user ${f.userId} product ${f.productId}: INFERRED with NO UserProductAdd row`;
+    }),
+    "INFERRED_AFTER_ADDS=3, read from distinctDays where recorded and from count for rows that predate the column");
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("\n═══ DATABASE INVARIANT AUDIT ═══");
@@ -1072,6 +1129,7 @@ async function main() {
   await auditUnplacedPile();
   await auditProductUrlsAreProducts();
   await auditDerivedDataIsFresh();
+  await auditFavourites();
 
   let lastGroup = "";
   for (const c of checks) {
