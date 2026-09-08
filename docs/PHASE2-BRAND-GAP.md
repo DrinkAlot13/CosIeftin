@@ -209,3 +209,131 @@ both a brand word and a common noun.
 3. **Fix the flavour synonyms** — cheap, safe, worth three matches.
 4. **The real ceiling on comparability is merchant overlap, not matching.** That is a sourcing
    question, and no amount of matcher work reaches it.
+
+---
+
+# Both fixes applied and refereed — 2026-09-08
+
+Golden-set cases were added **before** either fix, so both are graded rather than tuned.
+
+| | golden set | false matches | queued pairs that now match |
+|---|---|---|---|
+| baseline, with the 7 new cases | 94.6% (227/240) | 1 | 938 |
+| + brand-aware head noun | 95.0% (228/240) | 1 | 930 |
+| + flavour folding | **95.0% (228/240)** | **1** | 930 |
+
+903 tests pass. False matches stayed at 1 against a ceiling of 2.
+
+## 1. The head-noun gate
+
+`headNoun` now returns the first significant token that is **not part of the brand**. The brand
+is a known field on both sides; excluding it is not a heuristic.
+
+**It had to change in two places, and the second is the one that mattered.** `decide()`'s gate
+was the visible defect. But `matchPoolToCatalog` indexes store items by token and looks each
+catalog row up **by its head noun** — so a brand-first row asked the pool for items containing
+its BRAND, and at Mega Image (1.8% of names carry one) those items do not exist. The pair never
+became a candidate and no rule ever got to weigh in.
+
+### What it did, measured three ways
+
+**Refusal reasons** — `head-noun` refusals fell **353 → 41**. The unblocked pairs did not become
+matches; they met `mutually-distinct` instead (1,800 → 2,041), because the brand token sitting
+*inside* the name is still counted as content by every token rule.
+
+**The queue** — 938 → **930** matches. A small net LOSS, and it is not a regression: the queue
+holds only pairs that became candidates under the OLD index, i.e. pairs where the merchant DID
+write the brand. On exactly those, the new rule is strictly harder. The population is selected by
+the thing being changed.
+
+**Candidate reach** — the half the queue cannot see. `npm run audit:candidate-reach` rebuilds the
+index and asks each row for candidates under both head nouns: **835,349 pairs newly reachable, 4
+of which `decide()` accepts.**
+
+### The measurement changed the design
+
+Swapping the index key was a net loss: **1,095,490 pairs would have become unreachable** against
+835,349 gained. Indexing a brand-first row on its brand was not purely a bug — asking the pool for
+`milka` returns a tightly brand-scoped candidate set; asking for `ciocolata` returns every
+chocolate in the shop. So candidate selection now takes the **union of both head nouns** and loses
+nothing. The gate uses the brand-aware one, which is where the defect always was.
+
+### Comparability, before and after
+
+**1,253 → 1,253 products comparable in 2+ shops, across 6,939 targets. No change.**
+Accepted gap pairs went 1 → 4.
+
+The simulation said 275. It delivered 3 additional accepted pairs and **zero** additional
+comparable products. The simulation modelled the gate in isolation; in the whole pipeline the
+pairs it unblocked immediately met `mutually-distinct`. This is the second time a single-gate
+projection has overstated a matcher fix by two orders of magnitude — the descriptor work
+projected 2,097 and delivered 5.
+
+**The fix is still right.** It removes a rule that was refusing pairs for a reason unrelated to
+what the product is, it improves the golden set, and it adds no false match. It is simply not
+worth what the projection implied, and the projection was the thing at fault.
+
+## 2. Flavour folding
+
+`variantConflict` compared flavour values by exact set membership over an inflected language.
+Now compared through a canonical form. **Flavour-synonym refusals: 4 → 0.**
+
+**Every merge, enumerated** — this is an explicit list, never a stemmer:
+
+    afine = afina        capsuni = capsuna    mure = mura          portocale = portocala
+    alune = aluna        cirese = cireasa     pere = para          struguri = strugure
+    banane = banana      mere = mar           piersici = piersica  visine = visina
+                                                                   zmeura = zmeure
+
+A stemmer is actively dangerous here: **`mure` (blackberry) and `mere` (apple) are one letter
+apart**, and `para` (pear) is a prefix of `paprica`. `tests/variant-flavour-folding.test.ts`
+pins those apart, along with `lamaie`/`lime` and `visine`/`vanilie`, and asserts that folding
+collapses exactly these groups and nothing else.
+
+The missing singular forms were added to the flavour vocabulary while I was in there, which makes
+the class fire slightly more overall (`mutually-distinct → variant-flavour` 1,771 → 1,805): those
+are pairs where both sides state a flavour and the flavours differ. Correct blocks.
+
+---
+
+# A third defect, found while measuring the second — NOT fixed
+
+`npm run audit:brand-substring`
+
+The brand gate is the strongest thing between a shopper and one product's price on another:
+
+    const brandHit = branded && (st.nbrand.includes(cat.nbrand) || st.nname.includes(cat.nbrand));
+
+Both tests are **substring containment on a normalised string, not token equality.** `aro` is
+Metro's private label, and `aroma` contains it. Demonstrated end to end, with a control:
+
+    catalog "aro Dropsuri Menta 75 g" [brand aro]
+      vs "Dropsuri de menta 75g"           REJECT  brand   <- correct
+      vs "Dropsuri cu aroma de menta 75g"  MATCH   1.00    <- the word "aroma" did that
+
+    catalog "aro Detergent de Vase Lamaie 500 ml" [brand aro]
+      vs "Fine Life Detergent de Vase cu Aroma de Lamaie 500 ml"   MATCH 0.87
+
+The last publishes one private label's price on a **different** private label's product.
+
+**Blast radius: 25 of 22,932 live branded non-EAN offers (0.11%).** Live and wrong today:
+
+    carrefour  brand "Fort" found inside "fortuna"
+      we say:   Cafea macinata si prajita Fort, 500 g
+      they say: Cafea prajita si macinata Fortuna Crema, 500g
+
+**Why it is not fixed here: the obvious fix loses more than it gains, and the choice is yours.**
+
+| rule | blocks `aro`/`aroma`, `Eti`/`petit` | keeps `Wella`/`wellaflex`, `Spira`/`spiral`, `Muller`/`mullermilch`, `OMO PROF`/`OMO PROFESSIONAL` |
+|---|---|---|
+| whole word only | yes | **no — breaks all four** |
+| match at a word boundary | no — `fortuna` and `aroma` both start with the brand | yes |
+
+Neither is clean, because four of the 25 are brand fields that are legitimate *prefixes* of the
+real word. `Fort`/`Fortuna` is not reachable by any string rule at all — it needs the overlap
+rules, and `difference()` treats `fort`/`fortuna` as counterparts because it is deliberately
+fuzzy about prefixes.
+
+A defensible option is whole-word on the NAME clause only, keeping `st.nbrand.includes(...)` as
+the escape hatch for sub-brands — but whether the four prefix cases carry a store brand field is
+not knowable from `Offer`, which has no `storeBrand` column. That needs a scrape to answer.

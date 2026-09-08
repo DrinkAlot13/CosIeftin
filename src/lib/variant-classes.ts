@@ -44,11 +44,12 @@ export type VariantClass = "flavour" | "qualifier" | "fat" | "format";
 export const VARIANT_CLASSES: Record<VariantClass, ReadonlySet<string>> = {
   // Which flavour. The Pepsi case.
   flavour: new Set([
-    "zmeura", "capsuni", "capsuna", "lamaie", "portocale", "portocala", "cola",
-    "vanilie", "cirese", "cirese", "visine", "visina", "piersici", "piersica",
-    "mango", "ananas", "pepene", "tropical", "afine", "mure", "kiwi", "banane",
-    "ciocolata", "caramel", "menta", "cocos", "alune", "fistic", "capsuni",
-    "mar", "mere", "para", "pere", "struguri", "grepfrut", "rodie", "lime",
+    "zmeura", "zmeure", "capsuni", "capsuna", "lamaie", "portocale", "portocala", "cola",
+    "vanilie", "cirese", "cireasa", "visine", "visina", "piersici", "piersica",
+    "mango", "ananas", "pepene", "tropical", "afine", "afina", "mure", "mura", "kiwi",
+    "banane", "banana", "ciocolata", "caramel", "menta", "cocos", "alune", "aluna",
+    "fistic", "mar", "mere", "para", "pere", "struguri", "strugure", "grepfrut",
+    "rodie", "lime",
   ]),
   // Which formulation. These change the product and usually the price.
   qualifier: new Set([
@@ -117,6 +118,62 @@ export function variantTokensOf(name: string): Map<VariantClass, Set<string>> {
   return out;
 }
 
+/**
+ * ONE FLAVOUR, TWO INFLECTIONS. Romanian nouns decline, and the flavour set listed both forms
+ * of several fruits as SEPARATE values while `variantConflict` compared them by exact set
+ * membership. So two merchants naming the same juice disagreed:
+ *
+ *     "Suc de portocale Olympus, 0.5 l"  vs  "OLYMPUS Suc de portocala 500 ml"
+ *
+ * — a flavour CONTRADICTION, and therefore a hard REJECT raised before anything is scored,
+ * which is why these never reached the review queue and no audit ever saw one. CLAUDE.md is
+ * explicit that token equality in this project is fuzzy ("comprimate/compr.", "paprica/paprika");
+ * the flavour class was the one comparison that was not.
+ *
+ * ── WHY THIS IS AN EXPLICIT LIST AND NOT A STEMMER.
+ *
+ * Every merge here is enumerated so it can be READ and disputed, because an algorithmic
+ * singular/plural rule is actively dangerous in this vocabulary:
+ *
+ *     mure  (blackberry)  vs  mere  (apple)      one letter apart, different fruit
+ *     para  (pear)        vs  paprica            a prefix rule merges them
+ *     lamaie (lemon)      vs  lime               genuinely different flavours
+ *
+ * A stemmer would merge the first pair and publish blackberry juice at apple juice's price.
+ * `tests/variant-flavour-folding.test.ts` asserts those three stay apart.
+ *
+ * Everything absent from this map folds to itself, so an unlisted flavour keeps today's exact
+ * behaviour — the safe direction.
+ */
+const FLAVOUR_GROUPS: string[][] = [
+  ["portocale", "portocala"],   // orange
+  ["capsuni", "capsuna"],       // strawberry
+  ["cirese", "cireasa"],        // cherry
+  ["visine", "visina"],         // sour cherry
+  ["piersici", "piersica"],     // peach
+  ["mere", "mar"],              // apple
+  ["pere", "para"],             // pear
+  ["banane", "banana"],         // banana
+  ["afine", "afina"],           // blueberry
+  ["mure", "mura"],             // blackberry — NOT "mere"
+  ["struguri", "strugure"],     // grape
+  ["alune", "aluna"],           // hazelnut
+  ["zmeura", "zmeure"],         // raspberry
+];
+
+/** Every form mapped to its group's first member. Absent words fold to themselves. */
+export const FLAVOUR_CANON: ReadonlyMap<string, string> = new Map(
+  FLAVOUR_GROUPS.flatMap((g) => g.map((w) => [w, g[0]] as [string, string])),
+);
+
+/** The groups, for the test and for anyone auditing what folding merges. */
+export const FLAVOUR_FOLDING_GROUPS: readonly (readonly string[])[] = FLAVOUR_GROUPS;
+
+/** Canonical form of a variant value. Identity for every class except flavour. */
+function canonical(klass: VariantClass, value: string): string {
+  return klass === "flavour" ? (FLAVOUR_CANON.get(value) ?? value) : value;
+}
+
 export type VariantConflict = { klass: VariantClass; a: string[]; b: string[] } | null;
 
 /**
@@ -134,9 +191,11 @@ export function variantConflict(nameA: string, nameB: string): VariantConflict {
     const sa = a.get(k)!;
     const sb = b.get(k)!;
     if (sa.size === 0 || sb.size === 0) continue;
-    // Any shared value means they agree about this class.
+    // Any shared value means they agree about this class. Compared through `canonical`, so
+    // "portocale" and "portocala" are one orange rather than two contradicting flavours.
+    const ca = new Set([...sa].map((v) => canonical(k, v)));
     let shared = false;
-    for (const v of sa) if (sb.has(v)) { shared = true; break; }
+    for (const v of sb) if (ca.has(canonical(k, v))) { shared = true; break; }
     if (!shared) return { klass: k, a: [...sa], b: [...sb] };
   }
   return null;

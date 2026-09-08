@@ -247,9 +247,39 @@ export function overlapTokens(nname: string): string[] {
     .filter((t) => t.length >= 1 && !STOP.has(t) && !SIZE_TOKEN.test(t) && !UNIT_NOISE.has(t));
 }
 
-/** The catalog item's anchor noun = its first significant token (RO names are noun-first). */
-export function headNoun(nname: string): string {
-  return sigTokens(nname)[0] ?? "";
+/**
+ * The catalog item's anchor noun: its first significant token that is NOT part of its brand.
+ *
+ * ── THE ASSUMPTION THIS USED TO MAKE, AND THE MEASUREMENT THAT KILLED IT.
+ *
+ * The old body was `sigTokens(nname)[0]`, and the comment above it read "RO names are
+ * noun-first". Nobody had checked. Measured across 6,939 branded grocery products
+ * (`npm run audit:brand-gap`): **1,885 of them, 27.2%, lead with the brand.** So the "head
+ * noun" of "BUCEGI Carne Porc 300 g" was `bucegi`, of "Chio Hula Hoops Inele Cascaval" was
+ * `chio`, and of "Poiana Ciocolata cu Lapte" was `poiana`.
+ *
+ * ── WHAT THAT COST, in two places rather than one.
+ *
+ *   1. `decide()` demanded that word in the merchant's own name, BEFORE the brand gate ran —
+ *      327 of 353 head-noun refusals (92.6%) sat on brand-first rows.
+ *   2. Worse, and invisible from `decide()`: `matchPoolToCatalog` indexes store items by their
+ *      tokens and looks each catalog row up BY ITS HEAD NOUN. A brand-first row therefore asked
+ *      for store items containing `bucegi`. At Mega Image (1.8% of names carry the brand) and
+ *      Freshful (2.2%) those items DO NOT EXIST, so the pair never became a candidate and
+ *      `decide()` never saw it. The two defects compound exactly.
+ *
+ * Excluding the brand is not a heuristic: the brand is a known field on both sides, and a name
+ * that repeats it is describing the same product, not a different one.
+ *
+ * The fallback matters. When every significant token IS a brand token ("Napolact", "Milka"),
+ * fall back to the first token rather than returning "" — an empty head noun makes the caller
+ * skip the row entirely, which would silently drop single-word products.
+ */
+export function headNoun(nname: string, nbrand = ""): string {
+  const toks = sigTokens(nname);
+  if (!nbrand) return toks[0] ?? "";
+  const brandParts = new Set(nbrand.split(/\s+/).filter(Boolean));
+  return toks.find((t) => !brandParts.has(t)) ?? toks[0] ?? "";
 }
 
 /**
@@ -488,7 +518,7 @@ export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number 
   if (cat.ean && st.ean && cat.ean === st.ean) return { ok: true, band: "AUTO_MATCH", score: 1, reason: "ean" };
   if (!stSize || stSize.unit !== catSize.unit) return { ok: false, band: "REJECT", score: 0, reason: "size-unit" };
   if (Math.abs(stSize.unitSize - catSize.unitSize) > catSize.unitSize * SIZE_TOLERANCE + 1e-9) return { ok: false, band: "REJECT", score: 0, reason: "size" };
-  const chead = headNoun(cat.nname);
+  const chead = headNoun(cat.nname, cat.nbrand);
   if (chead && !st.tokens.has(chead) && !st.nname.includes(chead)) return { ok: false, band: "REJECT", score: 0, reason: "head-noun" };
   const branded = cat.nbrand.length > 0;
   const brandHit = branded && (st.nbrand.includes(cat.nbrand) || st.nname.includes(cat.nbrand));
@@ -908,10 +938,28 @@ export async function matchPoolToCatalog(
   const coverage = new DecisionCoverage();
   for (const cp of rows) {
     const cItem = prep(cp.name, cp.brand, cp.ean);
-    const chead = headNoun(cItem.nname);
-    if (!chead) continue;
-    const cands = storeByToken.get(chead);
-    if (!cands) continue;
+    // ── CANDIDATE SELECTION LOOKS UP BOTH HEAD NOUNS, AND THE UNION IS THE POINT.
+    //
+    // The brand-aware head noun is what the GATE should compare (see `headNoun`). But swapping
+    // the index key to it as well was measured and was a net LOSS: `audit:candidate-reach` put
+    // it at 835,349 pairs newly reachable against **1,095,490 no longer reachable**.
+    //
+    // The reason is that indexing a brand-first row on its BRAND was not purely a bug. Asking
+    // the pool for "milka" returns every Milka item — a tightly brand-scoped candidate set, and
+    // a good one. Asking for "ciocolata" returns every chocolate in the shop. The defect was
+    // always the GATE demanding the brand in the merchant's own name before the brand gate ran;
+    // the index was doing something useful by accident.
+    //
+    // So take both and lose nothing. A candidate still has to survive `decide()`, which is
+    // where the actual judgement lives — widening the funnel cannot admit a wrong match on its
+    // own, it can only stop hiding a right one.
+    const cands: Prepared[] = [];
+    const seenCand = new Set<Prepared>();
+    for (const h of new Set([headNoun(cItem.nname), headNoun(cItem.nname, cItem.nbrand)])) {
+      if (!h) continue;
+      for (const c of storeByToken.get(h) ?? []) if (!seenCand.has(c)) { seenCand.add(c); cands.push(c); }
+    }
+    if (cands.length === 0) continue;
     const cSize = { unit: cp.unit, unitSize: cp.unitSize };
     for (const c of cands) {
       if (rejects.has(cp.id)) continue;

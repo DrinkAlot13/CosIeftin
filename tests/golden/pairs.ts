@@ -449,3 +449,47 @@ add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
 add("grocery", "pack-size", "SHOULD_NOT_MATCH",
   desc("Iaurt cremos Covalact, 900 g", "Covalact", "kg", 0.9),
   desc("Iaurt cremos 5% grăsime, 400g", "Covalact", "kg", 0.4));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BRAND-FIRST NAMES — `headNoun` returns the BRAND, not the noun
+//
+// Added BEFORE the head-noun fix is written, so the fix is GRADED against them rather than
+// tuned to them. `headNoun` is `sigTokens(nname)[0]`, and its own comment states the assumption:
+// "RO names are noun-first". Measured across 6,939 branded grocery targets, 1,885 of them
+// (27.2%) lead with the brand, so the "head noun" of "BUCEGI Carne Porc 300 g" is `bucegi` —
+// and `decide()` then demands that word in the merchant's own name BEFORE the brand gate runs.
+// 327 of 353 head-noun refusals (92.6%) sit on brand-first rows.
+//
+// The SHOULD_MATCH cases are the shape that compounds with the brand-in-name survey: a
+// brand-first catalog row meeting a merchant that omits brands from its names.
+//
+// THE GUARD-RAILS MATTER MORE. Removing the brand from the head-noun test also removes whatever
+// blocking that test was doing by accident, and these are the pairs it was blocking correctly.
+// The last two are the exact leaks the full-catalog simulation showed: Milka Bubbly is a
+// different bar, and a brandless "Apa plata 500ml" could be any of a dozen waters.
+const bf = (n: string, brand: string | null, unit: string, size: number): Side =>
+  ({ name: n, brand, unit, unitSize: size });
+
+add("grocery", "cross-store", "SHOULD_MATCH",
+  bf("BUCEGI Carne Porc 300 g", "Bucegi", "kg", 0.3),
+  bf("Conserva carne de porc 300g", "Bucegi", "kg", 0.3));
+add("grocery", "cross-store", "SHOULD_MATCH",
+  bf("Poiana Ciocolata cu Lapte 90 g", "Poiana", "kg", 0.09),
+  bf("Ciocolata cu lapte 90g", "Poiana", "kg", 0.09));
+add("grocery", "cross-store", "SHOULD_MATCH",
+  bf("Chio Hula Hoops Inele Cascaval 70 g", "Chio", "kg", 0.07),
+  bf("Pufuleti crocanti Hula Hoops cu aroma de cascaval 70 g", "Chio", "kg", 0.07));
+
+// ── GUARD-RAILS: what the brand-as-head-noun was blocking, correctly, by accident. ──
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  bf("BUCEGI Carne Porc 300 g", "Bucegi", "kg", 0.3),
+  bf("Carne de curcan 300g", "Bucegi", "kg", 0.3));
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  bf("Poiana Ciocolata Lapte si Stafide 90 g", "Poiana", "kg", 0.09),
+  bf("Ciocolata cu alune si stafide 90g", "Poiana", "kg", 0.09));
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  bf("Ciocolata cu lapte Milka, 90 g", "Milka", "kg", 0.09),
+  bf("Ciocolata aerata cu lapte 90g", "Milka", "kg", 0.09));
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  bf("Apa plata minerala San Benedetto, 0.5 l", "San Benedetto", "l", 0.5),
+  bf("Apa plata 500ml", null, "l", 0.5));
