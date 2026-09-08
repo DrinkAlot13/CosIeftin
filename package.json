@@ -163,7 +163,8 @@
     "audit:brand-substring": "tsx scripts/audit-brand-substring.ts",
     "verify:push": "tsx scripts/verify-push.ts",
     "audit:rate-limit": "tsx scripts/audit-rate-limit.ts",
-    "probe:sitemap": "tsx scripts/probe-sitemap.ts"
+    "probe:sitemap": "tsx scripts/probe-sitemap.ts",
+    "audit:deploy": "tsx scripts/audit-deploy.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

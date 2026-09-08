@@ -161,9 +161,25 @@ async function main(): Promise<void> {
   const advertisedOrigins = new Set<string>();
   for (const u of urls) { try { advertisedOrigins.add(new URL(u).origin); } catch { /* reported below as an unparseable URL */ } }
   const foreign = [...advertisedOrigins].filter((o) => o !== baseOrigin);
+  let originAnswers = true;
   if (foreign.length > 0) {
     console.log(`\n  ORIGIN MISMATCH — the sitemap advertises ${foreign.join(", ")}`);
     console.log(`  but this run is probing ${baseOrigin}. SITE_URL and the listening port disagree.`);
+
+    // ── DOES THE ADVERTISED ORIGIN ANSWER AT ALL?
+    //
+    // Named as its own check because the failure it catches is one a reader would otherwise
+    // misdiagnose. When SITE_URL pointed at :3200 and the server listened on :3000, this script
+    // could not fetch a single child sitemap and reported "ZERO URLS READ — is the server
+    // running?" — true, alarming, and about the wrong thing. The server was running; the
+    // sitemap was advertising an origin nobody serves. In production that is what gets
+    // published to Google, and Google is slow to forgive.
+    for (const o of foreign) {
+      const ok = await fetch(o, { headers: { "user-agent": UA } }).then((r) => r.ok).catch(() => false);
+      console.log(`    ${o}  ${ok ? "answers" : "DOES NOT ANSWER — every URL in this sitemap is unreachable as published"}`);
+      if (!ok) originAnswers = false;
+    }
+
     console.log(rewriteOrigin
       ? `  --rewrite-origin given: probing the paths against ${baseOrigin} anyway, which tests the\n  URL SHAPES but NOT the origin. The mismatch above is still a real finding.`
       : `  Probing them as published, which is the honest oracle: a URL that does not resolve\n  where it claims to live does not resolve. Pass --rewrite-origin to test shapes locally.`);
@@ -239,8 +255,18 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n  checked ${checked} of ${urls.length} advertised URLs, rotating by date.`);
-  emitJson({ base, advertised: urls.length, checked, shapes: summary, dead: deadRows.slice(0, 200), pass: !anyBroken });
+  const pass = !anyBroken && originAnswers;
+  emitJson({
+    base, advertised: urls.length, checked, shapes: summary,
+    advertisedOrigins: [...advertisedOrigins], originMismatch: foreign, originAnswers,
+    dead: deadRows.slice(0, 200), pass,
+  });
 
+  if (!originAnswers) {
+    console.error(`\n  FAIL — the sitemap advertises an origin that does not answer. Every URL it`);
+    console.error(`  publishes is unreachable as published, whatever those paths do locally.`);
+    process.exit(1);
+  }
   if (anyBroken) {
     console.error(`\n  FAIL — the sitemap advertises URLs that do not resolve.`);
     process.exit(1);
