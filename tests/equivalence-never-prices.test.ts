@@ -59,6 +59,22 @@ describe("equivalence never prices another product", () => {
     expect(page.includes("Nu sunt același produs")).toBe(true);
   });
 
+  it("the equivalents heading is chosen from the data, never asserted", () => {
+    // `crenvursti-450g` had three live members and ALL THREE were at Mega Image, so the page
+    // printed "la alte magazine" over a table where every row was the shop the reader was
+    // already looking at. The old guard was `rows.length > 1`, and a row is per (product,
+    // shop) — two rows can be one product at two shops, or two products at one.
+    const page = readFileSync(join(process.cwd(), "src/app/p/[slug]/page.tsx"), "utf8");
+    expect(page.includes("equivalents.rows.length > 1")).toBe(false);
+    expect(page.includes("equivalents.otherShopCount > 0")).toBe(true);
+    expect(page.includes("Produse echivalente în același magazin")).toBe(true);
+
+    // …and both counts must exist on EVERY return path of the query, or the page compares
+    // `undefined > 0`, which is false, and the section silently never renders.
+    const body = bodyOf(queries, "getClassEquivalents");
+    expect(body.includes("otherShopCount: 0, equivalentCount: 0")).toBe(true);
+  });
+
   it("countStats keeps comparable and comparable-or-equivalent as SEPARATE numbers", () => {
     const body = bodyOf(queries, "countStats");
     expect(body.includes("comparable,")).toBe(true);

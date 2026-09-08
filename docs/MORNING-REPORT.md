@@ -387,3 +387,103 @@ reading aid, and `audit:private-label-classes` reports **one verdict per class**
 
 `npm run audit:discriminator` prints both instruments side by side for all 30; `--demo` strips
 each fix's added exclusions and lists the 26 products the old rules admitted.
+
+---
+
+## 10. The class-churn problem, and the limit written down
+
+### 10.1 A class is only a comparison while its members are in stock at two shops
+
+**This is the failure mode of the whole approach and it happened on day one.**
+
+    the 30 new classes    29 are a comparison today · 1 stranded at one shop · 0 with no live member
+    all 131 classes      114 are a comparison today · 12 stranded at one shop · 5 with no live member
+
+At creation, all 30 spanned 2+ shops — the Phase 3 audit reported 0 single-merchant, which is
+the check that would have caught it. Within hours `sos-salsa-branza-300g` fell to one when
+Auchan's *Sos salsa cu branza 300 g* aged out of the live window. **Nothing announced it.** The
+class went on existing while the comparison stopped.
+
+The older classes tell the same story, and I have no creation-time snapshot for them — twelve
+are stranded now and I cannot say when any of them fell:
+
+    banane-bio-kg (sezamo) · crenvursti-450g (mega-image) · margarina-500g (metro)
+    mere-1kg, mere-granny-kg, mere-idared-kg, rosii-1kg, sare-1kg (auchan)
+    mere-kg, visine-kg (sezamo) · ridichi-kg (freshful) · sos-salsa-branza-300g (mega-image)
+
+**Now in the nightly.** `npm run audit:class-health` reports members, LIVE members and merchant
+span per class, and is recorded by `soak:log` as step 9. `soak:report` surfaces it **one line
+per class** — an aggregate would bury one class falling among 130 healthy ones, which is exactly
+how this went unnoticed. A stranded class is reported as **information, not a failure**: the
+rule may be perfectly good and the shelf temporarily empty, and deleting on that basis would be
+the "assign must be able to unassign" mistake pointed the wrong way.
+
+### 10.2 The UI did NOT handle it — a live bug, now fixed
+
+You asked me to confirm rather than assume, and the answer was no. Fetched, not reasoned:
+
+    /p/crenvursti-cu-piept-de-pui-caroli-450-g-5941259016419
+
+    🔁 Produse echivalente la alte magazine
+       Crenvursti cu piept de pui Caroli, 450 g · produsul de mai sus | Mega Image | 17,99
+       Crenvursti cu piept de pui Fox, 470 g                          | Mega Image | 18,79
+       Crenvursti cu curcan Caroli, 450 g                             | Mega Image | 23,39
+
+**"At other shops", over three rows all at the same shop, including the product being viewed.**
+The guard was `rows.length > 1`, and a row is per (product, shop) — two rows can be one product
+at two shops, or two products at one. It counted the wrong thing.
+
+`getClassEquivalents` now returns `otherShopCount` (equivalents at a shop that does not already
+sell this product) and `equivalentCount`. The page picks its heading from the data:
+
+- equivalents at other shops → **"Produse echivalente la alte magazine"**
+- equivalents only at the same shop → **"Produse echivalente în același magazin"**
+- no equivalents at all → nothing renders
+
+Verified on the rendered page both ways: the crenvurști page now says *în același magazin*, and
+`zahar-brun-500g` still says *la alte magazine* across five shops. Pinned by a test, including
+that both counts exist on every return path — omitting them from the early return would have
+made the page compare `undefined > 0`, which is false, and the section would have silently
+stopped rendering for every unclassed product.
+
+**Deliberately kept rather than hidden:** a cheaper equivalent at the shop you are already in is
+useful, so that case gets an honest heading instead of being suppressed.
+
+### 10.3 The limit, written into CLAUDE.md
+
+New section, **"SOME DEFECTS HAVE NO AUTOMATED DETECTOR"**, next to the peer-median limit. It
+records that the spread rule did not find the seven merges — a person reading the member lists
+did — with the before/after table showing the flag set unchanged at twenty; that promoting the
+reading aid to an instrument produced a rule flagging 29 of 30 and detecting nothing; and three
+rules that follow: an audit's job is to make ten minutes productive rather than to reach a
+verdict, one verdict per subject, and say plainly which numbers are judgements.
+
+`audit:discriminator` was rebuilt for reading rather than for scoring: classes ordered
+likeliest-problem-first, one line per PRODUCT (not per row) sorted by unit price with its shops
+beside it, separating words in [brackets] inside the names, and spread, shop count and size
+range in the header. The ordering is stated in the file as a sorting heuristic only — nothing
+reads it and it appears in no summary.
+
+### 10.4 New since the report was written: Carrefour is collapsing on a second run
+
+`audit:db` went 43/48 → 42/48 while I worked, and neither new failure is from code changed here:
+
+**"no merchant's successful run collapsed to half its own recent best" — Carrefour.**
+
+    2026-09-08 06:55   written  1197   pool  1209    <- collapse
+    2026-09-08 05:14   written  4014   pool  3944    <- healthy, 100 minutes earlier
+    2026-09-07 20:59   written  4083   pool  4035
+    2026-09-07 01:58   written  1201   pool  1213    <- the same collapse, previous day
+
+It is **recurring**, not a one-off: a second Carrefour run shortly after a good one pools ~1,200
+instead of ~4,000 and writes them without aborting. The <60% guard did not fire because the
+POOL was small, not the write rate — the scraper found 1,209 products and honestly wrote 1,197
+of them. Something is truncating discovery on the second run. **The invariant is doing exactly
+its job; this needs a look and it is not mine to guess at.** Added to PROPOSALS as item 12.
+
+**"no offer past promoValidTo left unmarked as expired" — 18 Kaufland offers, all
+`validTo=2026-09-08`.** These are flyer promos expiring today; the step that marks them runs in
+the nightly. Clock-driven, self-clearing, and listed here so it is not read as a regression.
+
+Also worth noting: **fan-out now PASSES** (Auchan's 9-way product resolved on its own), so the
+count moving 43 → 42 is two new failures and one fixed, not a slide.

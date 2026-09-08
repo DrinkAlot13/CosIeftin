@@ -68,6 +68,12 @@ type Entry = {
       pass: boolean; totalChecked: number; broken: string[];
       merchants?: { merchant: string; live: number; checked: number; deadRate: number }[];
     } | null;
+    /** Which equivalence classes are still a comparison today. */
+    "audit:class-health"?: {
+      total: number; comparable: number;
+      stranded?: { slug: string; shop: string }[];
+      dark?: string[];
+    } | null;
   };
   comparability: {
     comparison?: { products: number; comparable: number; share: number };
@@ -104,6 +110,13 @@ function invariantMap(e: Entry): Map<string, boolean> {
   // ONE LINE PER MERCHANT, not one line for the check. A single "links ok" would hide the
   // failure this exists to catch: one merchant's URL scheme changing while eleven stay fine.
   // That is precisely how Sezamo's 9,420 dead links survived — invisible inside an aggregate.
+  // ONE LINE PER CLASS, for the same reason as the links: a class quietly falling to one shop
+  // is a comparison that stopped existing, and an aggregate would hide it among 130 healthy ones.
+  const health = e.invariants["audit:class-health"];
+  if (health) {
+    for (const st of health.stranded ?? []) m.set(`class · ${st.slug} spans 2+ shops`, false);
+    m.set("class · all classes span 2+ shops", (health.stranded ?? []).length === 0);
+  }
   const links = e.invariants["probe:links"];
   if (links) {
     m.set("links · checked something", links.totalChecked > 0);

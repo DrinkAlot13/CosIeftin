@@ -219,6 +219,11 @@ async function main(): Promise<void> {
   // shows up within days rather than by accident. See CLAUDE.md, "SOME FACTS CAN ONLY BE
   // CHECKED AGAINST THE WORLD".
   const links = runStep("probe:links", "scripts/probe-links.ts");
+  // 9 — A CLASS IS ONLY A COMPARISON WHILE ITS MEMBERS ARE IN STOCK AT TWO SHOPS, and stock
+  // moves daily. `sos-salsa-branza-300g` was written with two merchants and dropped to one
+  // within hours when Auchan's member aged out. Nothing announced it; the class simply stopped
+  // being a comparison while continuing to exist. Recorded nightly so the drift is visible.
+  const classHealth = runStep("audit:class-health", "scripts/audit-class-health.ts");
 
   const merchants = await merchantNight(new Date(`${date}T00:00:00`));
 
@@ -252,7 +257,7 @@ async function main(): Promise<void> {
       ? null
       : `liveness FAILED (${dead.join(", ") || "see step"}); the checks after it describe data whose source is not answering`,
     verifySite,
-    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links].map((s) => ({
+    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, classHealth].map((s) => ({
       name: s.name, ok: s.ok, exitCode: s.exitCode, durationMs: s.durationMs, ...(s.tail ? { tail: s.tail } : {}),
     })),
     liveness: liveness.data,
@@ -263,6 +268,7 @@ async function main(): Promise<void> {
       "pool-contract": { pass: poolContract.ok },
       // The only invariant here answered by the outside world rather than by ourselves.
       "probe:links": links.data,
+      "audit:class-health": classHealth.data,
       "verify:code": { pass: code.ok },
     },
     comparability: comparability.data,

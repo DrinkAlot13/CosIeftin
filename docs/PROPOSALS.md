@@ -196,3 +196,28 @@ Two considerations against, both worth saying plainly:
 
 **Recommendation: fix 1 first, then decide.** The overnight brief forbids adding merchants, so
 nothing was done.
+
+---
+
+## 12. Carrefour collapses on a second run — 1 hour, and it is silently costing 2,800 offers
+
+**The measurement** (found by `audit:db`'s collapse invariant, 2026-09-08):
+
+    2026-09-08 06:55   written  1197   pool  1209    <- collapse
+    2026-09-08 05:14   written  4014   pool  3944    <- healthy, 100 minutes earlier
+    2026-09-07 20:59   written  4083   pool  4035
+    2026-09-07 01:58   written  1201   pool  1213    <- same collapse, previous day
+
+A second Carrefour run shortly after a good one discovers ~1,200 products instead of ~4,000 and
+writes them without aborting. **The <60% abort guard cannot catch it**, because the write rate is
+fine — 1,197 of 1,209 pooled. What collapsed is DISCOVERY, upstream of everything the guard
+watches. Rate limiting, a session expiring, or a category list that renders short on a warm
+cache are all candidates; none is established.
+
+It leaves Carrefour holding roughly a quarter of its catalog until the next good run, which
+directly suppresses comparability — Carrefour is one of the six merchants that can pair with
+another on a private-label class.
+
+**Worth adding an invariant for the shape**, not just this instance: a run whose POOL is under
+60% of that merchant's recent best pool should abort the same way a run whose WRITES collapse
+does. The existing guard watches the wrong end of the pipe.

@@ -377,7 +377,11 @@ export async function getClassEquivalents(productId: number, limit = 12) {
     where: { id: productId },
     select: { id: true, equivalenceClassId: true, equivalenceClass: { select: { label: true, unit: true } } },
   });
-  if (!p?.equivalenceClassId) return { label: null, rows: [] };
+  // Every field the caller reads, on EVERY return path. Omitting the two counts here made them
+  // `number | undefined` at the call site, and the page would have compared `undefined > 0` —
+  // false, so the section would silently never render for an unclassed product. Correct by
+  // accident is still the shape of bug this project keeps finding.
+  if (!p?.equivalenceClassId) return { label: null, rows: [], otherShopCount: 0, equivalentCount: 0 };
 
   const siblings = await prisma.product.findMany({
     where: { equivalenceClassId: p.equivalenceClassId },
@@ -410,7 +414,31 @@ export async function getClassEquivalents(productId: number, limit = 12) {
     })),
   );
   rows.sort((a, b) => (a.pricePerUnit || Infinity) - (b.pricePerUnit || Infinity) || a.priceBani - b.priceBani);
-  return { label: p.equivalenceClass?.label ?? null, rows: rows.slice(0, limit) };
+  const shown = rows.slice(0, limit);
+
+  // ── "LA ALTE MAGAZINE" HAS TO BE TRUE.
+  //
+  // A class is a claim that two shops both sell something interchangeable, and stock moves
+  // daily: `crenvursti-450g` held three live members and ALL THREE were at Mega Image, so the
+  // item page rendered "Produse echivalente la alte magazine" over a table where every row was
+  // the shop the reader was already looking at — including the product itself. The old guard
+  // was `rows.length > 1`, which counts rows, and rows are per (product, shop).
+  //
+  // What the heading claims is a fact about SHOPS, so it is computed about shops: is there an
+  // equivalent — a DIFFERENT product — at a merchant that does not already sell this one? The
+  // page picks its heading from this rather than asserting the stronger of the two.
+  const ownShops = new Set(shown.filter((r) => r.isSelf).map((r) => r.merchantSlug));
+  const others = shown.filter((r) => !r.isSelf);
+  const shopsElsewhere = new Set(others.filter((r) => !ownShops.has(r.merchantSlug)).map((r) => r.merchantSlug));
+
+  return {
+    label: p.equivalenceClass?.label ?? null,
+    rows: shown,
+    /** Equivalents that exist at a shop which does not already sell this product. */
+    otherShopCount: shopsElsewhere.size,
+    /** Equivalents that exist at all, anywhere — including this product's own shops. */
+    equivalentCount: others.length,
+  };
 }
 export type ClassEquivalents = Awaited<ReturnType<typeof getClassEquivalents>>;
 

@@ -1,38 +1,32 @@
-// IS THE 2x UNIT-PRICE SPREAD THE RIGHT FLAG FOR A BAD CLASS? Both instruments, side by side.
+// A READING AID FOR EQUIVALENCE CLASSES. It reaches no verdict, and that is deliberate.
 //
-// THE CLAIM UNDER TEST. `audit:private-label-classes` flags a class whose members' unit prices
-// differ by more than 2x. On the thirty private-label classes it fires on twenty. If most of
-// those twenty are correct classes, the flag is not measuring what it is meant to measure, and
-// a person reading twenty false alarms a night will stop reading them.
+// ── WHY THIS IS NOT A CHECK.
 //
-// THE ALTERNATIVE. When a group's prices disagree, ask WHICH WORDS separate the cheap half from
-// the dear half — the test CLAUDE.md already prescribes for peer-relative checks, which says
-// divergent store names are the cheapest available discriminator and do not depend on the
-// prices at all. If the separating words are BRAND NAMES and PACK SIZES, the class is
-// consistent and the gap is brand premium. If a PRODUCT-DEFINING word appears on one side only
-// — `masline` against `floarea-soarelui`, `gura` against `izvor` — the class merged two things.
+// Whether a class describes a real purchase is a judgement about the world, not a property of
+// the data — see CLAUDE.md, "SOME DEFECTS HAVE NO AUTOMATED DETECTOR". Seven real merges were
+// found in these thirty classes, and fixing all seven left the spread rule's flag set at twenty
+// before and twenty after. A person reading the member lists found them, with a list of
+// discriminating words as a prompt.
 //
-// ── HOW A TOKEN IS JUDGED, and the first attempt was wrong.
+// This file IS that prompt, built for reading. Its job is to make ten minutes of a person's
+// attention productive: group the members, show the words that separate the cheap half from the
+// dear half, put the spread and the shop count beside them, and order the classes so the
+// likeliest problems come first.
 //
-// Version one asked whether the token appears in the `Product.brand` column. That called
-// `simpl`, `bilbor`, `yutto`, `olitalia`, `cornette` and `kitchin` product words, because those
-// brands are not populated in the brand column for the products carrying them. A discriminator
-// that depends on a column being filled in inherits that column's gaps.
+// The ordering is a HEURISTIC FOR SORTING ONLY. It is not a score, it does not appear in any
+// summary, and nothing downstream reads it. `audit:private-label-classes` remains the one place
+// a class gets a verdict, and it gets exactly one.
 //
-// Version two asks a question the data can always answer: **how many DISTINCT BRANDS does this
-// token appear alongside across the whole catalog?** A brand name appears with one brand — its
-// own. A descriptive word (`integral`, `sarat`, `murate`, `gura`) appears with dozens, because
-// dozens of brands describe their products with it. That needs no curation and no list.
-//
-//   npm run audit:discriminator            all 30 classes, both verdicts
-//   npm run audit:discriminator -- --demo  what the token test caught that the spread did not
+//   npm run audit:discriminator            every class, worst-looking first
+//   npm run audit:discriminator -- --demo  what each rule fix actually removed, from live data
+//   npm run audit:discriminator -- --top=8
 
 import { PrismaClient } from "@prisma/client";
 import { membershipOk, rulesFromAttributes, type ClassRules } from "../src/lib/substitution/class-rules";
 
 const prisma = new PrismaClient();
 
-/** A token seen beside this many distinct brands or more is DESCRIPTIVE, not a brand. */
+/** A token seen beside this many distinct brands or more is descriptive, not a brand name. */
 const DESCRIPTIVE_MIN_BRANDS = 4;
 
 function toks(s: string): string[] {
@@ -44,36 +38,45 @@ function toks(s: string): string[] {
     .filter((t) => t.length > 2);
 }
 
-type Member = { id: number; name: string; unitSize: number; prices: { merchant: string; bani: number }[] };
+type Priced = { shop: string; bani: number };
+type Member = { name: string; unitSize: number; prices: Priced[] };
 
 /**
- * The seven merges the token test caught, expressed as the exclusions the fix ADDED.
+ * The rule fixes, expressed as the exclusions each ADDED.
  *
- * Rather than reconstruct seven whole pre-fix rule sets from memory — which would be a story,
- * not evidence — each entry names only the tokens that were added. `--demo` removes them from
- * the CURRENT rule, re-runs membership over the live catalog, and shows exactly which products
- * the old rule admitted. Computed, not remembered.
+ * Reconstructing seven pre-fix rule sets from memory would be a story. Naming only the tokens
+ * that were added lets `--demo` remove them from the CURRENT rule, re-run membership over the
+ * live catalog, and show exactly which products the old rule let in. Computed, not remembered.
  */
 const FIXES: { slug: string; added: string[]; what: string }[] = [
-  { slug: "apa-carbogazoasa-05l", added: ["necarbogaz", "decarbogaz"], what: "`carbogaz` is a SUBSTRING match, so the token DEFINING the class also matched its own negation" },
-  { slug: "apa-carbogazoasa-05l", added: ["afine", "menta", "lamaie", "capsuni", "zmeura", "portocale", "piersici", "ghimbir", "castravete"], what: "flavoured waters are not water" },
-  { slug: "apa-plata-05l", added: ["afine", "menta", "lamaie", "capsuni", "zmeura", "portocale", "piersici", "ghimbir", "castravete"], what: "flavoured waters are not water" },
-  { slug: "zahar-brun-500g", added: ["plic", "baghete", "stick", "melasa", "nerafinat", "dark", "crystals", "muscovado", "demerara"], what: "sachet packs stored as 500 g exactly like a bag, plus other sugars" },
+  { slug: "apa-carbogazoasa-05l", added: ["necarbogaz", "decarbogaz"], what: "`carbogaz` matches by SUBSTRING, so the token defining the class also matched its own negation" },
+  { slug: "apa-carbogazoasa-05l", added: ["afine", "menta", "lamaie", "capsuni", "zmeura", "portocale", "piersici", "ghimbir", "castravete"], what: "flavoured water is not water" },
+  { slug: "apa-plata-05l", added: ["afine", "menta", "lamaie", "capsuni", "zmeura", "portocale", "piersici", "ghimbir", "castravete"], what: "flavoured water is not water" },
+  { slug: "zahar-brun-500g", added: ["plic", "baghete", "stick", "melasa", "nerafinat", "dark", "crystals", "muscovado", "demerara"], what: "sachet boxes stored as 500 g exactly like a bag, plus other sugars" },
   { slug: "ciuperci-intregi-conserva-280g", added: ["otet", "murate", "marar"], what: "PICKLED mushrooms, in vinegar with dill" },
   { slug: "croissant-cacao-85g", added: ["capsuni", "alune", "cocos", "padure", "dubla", "fistic", "lamaie"], what: "other fillings — the rule said `capsune`, the catalog writes `capsuni`" },
   { slug: "faina-alba-650-1kg", added: ["manitoba", "graham"], what: "Manitoba is a high-protein bread flour, not tip 650" },
   { slug: "fulgi-ovaz-500g", added: ["macinat", "faina", "tarate"], what: "ground oats are oat FLOUR, not oat flakes" },
 ];
 
+/** Wrap the separating words in a name so the eye lands on them. */
+function highlight(name: string, words: Set<string>): string {
+  if (words.size === 0) return name;
+  return name.split(/(\s+)/).map((w) => {
+    const bare = toks(w)[0];
+    return bare && words.has(bare) ? `[${w}]` : w;
+  }).join("");
+}
+
 async function main(): Promise<void> {
   const demo = process.argv.includes("--demo");
+  const top = Number((process.argv.find((a) => a.startsWith("--top=")) ?? "--top=99").split("=")[1]);
   const cutoff = new Date(Date.now() - 14 * 86_400_000);
   const live = {
     merchant: { active: true }, availability: "in stock", isStale: false, flagged: false,
     NOT: { priceSource: "DELIVERY_PLATFORM" }, lastObservedAt: { gte: cutoff },
   } as const;
 
-  // ── The catalog's token vocabulary: token -> how many distinct brands use it.
   const catalog = await prisma.product.findMany({
     where: { section: "grocery", offers: { some: live } },
     select: { id: true, name: true, brand: true, unit: true, unitSize: true },
@@ -102,76 +105,91 @@ async function main(): Promise<void> {
   const byClass = new Map<number, Member[]>();
   for (const p of assigned) {
     const prices = p.offers.filter((o) => o.priceBani != null && o.priceBani > 0)
-      .map((o) => ({ merchant: o.merchant.slug, bani: o.priceBani as number }));
+      .map((o) => ({ shop: o.merchant.slug, bani: o.priceBani as number }));
     if (!prices.length) continue;
-    byClass.set(p.equivalenceClassId!, [...(byClass.get(p.equivalenceClassId!) ?? []), { id: p.id, name: p.name, unitSize: p.unitSize, prices }]);
+    byClass.set(p.equivalenceClassId!, [...(byClass.get(p.equivalenceClassId!) ?? []), { name: p.name, unitSize: p.unitSize, prices }]);
   }
 
-  type Verdict = { slug: string; spread: number; spreadFlag: boolean; tokenFlag: boolean; cheapWords: string[]; dearWords: string[]; members: Member[]; unit: string };
-  const verdicts: Verdict[] = [];
+  type View = {
+    slug: string; label: string; unit: string; members: Member[];
+    lo: number; hi: number; spread: number; shops: Set<string>;
+    words: Set<string>; cheapWords: string[]; dearWords: string[];
+    sizes: number[]; attention: number;
+  };
+  const views: View[] = [];
 
   for (const c of strict) {
     const members = byClass.get(c.id) ?? [];
-    const unitPrices = members.flatMap((m) => m.prices.map((p) => ({ name: m.name, perUnit: p.bani / 100 / m.unitSize })));
-    if (unitPrices.length === 0) continue;
-    const lo = Math.min(...unitPrices.map((u) => u.perUnit));
-    const hi = Math.max(...unitPrices.map((u) => u.perUnit));
+    if (!members.length) continue;
+    const rows = members.flatMap((m) => m.prices.map((p) => ({ name: m.name, perUnit: p.bani / 100 / m.unitSize })));
+    const lo = Math.min(...rows.map((r) => r.perUnit));
+    const hi = Math.max(...rows.map((r) => r.perUnit));
     const spread = lo > 0 ? hi / lo : 0;
     const mid = (lo + hi) / 2;
-    const cheapToks = new Set(unitPrices.filter((u) => u.perUnit <= mid).flatMap((u) => toks(u.name)));
-    const dearToks = new Set(unitPrices.filter((u) => u.perUnit > mid).flatMap((u) => toks(u.name)));
-    const onlyCheap = [...cheapToks].filter((t) => !dearToks.has(t) && descriptive(t) && !/^\d/.test(t));
-    const onlyDear = [...dearToks].filter((t) => !cheapToks.has(t) && descriptive(t) && !/^\d/.test(t));
-    verdicts.push({
-      slug: c.slug, spread, spreadFlag: spread > 2,
-      tokenFlag: onlyCheap.length + onlyDear.length > 0,
-      cheapWords: onlyCheap, dearWords: onlyDear, members, unit: c.unit,
+    const cheapToks = new Set(rows.filter((r) => r.perUnit <= mid).flatMap((r) => toks(r.name)));
+    const dearToks = new Set(rows.filter((r) => r.perUnit > mid).flatMap((r) => toks(r.name)));
+    const cheapWords = [...cheapToks].filter((t) => !dearToks.has(t) && descriptive(t) && !/^\d/.test(t));
+    const dearWords = [...dearToks].filter((t) => !cheapToks.has(t) && descriptive(t) && !/^\d/.test(t));
+    const shops = new Set(members.flatMap((m) => m.prices.map((p) => p.shop)));
+    const sizes = [...new Set(members.map((m) => m.unitSize))].sort((a, b) => a - b);
+    // ORDERING ONLY. Not a score, not reported, not read by anything.
+    const attention =
+      Math.min(spread, 8) * 2 +
+      (cheapWords.length + dearWords.length) * 0.5 +
+      (shops.size < 2 ? 10 : 0) +
+      (sizes.length > 1 ? 2 : 0);
+    views.push({
+      slug: c.slug, label: c.label, unit: c.unit, members, lo, hi, spread, shops,
+      words: new Set([...cheapWords, ...dearWords]), cheapWords, dearWords, sizes, attention,
     });
   }
 
-  console.log("═".repeat(112));
-  console.log("THE TWO INSTRUMENTS, SIDE BY SIDE — 30 private-label classes");
-  console.log("═".repeat(112));
-  console.log(`  ${"class".padEnd(34)} ${"spread".padStart(7)} ${"spread?".padStart(8)} ${"token?".padStart(7)}  separating PRODUCT words (brands and sizes filtered out)`);
-  for (const v of verdicts.sort((a, b) => b.spread - a.spread)) {
-    const words = [...v.cheapWords.map((w) => `-${w}`), ...v.dearWords.map((w) => `+${w}`)].slice(0, 8).join(" ");
-    console.log(`  ${v.slug.padEnd(34)} ${v.spread.toFixed(2).padStart(6)}x ${(v.spreadFlag ? "FLAG" : "ok").padStart(8)} ${(v.tokenFlag ? "FLAG" : "ok").padStart(7)}  ${words}`);
-  }
+  views.sort((a, b) => b.attention - a.attention);
 
-  const bothFlag = verdicts.filter((v) => v.spreadFlag && v.tokenFlag);
-  const spreadOnly = verdicts.filter((v) => v.spreadFlag && !v.tokenFlag);
-  const tokenOnly = verdicts.filter((v) => !v.spreadFlag && v.tokenFlag);
-  const neither = verdicts.filter((v) => !v.spreadFlag && !v.tokenFlag);
-  console.log(`\n  spread flags ${verdicts.filter((v) => v.spreadFlag).length}/${verdicts.length} · token flags ${verdicts.filter((v) => v.tokenFlag).length}/${verdicts.length}`);
-  console.log(`  both ${bothFlag.length} · spread ONLY ${spreadOnly.length} · token ONLY ${tokenOnly.length} · neither ${neither.length}`);
+  console.log("═".repeat(104));
+  console.log(`EQUIVALENCE CLASSES, FOR READING — ${views.length} classes, likeliest problems first`);
+  console.log("This reaches no verdict. audit:private-label-classes does that, once per class.");
+  console.log("═".repeat(104));
 
-  console.log(`\n${"─".repeat(112)}\nFLAGGED BY SPREAD, CLEARED BY THE TOKEN TEST — the false alarms, with their members\n${"─".repeat(112)}`);
-  for (const v of spreadOnly.sort((a, b) => b.spread - a.spread)) {
-    console.log(`\n  ${v.slug}   spread ${v.spread.toFixed(2)}x — every separating word is a brand or a size`);
-    const rows = v.members.flatMap((m) => m.prices.map((p) => ({ n: m.name, s: m.unitSize, m: p.merchant, per: p.bani / 100 / m.unitSize })))
-      .sort((a, b) => a.per - b.per);
-    for (const r of [rows[0], rows[rows.length - 1]]) {
-      console.log(`      ${r.per.toFixed(2).padStart(7)}/${v.unit}  ${r.m.padEnd(12)} ${r.n.slice(0, 56)}`);
+  for (const [i, v] of views.slice(0, top).entries()) {
+    console.log(`\n${"─".repeat(104)}`);
+    console.log(`${String(i + 1).padStart(2)}. ${v.slug}   "${v.label}"`);
+    const sizeNote = v.sizes.length > 1 ? `sizes ${v.sizes.join(", ")} ${v.unit}` : `all ${v.sizes[0]} ${v.unit}`;
+    console.log(`    ${v.members.length} products · ${v.shops.size} shops · ${v.lo.toFixed(2)}–${v.hi.toFixed(2)} lei/${v.unit} (${v.spread.toFixed(2)}x) · ${sizeNote}`);
+    if (v.shops.size < 2) console.log(`    ⚠ ONE SHOP (${[...v.shops][0]}) — not a comparison today`);
+    if (v.cheapWords.length || v.dearWords.length) {
+      console.log(`    words only in the CHEAPER half: ${v.cheapWords.slice(0, 12).join(" ") || "—"}`);
+      console.log(`    words only in the DEARER  half: ${v.dearWords.slice(0, 12).join(" ") || "—"}`);
+    } else {
+      console.log(`    the halves use the same words`);
     }
-    console.log(`      (${rows.length} priced rows; cheapest and dearest shown)`);
-  }
-
-  if (tokenOnly.length) {
-    console.log(`\n${"─".repeat(112)}\nFLAGGED BY THE TOKEN TEST, MISSED BY SPREAD — a merge the price gap did not reveal\n${"─".repeat(112)}`);
-    for (const v of tokenOnly) {
-      console.log(`\n  ${v.slug}   spread only ${v.spread.toFixed(2)}x, but the halves are separated by:`);
-      console.log(`      cheaper half only: ${v.cheapWords.join(" ") || "—"}`);
-      console.log(`      dearer  half only: ${v.dearWords.join(" ") || "—"}`);
+    // GROUPED BY PRODUCT, cheapest first — one line per product, its shops beside it.
+    const withUnit = v.members
+      .map((m) => ({ m, best: Math.min(...m.prices.map((p) => p.bani / 100 / m.unitSize)) }))
+      .sort((a, b) => a.best - b.best);
+    for (const { m, best } of withUnit) {
+      const shops = m.prices
+        .sort((a, b) => a.bani - b.bani)
+        .map((p) => `${p.shop} ${(p.bani / 100).toFixed(2)}`)
+        .join("  ");
+      console.log(`    ${best.toFixed(2).padStart(7)}/${v.unit.padEnd(3)} ${`${m.unitSize}${v.unit}`.padEnd(8)} ${highlight(m.name, v.words).slice(0, 56).padEnd(56)} ${shops}`);
     }
   }
 
-  // ── What the token test caught that the spread never could ────────────────────
+  console.log(`\n${"═".repeat(104)}`);
+  console.log(`Words in [brackets] are those that appear in only ONE half of the price range.`);
+  console.log(`They are a PROMPT, not a finding: they cannot tell a product-defining word from a`);
+  console.log(`descriptive one. Read the names. The question is "would a shopper accept this`);
+  console.log(`instead of that?", and no query answers it.`);
+
   if (demo) {
-    console.log(`\n${"═".repeat(112)}`);
-    console.log("WHAT THE TOKEN TEST CAUGHT — each fix, re-evaluated against the live catalog");
-    console.log("Removing the exclusions the fix added, and listing the products the OLD rule admitted.");
-    console.log("═".repeat(112));
+    console.log(`\n${"═".repeat(104)}`);
+    console.log("WHAT READING THEM CAUGHT — each fix re-evaluated against the live catalog");
+    console.log("Each rule's added exclusions are stripped, membership re-run, and the products the");
+    console.log("OLD rule admitted are listed. This is the evidence, not the recollection.");
+    console.log("═".repeat(104));
     const bySlug = new Map(classes.map((c) => [c.slug, c]));
+    let totalAdmitted = 0;
     for (const f of FIXES) {
       const c = bySlug.get(f.slug);
       if (!c) continue;
@@ -183,13 +201,16 @@ async function main(): Promise<void> {
         if (rules.maxUnitSize != null && p.unitSize > rules.maxUnitSize) return false;
         return membershipOk(p.name, relaxed).ok && !membershipOk(p.name, rules).ok;
       });
-      console.log(`\n  ${f.slug}  +[${f.added.join(" ")}]`);
+      totalAdmitted += admitted.length;
+      console.log(`\n  ${f.slug}   +[${f.added.join(" ")}]`);
       console.log(`    ${f.what}`);
-      if (admitted.length === 0) { console.log(`    (the old rule admitted nothing extra in today's catalog)`); continue; }
-      console.log(`    the OLD rule admitted ${admitted.length} product(s) the new one refuses:`);
-      for (const p of admitted.slice(0, 6)) console.log(`      ${`${p.unitSize}${p.unit}`.padEnd(9)} ${p.name.slice(0, 74)}`);
+      if (!admitted.length) { console.log(`    (nothing extra in today's catalog)`); continue; }
+      console.log(`    the OLD rule admitted ${admitted.length}:`);
+      for (const p of admitted.slice(0, 6)) console.log(`      ${`${p.unitSize}${p.unit}`.padEnd(9)} ${p.name.slice(0, 72)}`);
       if (admitted.length > 6) console.log(`      … and ${admitted.length - 6} more`);
     }
+    console.log(`\n  ${totalAdmitted} products in total, none of which the spread rule would have surfaced:`);
+    console.log(`  fixing all of them left the flag set at twenty before and twenty after.`);
   }
 }
 

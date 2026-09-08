@@ -366,3 +366,44 @@ publish one (today only Auchan and Farmacia Tei do, and never for the same produ
   declares which merchants publish deep links at all, so a legitimate absence (Kaufland's flyer,
   Glovo's tiles) is never counted as a gap, and 209 real gaps stop hiding among 3,270 correct
   nulls.
+
+## SOME DEFECTS HAVE NO AUTOMATED DETECTOR
+
+The peer-median section above says a peer-relative check may not name a culprit. This is the
+stronger version of that, and it cuts against how the rest of this project is built: **for some
+questions there is no check to write at all.**
+
+**Whether an equivalence class describes a real purchase is a judgement about the world, not a
+property of the data.** No query can tell you that a shopper who wants sparkling water will not
+accept still water, or that Manitoba flour is not tip 650, or that a 200-sachet box of sugar is
+not a 500 g bag. Those are facts about what people buy.
+
+**The evidence, measured rather than argued.** Seven real merges were found in the thirty
+private-label classes. Fixing all seven left the spread rule's flag set at **twenty before and
+twenty after**, and four of the seven did not move the spread figure at all:
+
+    apa-plata-05l        5.08x -> 5.08x      croissant-cacao-85g   2.42x -> 2.42x
+    fulgi-ovaz-500g      6.28x -> 6.28x      ciuperci-intregi      2.08x -> 2.08x
+
+The spread was brand premium the whole time — Evian beside an own-brand spring water — and the
+merges were hiding inside flags already red for a different reason. **The rule is not wrong; it
+simply is not the instrument that found them.** A person reading the member lists found them,
+with a list of discriminating words as a prompt.
+
+**Do not promote a reading aid to an instrument.** That word list was written up as a better
+detector than the spread threshold. Measured as a classifier (`npm run audit:discriminator`) it
+flags **29 of 30** — worse than the 20 it was meant to replace — because it cannot separate a
+product-defining word (`masline`, `murate`) from a merely descriptive one (`coapte`, `fin`,
+`din`), and it flags a class with a perfect 1.00x spread on the class's own require-words.
+Automating a judgement produced a rule that fires almost always and detects nothing.
+
+So:
+
+- **An audit's job here is to make a person's ten minutes productive**, not to reach a verdict.
+  Surface the group, the discriminators, and the context; sort so the likeliest problems come
+  first; then stop.
+- **One verdict per subject.** Two verdicts that can disagree is how a reader learns to ignore
+  both.
+- **Say which numbers are judgements.** "Every remaining spread is brand premium" is a
+  conclusion a person reached by reading, and it should be written as one — not reported as
+  though a rule established it.

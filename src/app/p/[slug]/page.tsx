@@ -242,9 +242,17 @@ export default async function ItemPage({
           class — and shows them PER SHOP. That distinction is the site's reason to exist: if
           Auchan sells eggs L 10-pack and Mega sells a different brand of eggs L 10-pack, both
           belong here, priced, with the shop named. */}
-      {equivalents.rows.length > 1 && (
+      {/* THE HEADING IS CHOSEN FROM THE DATA, not asserted. `crenvursti-450g` had three live
+          members and all three were at Mega Image, so "la alte magazine" was printed over a
+          table in which every row was the shop the reader was already looking at. The old
+          guard counted ROWS, and rows are per (product, shop) — two rows can be one product at
+          two shops, or two products at one. `otherShopCount` counts the thing the heading
+          claims. Where equivalents exist only at the same shop the heading says so, because
+          "a cheaper equivalent on the same shelf" is still worth showing and is a different
+          sentence. */}
+      {equivalents.equivalentCount > 0 && (
         <section className="section">
-          <div className="section-head"><h2>🔁 Produse echivalente la alte magazine</h2></div>
+          <div className="section-head"><h2>🔁 {equivalents.otherShopCount > 0 ? "Produse echivalente la alte magazine" : "Produse echivalente în același magazin"}</h2></div>
           <p className="muted" style={{ marginTop: -8, marginBottom: 12 }}>
             Nu sunt același produs. Sunt produse pe care le considerăm <b>echivalente</b>{equivalents.label ? <> ({equivalents.label.toLowerCase()})</> : null} —
             marcă diferită, aceeași nevoie. Sortate după prețul pe unitate.
