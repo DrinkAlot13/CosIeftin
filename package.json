@@ -155,7 +155,9 @@
     "audit:descriptors": "tsx scripts/audit-descriptor-tokens.ts",
     "mine:block-tokens": "tsx scripts/mine-block-tokens.ts",
     "simulate:descriptors": "tsx scripts/simulate-descriptor-fix.ts",
-    "diff:descriptors": "tsx scripts/diff-descriptor-fix.ts"
+    "diff:descriptors": "tsx scripts/diff-descriptor-fix.ts",
+    "audit:brand-in-name": "tsx scripts/audit-brand-in-name.ts",
+    "audit:descriptor-gap": "tsx scripts/audit-descriptor-gap.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

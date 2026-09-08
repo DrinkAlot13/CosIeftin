@@ -224,6 +224,11 @@ async function main(): Promise<void> {
   // within hours when Auchan's member aged out. Nothing announced it; the class simply stopped
   // being a comparison while continuing to exist. Recorded nightly so the drift is visible.
   const classHealth = runStep("audit:class-health", "scripts/audit-class-health.ts");
+  // 10 — THE DESCRIPTOR LIST'S STALENESS SIGNAL. A token absent from the list keeps today's
+  // behaviour (it blocks), which is safe and SILENT. Recorded nightly because the level means
+  // nothing on its own — most high-frequency blockers are product identity — and only the
+  // movement over a fortnight says the list has stopped covering how merchants write names.
+  const descriptorGap = runStep("audit:descriptor-gap", "scripts/audit-descriptor-gap.ts");
 
   const merchants = await merchantNight(new Date(`${date}T00:00:00`));
 
@@ -257,7 +262,7 @@ async function main(): Promise<void> {
       ? null
       : `liveness FAILED (${dead.join(", ") || "see step"}); the checks after it describe data whose source is not answering`,
     verifySite,
-    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, classHealth].map((s) => ({
+    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, classHealth, descriptorGap].map((s) => ({
       name: s.name, ok: s.ok, exitCode: s.exitCode, durationMs: s.durationMs, ...(s.tail ? { tail: s.tail } : {}),
     })),
     liveness: liveness.data,
@@ -269,6 +274,7 @@ async function main(): Promise<void> {
       // The only invariant here answered by the outside world rather than by ourselves.
       "probe:links": links.data,
       "audit:class-health": classHealth.data,
+      "audit:descriptor-gap": descriptorGap.data,
       "verify:code": { pass: code.ok },
     },
     comparability: comparability.data,
