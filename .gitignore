@@ -54,3 +54,4 @@ logs/nightly/
 logs/*.html
 logs/*.json
 logs/*.txt
+logs/*.xml
