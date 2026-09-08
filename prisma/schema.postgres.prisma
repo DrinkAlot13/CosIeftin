@@ -411,6 +411,36 @@ model ScraperRun {
   /// not because they created nothing.
   productsCreated   Int       @default(0)
 
+  /// HOW MANY ITEMS THIS RUN DISCOVERED, before any matching or writing.
+  ///
+  /// Every other counter here is downstream of the pool, and so is every guard. `offersWritten`
+  /// and the <60% abort rule both read what happened AFTER discovery, so a run that finds a
+  /// third of the catalog and writes it flawlessly reads as perfectly healthy: Carrefour pooled
+  /// 3,944 at 05:14 and 1,209 at 06:55 on 2026-09-08, wrote 99% of each, and nothing fired.
+  ///
+  /// NULL means NOT RECORDED — every run before 2026-09-08 — and is deliberately distinct from
+  /// 0, which means a run that genuinely found nothing. The pool guard treats null as unknown
+  /// and falls back to `offersAttempted`, which is the closest pool-shaped number those rows
+  /// carry.
+  poolSize          Int?
+
+  /// WHICH CATALOG THIS RUN COVERED — "grocery", "alcohol", "farmacie", …
+  ///
+  /// More than one scraper writes to the same Merchant row: `scrape-carrefour` (grocery) and
+  /// `scrape-carrefour-alcohol` both target `carrefour`, and `scrape-farmaciatei` loops over
+  /// several sections. Without this column a run cannot be compared with the right peers, and
+  /// every comparison across a merchant's history silently compares two different catalogs.
+  ///
+  /// That is not hypothetical: Carrefour's grocery run pools ~4,000 and its alcohol run ~1,212,
+  /// and `audit:db`'s collapse invariant — which takes a merchant's last four runs regardless of
+  /// section — reported a "collapse with no abort" every night the alcohol run happened to be
+  /// newest. The write-side guard in `matchPoolToCatalog` had already learned this and works
+  /// around it by counting live offers per merchant AND section; the invariant had not.
+  ///
+  /// NULL means NOT RECORDED — every run before 2026-09-08 — and such runs are excluded from
+  /// peer comparison rather than assumed to be grocery.
+  section           String?
+
   /// JSON census of THIS merchant's offers immediately after the run: how many ended up
   /// live, and how many landed in each non-live bucket. Recorded per run so a future drop
   /// can be attributed on the spot instead of reconstructed from a backup weeks later —

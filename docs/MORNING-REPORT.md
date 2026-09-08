@@ -464,26 +464,79 @@ beside it, separating words in [brackets] inside the names, and spread, shop cou
 range in the header. The ordering is stated in the file as a sorting heuristic only — nothing
 reads it and it appears in no summary.
 
-### 10.4 New since the report was written: Carrefour is collapsing on a second run
 
-`audit:db` went 43/48 → 42/48 while I worked, and neither new failure is from code changed here:
+### 10.4 CORRECTED — Carrefour is not collapsing, and the real finding is better
 
-**"no merchant's successful run collapsed to half its own recent best" — Carrefour.**
+**What I told you:** "Carrefour collapses on a second run", 1,197 written against a recent best
+of 4,083, recurring. **That was wrong.** I would have handed you a defect that does not exist.
 
-    2026-09-08 06:55   written  1197   pool  1209    <- collapse
-    2026-09-08 05:14   written  4014   pool  3944    <- healthy, 100 minutes earlier
-    2026-09-07 20:59   written  4083   pool  4035
-    2026-09-07 01:58   written  1201   pool  1213    <- the same collapse, previous day
+**What it actually is:** `scrape-carrefour` (grocery) and `scrape-carrefour-alcohol` both write
+to the SAME merchant row. Carrefour holds **4,763 grocery offers and 1,243 alcohol offers**, and
+the ~1,212-item runs are the alcohol catalog working normally — on eight of fourteen days,
+always beside a ~4,000 grocery run. Two scrapers, not one scraper failing.
 
-It is **recurring**, not a one-off: a second Carrefour run shortly after a good one pools ~1,200
-instead of ~4,000 and writes them without aborting. The <60% guard did not fire because the
-POOL was small, not the write rate — the scraper found 1,209 products and honestly wrote 1,197
-of them. Something is truncating discovery on the second run. **The invariant is doing exactly
-its job; this needs a look and it is not mine to guess at.** Added to PROPOSALS as item 12.
+I caught it by checking the alternative before building the guard on top of it, which is the
+only reason it did not reach you as PROPOSALS item 12.
 
-**"no offer past promoValidTo left unmarked as expired" — 18 Kaufland offers, all
-`validTo=2026-09-08`.** These are flyer promos expiring today; the step that marks them runs in
-the nightly. Clock-driven, self-clearing, and listed here so it is not read as a regression.
+**The real defect is in the invariant that told me.** `audit:db`'s collapse check took a
+merchant's last four runs *regardless of which catalog they covered*, so it fired every night
+the alcohol run finished last. **`matchPoolToCatalog`'s write-side guard had already learned
+exactly this** — its comment says so in as many words, and it works around it by counting live
+offers per merchant AND section. The invariant one file away never got it. The same shape as the
+assign/unassign rule in CLAUDE.md: two places, one lesson, nothing connecting them.
 
-Also worth noting: **fan-out now PASSES** (Auchan's 9-way product resolved on its own), so the
-count moving 43 → 42 is two new failures and one fixed, not a slide.
+Fixed: `ScraperRun.section` exists and the invariant compares within a section. Runs from before
+the column are **excluded rather than assumed to be grocery** — and because that is currently
+every run, the check prints
+
+    note: COMPARED NOTHING — no merchant yet has 3+ runs carrying ScraperRun.section.
+          Green here means 'not checked', not 'healthy'.
+
+which is the rule I wrote into CLAUDE.md tonight, applied to my own work.
+
+**Your diagnosis of the guard gap was right regardless**, and it is now closed — see 10.5.
+
+### 10.5 The missing guard, added: pool size against the merchant's own recent pools
+
+`ScraperRun.poolSize` records what each run DISCOVERED, and `matchPoolToCatalog` refuses a run
+pooling under 60% of its merchant-and-section's recent pool. **The existing write guard is
+untouched.**
+
+**The baseline is the MEDIAN, not the maximum, and Kaufland is why.** Its pool swings 540 → 247
+→ 500 as flyer promotions start and end. Against the recent maximum every short flyer week is a
+49% "collapse", so a max-based guard would refuse a healthy run most weeks — the same mistake
+that once made the write-side guard refuse Kaufland twice by comparing one week's catalogue
+against three weeks of expired offers. A median absorbs the cycle and still catches a real
+collapse: Kaufland's median is ~264 so 247 passes, while Carrefour grocery's is ~3,961 so a
+1,200-item run would not.
+
+Verified with a real scrape rather than reasoning: Penny wrote 29 offers from a pool of 30, no
+false abort.
+
+**14 nights of pool sizes — the number that has been invisible the whole time:**
+
+    merchant         08-30  08-31  09-01  09-02  09-03  09-04  09-05  09-06  09-07  09-08
+    auchan               —      —   5707   5695   5649   5420   5667   4536   5294   4644
+    carrefour            —   3961   4006   4010   4011   4006   4039   4043   4041   3944
+    dcneu             7734   6024      —  10676  10689  10689  10706  10701  10701  10679
+    farmaciatei          —    897      —    884    932    909    920    927    917    921
+    freshful             —   3239   3244   3104   3103   3100   3102   3112   3103   3100
+    kaufland           286    286    540    264    264    264    254    252    247    500
+    mega-image           —   7129   7160   6960   7031   7025   7027   7036   7036   7009
+    metro             5244   5245   5246   5246   5247   5245   5245   5235   5239   5233
+    sezamo            7820   7724      —   7799   7853   7828   7850   7862   7814   7801
+
+**Nobody else fluctuates.** Metro is flat to ±14 across ten days, Mega Image to ±200, Sezamo to
+±140. The two entries still on the collapse list are both explained and neither is a defect:
+Carrefour's are the alcohol scraper, and DCNeu's are runs from before its discovery **improved**
+from ~6,000 to ~10,700 on 2 September — the past reading as broken because the median moved. The
+report prints both caveats in its own output; the guard sees neither, because it compares only
+the last 14 days within one section.
+
+**One thing neither guard catches, named rather than fixed:** Auchan drifted 5,707 → 4,644 over
+ten days, a 19% decline where every single night is within 60% of the last. Slow erosion passes
+a ratio test by construction.
+
+**Also still failing: "no offer past promoValidTo left unmarked as expired" — 18 Kaufland
+offers**, all `validTo=2026-09-08`. Flyer promos expiring today; the nightly step that marks
+them clears it.

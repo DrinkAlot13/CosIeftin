@@ -23,6 +23,10 @@ export type RunOutcome = {
   /** Catalog products this run CREATED (addNew), as opposed to matched onto. */
   productsCreated?: number;
   previousRunCount?: number;
+  /** Items the scraper DISCOVERED, before matching. Null when the caller did not measure it. */
+  poolSize?: number | null;
+  /** Which catalog this run covered. Two scrapers share a Merchant row; see the schema. */
+  section?: string | null;
   aborted?: boolean;
   abortReason?: string | null;
 };
@@ -42,6 +46,9 @@ export async function recordScraperRun(o: RunOutcome): Promise<void> {
         offersWritten: o.offersWritten ?? 0,
         productsCreated: o.productsCreated ?? 0,
         previousRunCount: o.previousRunCount ?? 0,
+        // Null rather than 0 when unmeasured: "we did not count" is not "it found nothing".
+        poolSize: o.poolSize ?? null,
+        section: o.section ?? null,
         // A run that wrote NO offer rows is not a success, whatever it reported about
         // itself. Deriving this here rather than trusting the caller means no scraper can
         // mark itself green while producing nothing.

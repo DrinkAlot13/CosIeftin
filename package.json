@@ -138,7 +138,8 @@
     "audit:assumptions": "tsx scripts/audit-assumptions.ts",
     "audit:never-used": "tsx scripts/audit-never-used.ts",
     "audit:discriminator": "tsx scripts/audit-class-discriminator.ts",
-    "audit:class-health": "tsx scripts/audit-class-health.ts"
+    "audit:class-health": "tsx scripts/audit-class-health.ts",
+    "audit:pool-history": "tsx scripts/audit-pool-history.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

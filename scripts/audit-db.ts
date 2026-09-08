@@ -240,27 +240,61 @@ async function auditPrices() {
       where: { active: true },
       select: { id: true, slug: true, lastOfferCount: true },
     });
+    // ── PEERS ARE SAME-MERCHANT AND SAME-SECTION. This compared a merchant's last four runs
+    // regardless of which catalog they covered, and MORE THAN ONE SCRAPER WRITES TO ONE
+    // MERCHANT ROW: `scrape-carrefour` pools ~4,000 grocery items and `scrape-carrefour-alcohol`
+    // ~1,212, both as `carrefour`. So every night the alcohol run finished last, this reported
+    // "carrefour: newest successful run wrote 1197 against a recent best of 4083 — a collapse".
+    // There was no collapse. Carrefour genuinely holds 4,763 grocery offers and 1,243 alcohol.
+    //
+    // `matchPoolToCatalog`'s write-side guard had already learned exactly this and works around
+    // it by counting live offers per merchant AND section — the lesson was in the codebase, one
+    // file away, and this invariant never got it. Same shape as the assign/unassign rule in
+    // CLAUDE.md: two places, one lesson, nothing connecting them.
+    //
+    // Runs recorded before `ScraperRun.section` existed are EXCLUDED rather than assumed to be
+    // grocery. An unknown section is not a section.
     const suspicious: string[] = [];
+    // A check that compares nothing must SAY SO rather than pass. `section` was added on
+    // 2026-09-08, so until each scraper has run a few times there are no comparable peers and
+    // this invariant is green because it looked at nothing — which is indistinguishable from
+    // green because everything is fine. The note is how you tell them apart.
+    let comparedGroups = 0;
     for (const m of merchants) {
-      const runs = await prisma.scraperRun.findMany({
-        where: { merchantId: m.id, aborted: false, offersWritten: { gt: 0 } },
-        orderBy: { startedAt: "desc" },
-        take: 4,
-        select: { offersWritten: true, startedAt: true },
-      });
-      if (runs.length < 3) continue;
-      const latest = runs[0].offersWritten;
-      const earlier = runs.slice(1).map((r) => r.offersWritten);
-      const best = Math.max(...earlier);
-      // Half or less than its own best recent run, while reporting success.
-      if (best > 0 && latest <= best * 0.5) {
-        suspicious.push(
-          `${m.slug}: newest successful run wrote ${latest} against a recent best of ${best} ` +
-          `— a collapse with no abort is what a silent cap looks like`,
-        );
+      const sections = (await prisma.scraperRun.findMany({
+        where: { merchantId: m.id, section: { not: null } },
+        select: { section: true },
+        distinct: ["section"],
+      })).map((r) => r.section as string);
+
+      for (const section of sections) {
+        const runs = await prisma.scraperRun.findMany({
+          where: { merchantId: m.id, section, aborted: false, offersWritten: { gt: 0 } },
+          orderBy: { startedAt: "desc" },
+          take: 4,
+          select: { offersWritten: true, startedAt: true },
+        });
+        if (runs.length < 3) continue;
+        comparedGroups++;
+        const latest = runs[0].offersWritten;
+        const best = Math.max(...runs.slice(1).map((r) => r.offersWritten));
+        // Half or less than its own best recent run in the SAME catalog, while reporting success.
+        if (best > 0 && latest <= best * 0.5) {
+          suspicious.push(
+            `${m.slug} [${section}]: newest successful run wrote ${latest} against a recent best of ${best} ` +
+            `— a collapse with no abort is what a silent cap looks like`,
+          );
+        }
       }
     }
-    record("Scraping", "no merchant's successful run collapsed to half its own recent best", suspicious);
+    record(
+      "Scraping",
+      "no merchant's successful run collapsed to half its own recent best",
+      suspicious,
+      comparedGroups === 0
+        ? "COMPARED NOTHING — no merchant yet has 3+ runs carrying ScraperRun.section (added 2026-09-08). Green here means 'not checked', not 'healthy'."
+        : `compared ${comparedGroups} merchant/section group(s)`,
+    );
   }
 
   // ── A MERCHANT THAT PRODUCES NOTHING IS NOT A QUIET MERCHANT.

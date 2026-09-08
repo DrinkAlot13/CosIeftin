@@ -199,25 +199,25 @@ nothing was done.
 
 ---
 
-## 12. Carrefour collapses on a second run — 1 hour, and it is silently costing 2,800 offers
+## 12. WITHDRAWN — Carrefour is not collapsing; the guard gap was real and is now closed
 
-**The measurement** (found by `audit:db`'s collapse invariant, 2026-09-08):
+**This entry originally said Carrefour collapses on a second run. It does not.**
+`scrape-carrefour` and `scrape-carrefour-alcohol` write to the same merchant row; Carrefour
+holds 4,763 grocery offers and 1,243 alcohol. The ~1,212-item runs are the alcohol catalog
+working normally.
 
-    2026-09-08 06:55   written  1197   pool  1209    <- collapse
-    2026-09-08 05:14   written  4014   pool  3944    <- healthy, 100 minutes earlier
-    2026-09-07 20:59   written  4083   pool  4035
-    2026-09-07 01:58   written  1201   pool  1213    <- same collapse, previous day
+Two real things came out of it, both **done** rather than proposed:
 
-A second Carrefour run shortly after a good one discovers ~1,200 products instead of ~4,000 and
-writes them without aborting. **The <60% abort guard cannot catch it**, because the write rate is
-fine — 1,197 of 1,209 pooled. What collapsed is DISCOVERY, upstream of everything the guard
-watches. Rate limiting, a session expiring, or a category list that renders short on a warm
-cache are all candidates; none is established.
+1. **`audit:db`'s collapse invariant was section-blind** and fired a false positive most nights.
+   `ScraperRun.section` now exists and the check compares within a section. Pre-column runs are
+   excluded, and the check says out loud when it has compared nothing.
+2. **No guard here had ever looked at pool size.** `ScraperRun.poolSize` is recorded and
+   `matchPoolToCatalog` refuses a run pooling under 60% of its merchant-and-section's recent
+   MEDIAN — median rather than maximum because Kaufland's flyer legitimately swings 540 → 247 →
+   500 and a max-based rule would refuse a healthy week. See `npm run audit:pool-history`.
 
-It leaves Carrefour holding roughly a quarter of its catalog until the next good run, which
-directly suppresses comparability — Carrefour is one of the six merchants that can pair with
-another on a private-label class.
-
-**Worth adding an invariant for the shape**, not just this instance: a run whose POOL is under
-60% of that merchant's recent best pool should abort the same way a run whose WRITES collapse
-does. The existing guard watches the wrong end of the pipe.
+**Still worth an eye, and genuinely a proposal:** Auchan's pool drifted 5,707 → 4,644 over ten
+days, a 19% decline that sits inside the guard. **Slow erosion is the one shape neither guard
+catches**, because every night is within 60% of the last. A drift check — this week's median
+against the median a month ago — would be a third instrument, and it is the only gap in
+discovery monitoring I can still see.

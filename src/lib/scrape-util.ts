@@ -796,7 +796,7 @@ export async function matchPoolToCatalog(
     if (linked.length >= 50 && share > 0.02) {
       const reason = `fabrication guard: ${(share * 100).toFixed(1)}% of scraped products share an identical (price,url) with a DIFFERENT product (largest group ${worst}) — the scraper is not reading per-card prices`;
       console.error(`[matchPool] ⚠ ${reason}`);
-      await recordScraperRun({ merchantId, startedAt, previousRunCount: merchant?.lastOfferCount ?? 0, aborted: true, abortReason: reason });
+      await recordScraperRun({ merchantId, startedAt, previousRunCount: merchant?.lastOfferCount ?? 0, poolSize: pool.length, section, aborted: true, abortReason: reason });
       return { offers: 0, created: 0, flagged: 0, aborted: true, reason };
     }
   }
@@ -996,8 +996,56 @@ export async function matchPoolToCatalog(
   if (baseline > 0 && chosen.size < baseline * 0.6) {
     const reason = `run refused: ${chosen.size} offers < 60% of last ${baseline} live in section "${section}"`;
     console.error(`[matchPool] ⚠ ${reason} — keeping previous data.`);
-    await recordScraperRun({ merchantId, startedAt, previousRunCount: baseline, aborted: true, abortReason: reason });
+    await recordScraperRun({ merchantId, startedAt, previousRunCount: baseline, poolSize: pool.length, section, aborted: true, abortReason: reason });
       return { offers: 0, created: 0, flagged: 0, aborted: true, reason };
+  }
+
+  // ── AND THE SAME RULE ON THE POOL, because the guard above watches the wrong end of the pipe.
+  //
+  // Everything before this line is downstream of DISCOVERY. The baseline check compares offers
+  // written against offers already live; when discovery halves, both ends fall together and the
+  // ratio stays healthy. A run that finds a third of the catalog and writes 99% of it passes
+  // every check in this file.
+  //
+  // Carrefour on 2026-09-08 pooled 3,944 at 05:14 and wrote 4,014; at 06:55 it pooled 1,209 and
+  // wrote 1,197. Nothing fired, and nothing could have. (That particular pair turned out to be
+  // two different scrapers — grocery and alcohol — which is why this comparison is scoped to
+  // the SECTION and why `ScraperRun.section` now exists. The guard gap it exposed is real
+  // regardless: no check in this project has ever looked at pool size.)
+  //
+  // Peers are same-merchant AND same-section runs that recorded a pool. Runs from before
+  // `poolSize` existed are excluded rather than read as zero — an unrecorded pool is unknown,
+  // and a guard that treats unknown as "found nothing" would abort every scrape on the first
+  // night after this ships.
+  const poolPeers = await prisma.scraperRun.findMany({
+    where: {
+      merchantId, section, aborted: false,
+      poolSize: { not: null, gt: 0 },
+      startedAt: { gte: new Date(Date.now() - 14 * 86_400_000) },
+    },
+    orderBy: { startedAt: "desc" },
+    take: 6,
+    select: { poolSize: true },
+  });
+  // ── THE MEDIAN, NOT THE MAXIMUM, and Kaufland is why.
+  //
+  // A flyer catalog varies by design: Kaufland pooled 540 on 1 September, 247 on the 7th and
+  // 500 on the 8th, as promotions started and ended. Against the recent MAXIMUM every short
+  // flyer week is a 49% "collapse", so a max-based guard would refuse a perfectly healthy run
+  // most weeks — the same mistake that once made this file's other guard refuse Kaufland twice
+  // by comparing one week's catalogue against three weeks of expired offers.
+  //
+  // A median absorbs the cycle and still catches a real collapse: Kaufland's median is ~264, so
+  // 247 passes; Carrefour's grocery median is ~4,010, so a 1,200-item run would not.
+  const pools = poolPeers.map((r) => r.poolSize as number).sort((a, b) => a - b);
+  const medianPool = pools.length >= 3 ? pools[Math.floor(pools.length / 2)] : 0;
+  if (medianPool > 0 && pool.length < medianPool * 0.6) {
+    const reason =
+      `run refused: pooled ${pool.length} items < 60% of this merchant's recent median pool ` +
+      `(${medianPool}) in section "${section}" — discovery collapsed, not the write rate`;
+    console.error(`[matchPool] ⚠ ${reason} — keeping previous data.`);
+    await recordScraperRun({ merchantId, startedAt, previousRunCount: baseline, poolSize: pool.length, section, aborted: true, abortReason: reason });
+    return { offers: 0, created: 0, flagged: 0, aborted: true, reason };
   }
 
   // Mark this merchant/section's offers stale first; ones seen this run are re-activated below.
@@ -1243,6 +1291,9 @@ export async function matchPoolToCatalog(
     // Counted at the write site, like offersWritten — never reported by the scraper.
     productsCreated: createdIds.size,
     previousRunCount: merchant?.lastOfferCount ?? 0,
+    // Recorded on EVERY path, so the pool guard has peers to compare against next time.
+    poolSize: pool.length,
+    section,
     censusJson,
   });
   // Persist the REVIEW band. A candidate that has since been AUTO-matched or explicitly
