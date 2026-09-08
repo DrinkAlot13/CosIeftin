@@ -144,3 +144,98 @@ survivors; it is not needed to find them.
 On the 50%: after this, I would not guess. If the Napolact family is representative, a
 deterministic consolidation plus one rule fix could close a large part of it with no model at
 all — and that is both cheaper and reversible in a single query, which an LLM's judgement is not.
+
+---
+
+# Phase 1b — I tried both steps and both failed. Two negative results.
+
+Written the same day. **Report before doing anything else with the upper bound**, as instructed —
+and it is as well, because the number came out the wrong way round.
+
+## Negative result 1 — the merge upper bound is NEGATIVE
+
+`npm run audit:catalog-duplicates`, grouping on brand + unit + size with no contradicting
+discriminator (fat, BIO, lactose, flavour):
+
+    live products (with a price)                        43,002
+    groups of 2+ rows that could be one                  6,033
+    rows inside such a group                            26,396
+
+    comparable in 2+ shops, TODAY                        2,830
+    comparable if EVERY group merged (upper bound)       2,795
+    change                                                 −35
+
+**Merging on that criterion would make the site worse.** The Barilla group shows why: **53 rows
+at 0.5 kg in one group** — Fusilli, Penne, Lasagne, Spaghetti, Farfalle, Linguine, Gnocchi,
+Maccheroni. Different pastas. My discriminators covered fat, BIO, lactose and flavour; nothing in
+them knows that a pasta SHAPE names a different product, so nothing contradicted.
+
+Those 53 rows are **already** comparable — several at 3 and 4 shops each. Collapsing them into one
+row destroys about twelve comparisons and creates one. Hence −35.
+
+We were both right that a merge upper bound is easy to guess wrong, and it went the opposite way
+from the one we hoped.
+
+## Negative result 2 — the descriptor/identity split cannot be mined from the corpus
+
+The obvious correction is to learn which tokens name a product (`fusilli`) and which merely
+describe one (`uht`). `npm run audit:descriptors` measures, within brand+size cohorts, how many
+distinct siblings each token co-occurs with and how many rows per cohort carry it — on the theory
+that a name excludes its siblings and a description sits with anything.
+
+**It does not separate them:**
+
+    token          rows  cohorts  siblings  rows/cohort
+    uht             104       41        84         2.54     ← description
+    penne            55       33        55         1.67     ← identity
+    fusilli          40       24        33         1.67     ← identity
+    integral         81       55       114         1.47     ← description
+    cutie            85       55       152         1.55     ← description
+
+`uht` and `penne` sit in the same range. `integral` has *more* siblings than `penne`. And the
+ranking's own top of "most description-like" is dominated by **head nouns and brand names**:
+
+    vin 858 · par 922 · dinti 660 · gel 853 · crema 1219 · nivea 232 · dove 241 · loncolor 93
+
+Those are the opposite of descriptions. The metric is measuring how common a word is, not what
+role it plays. Confounded, and not rescuable by tuning the weights.
+
+## What both failures mean
+
+**Whether `uht` describes a milk or names one is a fact about groceries, not a property of the
+corpus.** Within one brand and size, Barilla makes one Penne and one Fusilli, and Napolact makes
+one UHT and one "de consum" — statistically identical shapes, opposite meanings. The signal is
+not in the data because the distinction was never encoded in it.
+
+That is exactly the limit written into CLAUDE.md yesterday under **"SOME DEFECTS HAVE NO
+AUTOMATED DETECTOR"**, arriving one day later in a new place.
+
+## Which changes the case for the LLM — and sharpens it
+
+This is the first genuinely good argument for a model in this project, and it is for a **much
+smaller job** than Phase 3 proposed.
+
+**Not** "judge whether these two products match", per pair, at catalog scale, forever — that is
+the Zarea risk and it needs a verifier for every one of its outputs.
+
+**Instead:** answer one bounded language question, once. *"In Romanian grocery names, is `uht` a
+description of an attribute or the name of a product variant?"* A few hundred tokens, drawn from
+the ones that actually cause blocks. The output is **a list, checked into the repository as
+data** — reviewable in one sitting, diffable, revertible, and gradeable by the golden set before
+it touches anything.
+
+A wrong entry in that list is visible on the page in a code review. A wrong per-pair judgement is
+visible only when somebody drives to a shop.
+
+## Recommended next step, revised
+
+1. **Mine the CANDIDATE tokens from the blocked pairs** — the tokens that actually cause
+   `mutually-distinct` to fire, ranked by how many blocks each one causes. That part is
+   statistical and works; it narrows a 30,000-word vocabulary to the few hundred that matter.
+2. **Have a model classify only those**, into description / variant-name / unsure.
+3. **Read the list.** It is small enough to read.
+4. **Then** apply it in both places — `mutually-distinct` stops blocking on descriptor asymmetry,
+   and the duplicate detector gains the shape/variant knowledge it lacked — and re-measure the
+   upper bound, which is currently meaningless.
+
+Nothing in steps 1–4 lets a model write an offer, a match, or a price.

@@ -150,7 +150,9 @@
     "audit:api": "tsx scripts/audit-api-surface.ts",
     "audit:sitemap": "tsx scripts/audit-sitemap-truth.ts",
     "audit:price-truth": "tsx scripts/audit-price-truth.ts",
-    "trace": "tsx scripts/trace-product.ts"
+    "trace": "tsx scripts/trace-product.ts",
+    "audit:catalog-duplicates": "tsx scripts/audit-catalog-duplicates.ts",
+    "audit:descriptors": "tsx scripts/audit-descriptor-tokens.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
