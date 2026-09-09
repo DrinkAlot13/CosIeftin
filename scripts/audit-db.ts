@@ -63,7 +63,7 @@ async function auditPrices() {
     select: {
       id: true, price: true, priceBani: true, vatBasis: true, vatRateBp: true,
       isStale: true, isExpired: true, flagged: true, rawPriceText: true, lastObservedAt: true, availability: true, priceSource: true, promoValidTo: true,
-      storeName: true, matchedBy: true,
+      storeName: true, matchedBy: true, loyaltyPrice: true, loyaltyPriceBani: true, requiresLoyaltyCard: true,
       productId: true, merchant: { select: { name: true, slug: true } }, product: { select: { name: true, section: true } },
     },
   });
@@ -485,6 +485,42 @@ async function auditPrices() {
   record("Prices", "priceBani equals round(price * 100) for every row",
     offers.filter((o) => o.priceBani != null && Math.abs(o.priceBani - Math.round(o.price * 100)) > 1)
       .map((o) => `offer ${o.id} [${o.merchant.name}] float=${o.price.toFixed(2)} bani=${o.priceBani} (=${((o.priceBani ?? 0) / 100).toFixed(2)})`));
+
+  // ── A LOYALTY PRICE THAT IS NOT BELOW THE PRICE IS NOT A SECOND FACT.
+  //
+  // Kaufland's scraper filled `loyaltyPrice` from the same string it filled `price` from, so 44
+  // rows held the SAME number in both. That column then looks like a card discount and is one
+  // for nobody. The optimiser's `effectivePrice` happened to guard it with `loyaltyPrice < price`
+  // — a load-bearing guard nobody knew was load-bearing, and the only reason this never showed.
+  record("Prices", "no loyalty price that is not strictly below the price it accompanies",
+    offers.filter((o) => {
+      const shelf = o.priceBani ?? Math.round(o.price * 100);
+      const card = o.loyaltyPriceBani ?? (o.loyaltyPrice != null ? Math.round(o.loyaltyPrice * 100) : null);
+      return card != null && card >= shelf;
+    }).map((o) => `offer ${o.id} [${o.merchant.name}] price=${lei(o.priceBani ?? Math.round(o.price * 100))} loyalty=${lei(o.loyaltyPriceBani ?? Math.round((o.loyaltyPrice ?? 0) * 100))} — a card price at or above the shelf price says nothing`));
+
+  // ── THE TWO COLUMNS MUST AGREE, because one of them is the one we write.
+  // CLAUDE.md: bani is the value written and the float is derived from it, never the reverse.
+  // Kaufland wrote the float and left the integer null on all 14 rows that had one.
+  record("Prices", "loyaltyPriceBani and loyaltyPrice describe the same number",
+    offers.filter((o) => {
+      if (o.loyaltyPrice == null && o.loyaltyPriceBani == null) return false;
+      if (o.loyaltyPrice == null || o.loyaltyPriceBani == null) return true;
+      return Math.abs(o.loyaltyPriceBani - Math.round(o.loyaltyPrice * 100)) > 1;
+    }).map((o) => `offer ${o.id} [${o.merchant.name}] float=${o.loyaltyPrice} bani=${o.loyaltyPriceBani}`));
+
+  // ── A CARD-ONLY PRICE MUST SAY SO. `scrape-kaufland` takes
+  // `formattedPrice ?? loyaltyFormattedPrice`, so a flyer item headed "Reducere cu Kaufland
+  // Card" contributes a price a shopper without the card cannot pay. Unflagged, it sits beside
+  // every other store's shelf price and wins — the scraper's own comment predicted exactly that
+  // and nothing implemented the label for months.
+  record("Prices", "a price that came from a card-only source is flagged requiresLoyaltyCard",
+    offers.filter((o) => {
+      if (o.requiresLoyaltyCard) return false;
+      if (!o.rawPriceText) return false;
+      // Kaufland's card-only rows carry no normal formatted price in their source string.
+      return o.merchant.slug === "kaufland" && /reducere cu kaufland card/i.test(o.rawPriceText);
+    }).map((o) => `offer ${o.id} [${o.merchant.name}] ${lei(o.priceBani ?? Math.round(o.price * 100))} lei — card-only price, unflagged`));
 
   record("Prices", `no price outside ${MIN_BANI} ban .. ${MAX_BANI / 100} lei`,
     offers.filter((o) => { const b = o.priceBani ?? Math.round(o.price * 100); return b < MIN_BANI || b > MAX_BANI; })

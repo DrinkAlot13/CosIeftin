@@ -216,6 +216,18 @@ async function main() {
   for (const [name, o] of meta) {
     const old = parsePriceLei(o.formattedOldPrice) ?? 0;
     const loyal = parsePriceLei(o.loyaltyFormattedPrice) ?? 0;
+    // ── THE FLYER ITEM WHOSE ONLY PRICE IS A CARD PRICE.
+    //
+    // `parseItem` above takes `formattedPrice ?? loyaltyFormattedPrice`, so when Kaufland
+    // publishes only the "Reducere cu Kaufland Card" figure, THAT becomes `price` — a number a
+    // shopper without the card cannot pay, sitting unlabelled beside every other store's shelf
+    // price. The comment there has said since it was written that the loyalty price is "recorded
+    // separately so the UI can label it"; measured on 2026-09-09 that was true of nothing:
+    // 17 live offers, `requiresLoyaltyCard` false on all 17, and `loyaltyPrice` holding the SAME
+    // number as `price` because the same string filled both.
+    //
+    // So the flag is set here, which is the only place that knows.
+    const cardOnly = !o.formattedPrice && loyal > 0;
     if (!o.dateFrom && !old && !loyal) continue;
     const prod = await prisma.product.findFirst({ where: { name, section: "grocery" }, select: { id: true } });
     if (!prod) continue;
@@ -225,7 +237,11 @@ async function main() {
         validFrom: o.dateFrom ? new Date(o.dateFrom) : null,
         validTo: o.dateTo ? new Date(o.dateTo) : null,
         oldPrice: old > 0 ? old : null,
-        loyaltyPrice: loyal > 0 ? loyal : null,
+        // A card price EQUAL to the price is not a second fact. When the card figure IS the
+        // price, the flag carries the meaning and this column stays null rather than echoing.
+        loyaltyPrice: !cardOnly && loyal > 0 ? loyal : null,
+        loyaltyPriceBani: !cardOnly && loyal > 0 ? Math.round(loyal * 100) : null,
+        requiresLoyaltyCard: cardOnly,
       },
     });
     enriched += upd.count;

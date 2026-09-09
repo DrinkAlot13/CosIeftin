@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       price: o.price,
       availability: o.availability,
       loyaltyPrice: o.loyaltyPrice,
+      requiresLoyaltyCard: o.requiresLoyaltyCard,
       priceSource: o.priceSource,
       priceBani: o.priceBani,
       flagged: o.flagged,

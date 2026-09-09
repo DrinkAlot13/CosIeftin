@@ -182,7 +182,8 @@
     "check:concepts": "tsx scripts/check-concepts.ts",
     "probe:selgros-parse": "tsx scripts/probe-selgros-parse.ts",
     "audit:price-figures": "tsx scripts/audit-price-figures.ts",
-    "probe:price-figures": "tsx scripts/probe-price-figures.ts"
+    "probe:price-figures": "tsx scripts/probe-price-figures.ts",
+    "backfill:loyalty-card": "tsx scripts/backfill-loyalty-card.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

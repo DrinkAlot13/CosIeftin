@@ -14,6 +14,8 @@ export type OfferForBasket = {
   price: number;
   availability: string;
   loyaltyPrice?: number | null;
+  /** the `price` on this row IS a card price — the shopper needs the card to pay it */
+  requiresLoyaltyCard?: boolean;
   priceSource?: string | null;
   priceBani?: number | null;
   flagged?: boolean;
@@ -106,11 +108,31 @@ export type StoreTotal = {
   priceSource: string;
 };
 
-/** Effective price for one offer, honouring the loyalty-card toggle. */
+/**
+ * Effective price for one offer, honouring the loyalty-card toggle.
+ *
+ * ── A ROW WHOSE `price` IS ALREADY A CARD PRICE IS A LOYALTY PRICE WHATEVER THE TOGGLE SAYS.
+ *
+ * `useLoyalty` defaults to false, which reads like "the optimiser never uses a card price
+ * unless asked". It was not true: `scrape-kaufland` takes `formattedPrice ??
+ * loyaltyFormattedPrice`, so 65 Kaufland offers held a card price in `price` itself, and the
+ * toggle has no opinion about that column. Those rows won comparisons against other shops'
+ * shelf prices with nothing marking them — the direction that matters, because a card price is
+ * marked DOWN.
+ *
+ * The fix is not to drop them (they are real savings for a cardholder) but to stop the basket
+ * calling them ordinary: `loyalty` comes back true, `usesLoyalty` propagates, and the surface
+ * can say so.
+ *
+ * The `loyaltyPrice < price` guard below is older and was load-bearing without anyone knowing:
+ * Kaufland also wrote `loyaltyPrice` equal to `price` on 44 rows, and only this comparison kept
+ * that from being read as a discount of zero. `audit:db` now refuses that shape outright.
+ */
 function effectivePrice(o: OfferForBasket, useLoyalty: boolean): { price: number; loyalty: boolean } {
   if (useLoyalty && o.loyaltyPrice != null && o.loyaltyPrice > 0 && o.loyaltyPrice < o.price) {
     return { price: o.loyaltyPrice, loyalty: true };
   }
+  if (o.requiresLoyaltyCard === true) return { price: o.price, loyalty: true };
   return { price: o.price, loyalty: false };
 }
 

@@ -1,6 +1,7 @@
 import { StoreTypeBadge } from "@/components/StoreTypeBadge";
 import { DELIVERY_PLATFORM_LABEL, isDeliveryPlatform } from "@/lib/platform/visibility";
 import { AVAILABILITY_LABELS, formatDate, formatPerUnit, formatRON } from "@/lib/format";
+import { cardSavingBani, loyaltyLabel, requiresCard, shelfLabel, withCardPhrase, LOYALTY_BADGE } from "@/lib/loyalty";
 import type { OfferRow } from "@/lib/queries";
 
 /** Per-chain price table for one item, cheapest highlighted, unit price shown. */
@@ -65,6 +66,30 @@ export function OfferTable({ offers, unit }: { offers: OfferRow[]; unit: string 
                 </td>
                 <td>
                   <span className={oos ? "o-price o-oos" : "o-price"}>{formatRON(o.price)}</span>
+                  {/*
+                    A CARD PRICE THAT IS SHOWN AT ALL MUST SAY SO — the same rule as the
+                    delivery-platform badge above, and the more dangerous direction of it. A
+                    platform price is marked UP, so an unlabelled one merely looks expensive; a
+                    card price is marked DOWN, so an unlabelled one WINS a comparison it should
+                    not win. Kaufland's own scraper predicted this in a comment — "an unlabeled
+                    card price would silently undercut every other store" — and 65 offers carried
+                    one with nothing saying it.
+                  */}
+                  {requiresCard(o) && (
+                    <div style={{ marginTop: 4 }}>
+                      <span className="badge" style={{ whiteSpace: "nowrap" }} title="Acest preț se obține doar cu cardul de fidelitate al magazinului.">
+                        {LOYALTY_BADGE} {loyaltyLabel(o.merchant.slug)}
+                      </span>
+                    </div>
+                  )}
+                  {/* A cheaper card price ALONGSIDE the shelf price: the shelf figure is the one
+                      shown, and the card figure is offered as the extra it is. */}
+                  {cardSavingBani(o) != null && (
+                    <div className="m-net" style={{ marginTop: 3, fontSize: 11 }}>
+                      {LOYALTY_BADGE} {formatRON((o.loyaltyPriceBani as number) / 100)} {withCardPhrase(o.merchant.slug)}
+                      {" · "}{formatRON(o.price)} {shelfLabel(o.merchant.slug)}
+                    </div>
+                  )}
                   {isBest && (
                     <div style={{ marginTop: 4 }}>
                       <span className="badge badge-best">✓ Cel mai mic preț</span>
