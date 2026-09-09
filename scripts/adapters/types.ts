@@ -56,6 +56,42 @@ export type DomMap = {
   /** attribute to read the price from instead of textContent (e.g. "data-price") */
   priceAttr?: { sel: string; attr: string };
   /**
+   * A price RENDERED AS SEPARATE NODES, with the lei and the bani in different elements and no
+   * currency symbol anywhere on the card.
+   *
+   * Selgros renders `34,99 lei/kg` as:
+   *
+   *     <p>per kg</p>
+   *     <div class="… leading-8">
+   *       <span class="text-2xl …"> 34 </span>
+   *       <span class="text-xs …"> 99 </span>
+   *     </div>
+   *     <div>07/09/2026 - 13/09/2026</div>
+   *
+   * `textContent` of any ancestor is therefore `per kg 34 99 07/09/2026 - 13/09/2026`, which a
+   * price parser can read as 34, as 99, as 3499, or — before `parsePrice` learned to strip
+   * dates — as **7,09**. Every one of those is a fabricated price on a comparison site, and
+   * none of them looks wrong in the database.
+   *
+   * A promo card is worse: it carries TWO prices, the old one first, struck through with an
+   * absolutely-positioned `<span>` bar rather than a `<del>`. Taking the first group publishes
+   * the pre-discount price as the current one.
+   *
+   * So the parts are read explicitly and joined, and the reader REFUSES anything that is not
+   * exactly one integer group and one 2-digit decimal group. A refusal is recorded; a guess is
+   * not available.
+   */
+  priceParts?: {
+    /** the element holding ONE price's parts. Several may match; see `strikeMarker`. */
+    group: string;
+    /** the numeric parts inside a group, in reading order (lei then bani) */
+    part: string;
+    /** a group containing THIS is a struck "was" price and is read as the reference, not the price */
+    strikeMarker?: string;
+    /** the merchant's own unit label ("per kg", "per BUC.") — captured, never inferred */
+    unitLabel?: string;
+  };
+  /**
    * Selectors for the merchant's own REFERENCE-PRICE statement — the EU-Omnibus 30-day
    * minimum, or a struck "was" price — read SEPARATELY from the price.
    *

@@ -219,7 +219,69 @@ export function readReferenceStatement(
   return { bani: fromPrice.referencePriceBani ?? null, kind: fromPrice.referencePriceKind ?? null };
 }
 
-async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): Promise<StoreProduct[]> {
+/**
+ * WITHOUT THIS, `parseDom` DIES BEFORE IT READS ANYTHING — and its error blames the page.
+ *
+ * tsx compiles `const pick = (el, sels) => …` inside a `page.$$eval` callback into
+ * `const pick = __name((el, sels) => …, "pick")`, esbuild's keepNames helper. The callback is
+ * serialized and re-evaluated in the BROWSER, where `__name` does not exist, so it throws
+ * `ReferenceError: __name is not defined` at character 22 of the function.
+ *
+ * `runAdapter` has always installed this and every DOM adapter depends on it. It lived inline
+ * there, which meant a second page — `probe:selgros-parse`, opening its own browser to inspect
+ * the same extraction — failed with an error that looks like a broken selector or a hostile
+ * site. It is neither. One implementation, called by both, so a new caller cannot forget it.
+ */
+export async function installEsbuildShim(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    (globalThis as unknown as { __name: (f: unknown) => unknown }).__name = (f) => f;
+  });
+}
+
+export type PriceGroup = { parts: string[]; struck: boolean };
+
+/**
+ * Join a price split across separate elements, or REFUSE.
+ *
+ * ── THE ONLY ACCEPTABLE SHAPE IS EXACTLY ONE INTEGER AND EXACTLY TWO DECIMAL DIGITS.
+ *
+ * Selgros prints no currency symbol at all, so nothing downstream can tell a price from a
+ * quantity, a percentage or half a date. `parsePrice` already refuses the concatenated text —
+ * `"per kg 34 99"` and `"34 99 07/09/2026 - 13/09/2026"` both return null, which is why the
+ * adapter pooled zero products rather than wrong ones. That refusal is the safety property
+ * being replaced here, so what replaces it has to be at least as strict.
+ *
+ * Hence: two parts, `\d{1,5}` then `\d{2}`. A group with three parts, a one-digit decimal, or a
+ * stray element is not "probably a price" — it is a card shape we have not seen, and the honest
+ * output is nothing. `34` and `3499` and `7,09` are all available misreadings of this card and
+ * none of them looks wrong once written.
+ *
+ * ── OLD PRICE FIRST, NEW PRICE LAST. A Selgros promo card carries two groups, the old one
+ * struck through with an absolutely-positioned `<span>` bar rather than a `<del>` — invisible
+ * to every "was price" heuristic in this codebase. `strikeMarker` names that bar, so the struck
+ * group becomes the REFERENCE and the last unstruck group is the price. Taking the first group
+ * would publish 42,99 for an item selling at 29,99.
+ *
+ * Returns strings, not numbers, because `parsePrice` stays the one parser (CLAUDE.md) — and
+ * `"34,99"` is the exact pair of digit groups observed joined by the separator they represent,
+ * so `audit:price-truth` can still re-derive the price from `rawPriceText`.
+ */
+export function composeSplitPrice(groups: PriceGroup[]): { priceText: string | null; referenceText: string | null } {
+  const valid = (g: PriceGroup): string | null => {
+    const parts = g.parts.map((p) => p.trim()).filter((p) => p.length > 0);
+    if (parts.length !== 2) return null;
+    if (!/^\d{1,5}$/.test(parts[0]) || !/^\d{2}$/.test(parts[1])) return null;
+    return `${parts[0]},${parts[1]}`;
+  };
+  const live = groups.filter((g) => !g.struck).map(valid).filter((v): v is string => v != null);
+  const struck = groups.filter((g) => g.struck).map(valid).filter((v): v is string => v != null);
+  return {
+    priceText: live.length > 0 ? live[live.length - 1] : null,
+    referenceText: struck.length > 0 ? struck[0] : null,
+  };
+}
+
+export async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): Promise<StoreProduct[]> {
   const rows = await page.$$eval(map.card, (els, m) => {
     const pick = (el: Element, sels: string[] | undefined): string => {
       if (!sels) return "";
@@ -239,15 +301,39 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
     return els.map((el) => {
       const nameAttr = mm.name.map((s) => el.querySelector(s)?.getAttribute("title") || "").find(Boolean) || "";
       const img = mm.image ? mm.image.map((s) => el.querySelector(s)?.getAttribute("src") || el.querySelector(s)?.getAttribute("data-src") || "").find(Boolean) || "" : "";
-      const link = mm.link ? mm.link.map((s) => el.querySelector(s)?.getAttribute("href") || "").find(Boolean) || "" : "";
+      // THE CARD IS SOMETIMES THE LINK. `mm.link` selectors search DESCENDANTS, so a merchant
+      // whose whole tile is one `<a href>` — Selgros — yielded null for all 64 products, and
+      // "vezi în magazin" would have gone nowhere on every one of them. That is the Sezamo
+      // defect's shape: a link column that is populated, plausible, and useless. So when no
+      // descendant carries an href, fall back to the card's own.
+      let link = mm.link ? mm.link.map((s) => el.querySelector(s)?.getAttribute("href") || "").find(Boolean) || "" : "";
+      if (!link) link = el.getAttribute("href") || "";
       const brand = mm.brand ? mm.brand.map((b) => pickAttr(el, b.sel, b.attr)).find(Boolean) || "" : "";
       const ean = mm.ean ? mm.ean.map((b) => pickAttr(el, b.sel, b.attr)).find(Boolean) || "" : "";
       const priceText = mm.priceAttr ? pickAttr(el, mm.priceAttr.sel, mm.priceAttr.attr) : pick(el, mm.price);
       const referenceText = mm.reference ? pick(el, mm.reference) : "";
       const loyaltyText = mm.loyalty ? pick(el, mm.loyalty) : "";
+      // A price split across elements. Read as STRUCTURE, never as concatenated text.
+      // (Plain loops rather than `.map` — no reason beyond matching the code around it.)
+      const pp = mm.priceParts;
+      const priceGroups: { parts: string[]; struck: boolean }[] = [];
+      if (pp) {
+        const groups = el.querySelectorAll(pp.group);
+        for (let gi = 0; gi < groups.length; gi++) {
+          const g = groups[gi];
+          const nodes = g.querySelectorAll(pp.part);
+          const parts: string[] = [];
+          for (let ni = 0; ni < nodes.length; ni++) {
+            const t = (nodes[ni].textContent || "").replace(/\s+/g, " ").trim();
+            if (t.length > 0) parts.push(t);
+          }
+          priceGroups.push({ parts, struck: pp.strikeMarker ? g.querySelector(pp.strikeMarker) != null : false });
+        }
+      }
+      const unitLabel = pp && pp.unitLabel ? pick(el, [pp.unitLabel]) : "";
       let unavailable = false;
       if (mm.unavailable) unavailable = pickAttr(el, mm.unavailable.sel, mm.unavailable.attr) === mm.unavailable.equals;
-      return { name: nameAttr || pick(el, mm.name), priceText, referenceText, loyaltyText, img, link, brand, ean, unavailable };
+      return { name: nameAttr || pick(el, mm.name), priceText, referenceText, loyaltyText, priceGroups, unitLabel, img, link, brand, ean, unavailable };
     });
   }, map as unknown as Record<string, unknown>);
 
@@ -255,12 +341,25 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
   for (const r of rows) {
     const name = String(r.name || "").trim();
     if (!name) continue;
-    const det = parsePriceDetailed(r.priceText);
+
+    // A split price replaces the text read entirely — see `composeSplitPrice`. The composed
+    // string is the digits observed joined by the separator they represent, so it is still an
+    // exact source string and `audit:price-truth` can re-derive the price from it.
+    const split = r.priceGroups && r.priceGroups.length > 0 ? composeSplitPrice(r.priceGroups) : null;
+    const priceText = split ? (split.priceText ?? "") : r.priceText;
+    const referenceText = split ? (split.referenceText ?? "") : r.referenceText;
+
+    const det = parsePriceDetailed(priceText);
 
     // Same rule as the JSON path: an unparseable price is refused and RECORDED, not dropped.
-    const price = tally ? tally.record(r.priceText, det.priceBani) : det.priceBani;
+    const price = tally ? tally.record(priceText, det.priceBani) : det.priceBani;
 
-    const { bani: refBani, kind: refKind } = readReferenceStatement(det, r.referenceText);
+    // A struck group from `priceParts` IS a former price, established structurally rather than
+    // by matching words, so it is recorded as such.
+    const splitRef = split?.referenceText ? parsePriceDetailed(split.referenceText).priceBani : null;
+    const fromText = readReferenceStatement(det, split ? "" : referenceText);
+    const refBani = splitRef ?? fromText.bani;
+    const refKind = splitRef != null ? "STRIKETHROUGH" : fromText.kind;
     // A loyalty node yields a price and nothing else. It can never move `price`, which stays
     // what a shopper without a card pays.
     const loyaltyBani = r.loyaltyText ? parsePriceDetailed(r.loyaltyText).priceBani : null;
@@ -273,7 +372,7 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       // PRICE was parsed from", and `audit:price-truth` re-derives all 46,414 live prices from
       // it through `parsePrice`. Appending another amount to that column would change what it
       // means for the sake of provenance the reference's own columns already carry.
-      rawPriceText: r.priceText,
+      rawPriceText: priceText,
       referencePriceBani: refBani,
       referencePriceKind: refKind ?? null,
       loyaltyPriceBani: loyaltyBani,
@@ -340,8 +439,7 @@ export async function runAdapter(ad: Adapter): Promise<void> {
     browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
     const ctx = await browser.newContext({ userAgent: UA, locale: "ro-RO", viewport: { width: 1366, height: 900 } });
     page = await ctx.newPage();
-    // tsx/esbuild helper shim — some bundled page scripts expect __name to exist
-    await page.addInitScript(() => { (globalThis as unknown as { __name: (f: unknown) => unknown }).__name = (f) => f; });
+    await installEsbuildShim(page);
   }
 
   for (const route of routes) {

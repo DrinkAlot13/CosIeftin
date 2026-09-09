@@ -179,7 +179,8 @@
     "probe:overflow": "tsx scripts/probe-overflow.ts",
     "probe:omnibus": "tsx scripts/probe-omnibus.ts",
     "audit:discount-truth": "tsx scripts/audit-discount-truth.ts",
-    "check:concepts": "tsx scripts/check-concepts.ts"
+    "check:concepts": "tsx scripts/check-concepts.ts",
+    "probe:selgros-parse": "tsx scripts/probe-selgros-parse.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
