@@ -617,6 +617,20 @@ model IndexSnapshot {
   @@index([version, day])
 }
 
+/// ── EVERY CHILD RELATION HERE MUST DECLARE `onDelete: Cascade`.
+///
+/// Not a style preference — it is how the right to erasure survives the next model. None of
+/// these cascaded until 2026-09-10, so `prisma.user.delete()` failed outright:
+///
+///     Foreign key constraint violated: `foreign key`
+///
+/// while `/confidentialitate` — reachable from the footer and listed in the sitemap — promised
+/// "poti cere stergerea lor oricand". `erase:user` deletes the dependents in order and works,
+/// but a tool that knows the list is not the same as a schema that enforces it: a new child
+/// model added next month breaks erasure silently, and nothing notices until a real person asks
+/// to be forgotten and we cannot do it.
+///
+/// `tests/erasure-cascade.test.ts` fails the build on any model carrying `userId` without it.
 model User {
   id           Int           @id @default(autoincrement())
   email        String        @unique
@@ -630,10 +644,20 @@ model User {
 }
 
 /// A saved shopping list (tied to a user, or anonymous via `token`).
+///
+/// ── DORMANT, AND A PUBLISHED PRIVACY CLAIM DEPENDS ON IT STAYING SO.
+///
+/// Nothing in `src/` writes this model or `GroceryListItem` — the only writer is
+/// `scripts/migrate-to-postgres.ts`, which copies whatever exists. Lists live in the browser
+/// (`localStorage`, key `cosmic_carts`), and `/confidentialitate` says exactly that: the lists
+/// are not sent anywhere and we hold no copy.
+///
+/// Wiring up server-side list sync makes that sentence false the moment the first row is
+/// written. It is a fine feature to build; it is not a fine feature to build quietly.
 model GroceryList {
   id        Int               @id @default(autoincrement())
   userId    Int?
-  user      User?             @relation(fields: [userId], references: [id])
+  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String            @unique
   name      String            @default("Lista mea")
   items     GroceryListItem[]
@@ -643,7 +667,7 @@ model GroceryList {
 model GroceryListItem {
   id        Int         @id @default(autoincrement())
   listId    Int
-  list      GroceryList @relation(fields: [listId], references: [id])
+  list      GroceryList @relation(fields: [listId], references: [id], onDelete: Cascade)
   productId Int
   product   Product     @relation(fields: [productId], references: [id])
   qty       Int         @default(1)
@@ -703,7 +727,7 @@ model ProductAttribute {
 model UserFavorite {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId Int
   product   Product  @relation(fields: [productId], references: [id])
   /// "EXPLICIT" (they hearted it) | "INFERRED" (bought 3+ times)
@@ -716,10 +740,22 @@ model UserFavorite {
 
 /// Something the shopper never wants suggested: a brand, a product, or an attribute tag
 /// (an allergen, a dietary exclusion). Exactly one of the three is set.
+///
+/// ── `attributeTag` WOULD MAKE THIS AN ARTICLE 9 PROCESSOR. READ BEFORE WIRING IT UP.
+///
+/// An allergen exclusion is health data and a dietary one can reveal religious belief. Both are
+/// SPECIAL CATEGORY data under GDPR Article 9: prohibited by default, permitted here only with
+/// explicit consent (9(2)(a)) — a different and higher bar than the contract basis the rest of
+/// the account rests on, and it has to be asked for separately and recorded.
+///
+/// TODAY NOTHING WRITES THIS MODEL — zero write sites in `src/`, verified 2026-09-10 — which is
+/// why `/confidentialitate` does not mention it. The policy says we do not ask for health or
+/// dietary data. Wiring this up makes that sentence false, so the policy changes in the SAME
+/// commit or not at all.
 model UserBlocklist {
   id           Int      @id @default(autoincrement())
   userId       Int
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   brand        String?
   productId    Int?
   product      Product? @relation(fields: [productId], references: [id])
@@ -799,7 +835,7 @@ model PendingMatch {
 model UserProductAdd {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId Int
   product   Product  @relation(fields: [productId], references: [id])
   count     Int      @default(1)

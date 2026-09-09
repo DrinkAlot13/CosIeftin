@@ -10,6 +10,11 @@
 //   · No analytics, no ad tracking, no third-party scripts. Grepped for the fifteen usual
 //     suspects; the only hits were the English word "plausible" in comments.
 //   · Exactly ONE cookie exists: `pm_session`.
+//   · There is NO e-mail verification and NO password reset. That is why the rights section
+//     explains how identity is checked instead of saying "reply from the address on file":
+//     anyone can register with someone else's address, so the address proves nothing, and
+//     answering an access request from it alone could hand person A's data to whoever asked.
+//     GDPR Article 12(6) explicitly allows asking for more information — and refusing.
 //   · 89.9% of product images are hotlinked from 18 third-party hosts. The proxy was never
 //     built, so that section is generated FROM THE DATABASE and is true on the day it renders.
 //   · `UserBlocklist` and `GroceryList` are declared in the schema and written by NOTHING.
@@ -188,9 +193,30 @@ export default async function ConfidentialitatePage() {
         <li><b>Portabilitate</b> — îți trimitem datele într-un fișier pe care îl poți lua cu tine.</li>
         <li><b>Opoziție</b> — să nu mai prelucrăm datele tale.</li>
       </ul>
+      <h3>Cum verificăm că ești tu</h3>
       <p>
-        Momentan nu există un buton de ștergere în cont: cererea se face pe e-mail, iar ștergerea
-        o facem noi. Preferăm să spunem asta decât să promitem un buton care nu există.
+        Nu confirmăm adresa de e-mail la înregistrare, deci{" "}
+        <b>o cerere trimisă doar de la o adresă nu dovedește nimic</b> — oricine își poate face
+        cont cu adresa altcuiva. Ca să nu trimitem datele unei persoane către altcineva:
+      </p>
+      <ul className="legal-list">
+        <li>
+          Cel mai simplu: fii autentificat în cont când ne scrii și spune-ne asta. Dacă poți intra
+          în cont, controlezi parola.
+        </li>
+        <li>
+          Dacă nu poți intra în cont, îți vom cere informații suplimentare care să confirme că
+          este contul tău (de exemplu, aproximativ când l-ai creat sau ce ai salvat în el).
+        </li>
+        <li>
+          Dacă tot nu putem confirma cine ești, <b>refuzăm cererea</b> și îți explicăm de ce.
+          Este mai bine să te refuzăm pe tine decât să dăm datele tale altcuiva.
+        </li>
+      </ul>
+      <p>
+        Momentan nu există un buton de ștergere în cont și nici resetare de parolă: cererea se
+        face pe e-mail, iar ștergerea o facem noi, manual. Preferăm să spunem asta decât să
+        promitem butoane care nu există.
       </p>
       <p>
         Dacă nu ești mulțumit de răspunsul nostru, te poți adresa{" "}
