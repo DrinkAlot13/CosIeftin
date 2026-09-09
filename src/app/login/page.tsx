@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { login, register } from "@/app/actions";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -43,6 +44,15 @@ export default async function LoginPage({ searchParams }: { searchParams: { e?: 
             <input type="email" name="email" required placeholder="Email" aria-label="Email nou" />
             <input type="password" name="password" required minLength={6} placeholder="Parolă (min. 6 caractere)" aria-label="Parolă nouă" />
             <button className="btn btn-accent" type="submit">Creează cont</button>
+            {/* Consent has to be reachable AT the moment it is given, not only from the
+                footer. Linked rather than pre-ticked: a checkbox nobody reads is not consent,
+                and the account is optional anyway — the comparator works without one. */}
+            <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 4 }}>
+              Prin crearea contului accepți{" "}
+              <Link href="/termeni">termenii de utilizare</Link> și{" "}
+              <Link href="/confidentialitate">politica de confidențialitate</Link>. Păstrăm
+              adresa de e-mail și ce salvezi în cont; poți cere ștergerea oricând.
+            </p>
           </form>
         </div>
       </div>
