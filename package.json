@@ -168,7 +168,8 @@
     "probe:live-prices": "tsx scripts/probe-live-prices.ts",
     "audit:variable-weight": "tsx scripts/audit-variable-weight.ts",
     "audit:slug-size": "tsx scripts/audit-slug-size.ts",
-    "audit:unit-price-sanity": "tsx scripts/audit-unit-price-sanity.ts"
+    "audit:unit-price-sanity": "tsx scripts/audit-unit-price-sanity.ts",
+    "flow:user": "tsx scripts/flow-user.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

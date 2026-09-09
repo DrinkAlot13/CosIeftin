@@ -58,3 +58,4 @@ logs/*.html
 logs/*.json
 logs/*.txt
 logs/*.xml
+logs/flow/
