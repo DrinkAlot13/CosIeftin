@@ -49,6 +49,7 @@ import { parsePriceDetailed } from "../src/lib/price/parsePrice";
 
 import { nullProductUrlIsExpected } from "../src/lib/source-capabilities";
 import { emitJson } from "../src/lib/audit-json";
+import { allowedByRobots, PROBE_UA } from "../src/lib/net/robots";
 
 const prisma = new PrismaClient();
 
@@ -56,47 +57,12 @@ const DEFAULT_N = 24;
 const DELAY_MS = 2_000;
 const TIMEOUT_MS = 25_000;
 const MAX_AGE = 14 * 86_400_000;
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CosMicPriceCheck/1.0 (+https://cosmic.ro)";
+const UA = PROBE_UA;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ── ROBOTS.TXT — conservative: any Disallow under `User-agent: *` whose prefix matches the
-// path blocks the fetch. No `Allow` precedence, so it errs toward not fetching.
-const robotsCache = new Map<string, string[]>();
-
-async function disallowedPrefixes(origin: string): Promise<string[]> {
-  const cached = robotsCache.get(origin);
-  if (cached) return cached;
-  const rules: string[] = [];
-  try {
-    const res = await fetch(`${origin}/robots.txt`, { headers: { "user-agent": UA } });
-    if (res.ok) {
-      let applies = false;
-      for (const raw of (await res.text()).split(/\r?\n/)) {
-        const line = raw.split("#")[0].trim();
-        if (!line) continue;
-        const [k, ...rest] = line.split(":");
-        const key = k.trim().toLowerCase();
-        const value = rest.join(":").trim();
-        if (key === "user-agent") applies = value === "*";
-        else if (applies && key === "disallow" && value) rules.push(value);
-      }
-    }
-  } catch {
-    rules.push("/"); // Unreachable robots.txt is NOT permission.
-  }
-  robotsCache.set(origin, rules);
-  return rules;
-}
-
-async function allowedByRobots(url: string): Promise<boolean> {
-  try {
-    const u = new URL(url);
-    return !(await disallowedPrefixes(u.origin)).some((r) => u.pathname.startsWith(r));
-  } catch {
-    return false;
-  }
-}
+// robots.txt handling lives in `src/lib/net/robots.ts`. There were two copies of it — this
+// file's and probe-live-prices' — and `check:concepts` now names that module as the only one.
 
 // ── THE PRESENCE TEST, sharing nothing with the parser ─────────────────────────────────────
 //

@@ -85,6 +85,27 @@ const CONCEPTS: Concept[] = [
     known: [],
   },
   {
+    // ADDED AFTER THE REGISTER CAUGHT ITS AUTHOR. `probe:omnibus` was written the same day as
+    // this check and copied `probe:live-prices`' robots.txt reader wholesale, because the
+    // concept was not registered. A stale copy here answers "yes, fetch it" about a path a
+    // merchant asked us not to touch.
+    name: "the robots.txt permission check",
+    canonical: "src/lib/net/robots.ts",
+    pattern: /^\s*(?:export\s+)?(?:async\s+)?function\s+(?:allowedByRobots|disallowedPrefixes)\b/m,
+    why: "a second copy decides politeness on its own, and drifts toward fetching what we were asked not to",
+    known: [],
+  },
+  {
+    // Two audits ask opposite questions of the same figure — is our unit-price MATHS right
+    // (`audit:unit-oracle`), and is our stored PRICE secretly a unit price
+    // (`audit:price-figures`) — so the reader had to leave the first one.
+    name: "the merchant's own per-unit price",
+    canonical: "src/lib/price/merchant-unit-price.ts",
+    pattern: /^\s*(?:export\s+)?function\s+readMerchantUnitPrice\b/m,
+    why: "Mega Image's unitPrice is the PACK price echoed back; a second reader that trusts the field name adopts it and reports thousands of false defects",
+    known: [],
+  },
+  {
     name: "the unit-price refusal bounds",
     canonical: "src/lib/price/unit-price-bounds.ts",
     pattern: /^\s*(?:export\s+)?(?:function|const)\s+unitPriceRefusal\b/m,

@@ -23,6 +23,7 @@
 // Read-only. Run: npm run audit:unit-oracle
 
 import { PrismaClient } from "@prisma/client";
+import { readMerchantUnitPrice, type MerchantUnitPrice } from "../src/lib/price/merchant-unit-price";
 
 const prisma = new PrismaClient();
 
@@ -32,55 +33,20 @@ const lp = (s: string | number, n: number): string => String(s).padStart(n);
 /** Tolerance for agreement — merchants round their own reference figures. */
 const TOLERANCE = 0.02;
 
-type Oracle = {
-  unit: string;
-  value: number;
-  /** The merchant's OWN size string, where it publishes one — a second, independent check. */
-  amount?: string | null;
-};
+// The reader moved to `src/lib/price/merchant-unit-price.ts` when a second audit needed it.
+// A copy here would be the restatement this project has now paid for three times; the register
+// in `check:concepts` names that module as canonical.
+type Oracle = MerchantUnitPrice;
 
-/**
- * Pull a published per-unit price out of a merchant's source blob.
- *
- * Kaufland: `formattedBasePrice` = "(=1 kg 17.22)" — unit first, DOT decimal, wrapped in
- * parentheses. Kept as a per-merchant reader rather than one loose regex, because "the shape
- * happens to match" is how the wrong number gets read in the first place.
- */
+/** Kaufland and Sezamo, minus the rows whose per-unit price IS the price. */
 function readOracle(merchantSlug: string, blob: string): Oracle | null {
-  let b: Record<string, unknown>;
-  try { b = JSON.parse(blob) as Record<string, unknown>; } catch { return null; }
-
-  if (merchantSlug === "kaufland") {
-    const raw = (b.formattedBasePrice ?? b.basePrice) as string | undefined;
-    if (typeof raw !== "string") return null;
-    const m = raw.match(/\(=\s*1\s*(kg|l|buc)\s+([\d.,]+)\)/i);
-    if (!m) return null;
-    const value = Number(m[2].replace(",", "."));
-    return Number.isFinite(value) && value > 0 ? { unit: m[1].toLowerCase(), value } : null;
-  }
-
-  // ── SEZAMO publishes a RICHER oracle than Kaufland, on forty times as many offers.
-  //
-  //     prices.unitPrice  51.16      the per-unit price, computed by the shop
-  //     unit              "kg"       the unit it is quoted in
-  //     textualAmount     "250 g"    the shop's OWN size string — a second oracle, on our parse
-  //     weightedItem      false      whether the item is sold by weight
-  //
-  // 7,618 live offers carry it and nothing was reading any of it. Found by the weight-pricing
-  // sweep in `audit:variable-weight`, which widened a Mega-Image-shaped detector and
-  // immediately found the bigger population elsewhere — the reason a detector shaped around one
-  // merchant's payload cannot tell "nobody else does this" from "I only looked in one place".
-  if (merchantSlug === "sezamo") {
-    const prices = b.prices as Record<string, unknown> | undefined;
-    const value = prices && typeof prices.unitPrice === "number" ? prices.unitPrice : null;
-    const unit = typeof b.unit === "string" ? b.unit.toLowerCase() : null;
-    if (value === null || !unit || !(value > 0)) return null;
-    // A weighted item's per-unit price is the price; comparing it against a pack-derived figure
-    // compares two different claims. Excluded rather than counted as a disagreement.
-    if (b.weightedItem === true) return null;
-    return { unit, value, amount: typeof b.textualAmount === "string" ? b.textualAmount : null };
-  }
-  return null;
+  const r = readMerchantUnitPrice(merchantSlug, blob);
+  if (!r) return null;
+  // A weighted item's per-unit price is the price it sells at, so comparing it against a figure
+  // we derived from a pack size compares two different claims. Excluded, not counted as a
+  // disagreement. `audit:price-figures` wants exactly these rows and asks for them there.
+  if (r.weighted) return null;
+  return r;
 }
 
 async function main(): Promise<void> {

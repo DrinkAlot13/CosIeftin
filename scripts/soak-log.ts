@@ -219,6 +219,13 @@ async function main(): Promise<void> {
   // shows up within days rather than by accident. See CLAUDE.md, "SOME FACTS CAN ONLY BE
   // CHECKED AGAINST THE WORLD".
   const links = runStep("probe:links", "scripts/probe-links.ts");
+  // 8b — A SECOND EXTERNAL ORACLE, for a defect found FOUR TIMES SEPARATELY: a tile showing
+  // several price figures, and the selector taking the wrong one. Mega Image's per-kilo price,
+  // Penny's loyalty per-unit line (0,45 lei for a 17,99 pack), Selgros's "per BUC.", Carrefour's
+  // split was-price. It asks each merchant's page what it CALLS the number we stored — the only
+  // question `rawPriceText` cannot answer, because that column holds what the selector reached
+  // and a narrowed selector erases the evidence of its own bug. Rotating, 3 pages per merchant.
+  const priceFigures = runStep("probe:price-figures", "scripts/probe-price-figures.ts");
   // 9 — A CLASS IS ONLY A COMPARISON WHILE ITS MEMBERS ARE IN STOCK AT TWO SHOPS, and stock
   // moves daily. `sos-salsa-branza-300g` was written with two merchants and dropped to one
   // within hours when Auchan's member aged out. Nothing announced it; the class simply stopped
@@ -275,7 +282,7 @@ async function main(): Promise<void> {
       ? null
       : `liveness FAILED (${dead.join(", ") || "see step"}); the checks after it describe data whose source is not answering`,
     verifySite,
-    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, classHealth, descriptorGap, sitemap, sitemapProbe].map((s) => ({
+    steps: [liveness, db, displayed, cutover, code, comparability, poolContract, census, links, priceFigures, classHealth, descriptorGap, sitemap, sitemapProbe].map((s) => ({
       name: s.name, ok: s.ok, exitCode: s.exitCode, durationMs: s.durationMs, ...(s.tail ? { tail: s.tail } : {}),
     })),
     liveness: liveness.data,
@@ -286,6 +293,7 @@ async function main(): Promise<void> {
       "pool-contract": { pass: poolContract.ok },
       // The only invariant here answered by the outside world rather than by ourselves.
       "probe:links": links.data,
+      "probe:price-figures": priceFigures.data,
       "audit:class-health": classHealth.data,
       "audit:descriptor-gap": descriptorGap.data,
       "audit:sitemap": sitemap.data,
