@@ -148,6 +148,19 @@ Its first version measured against a 20-hour window and called an offer "rewritt
 withheld" when something else had touched it earlier that day. A check that answers easily is
 worse than one that answers rarely.
 
+### Changes made during the soak
+
+Logged here per the rule above. None touched the matcher, thresholds, coverage, the merchant
+list or any measured input.
+
+**2026-09-10 — the public read API (`/api/v1/*`).** Additive: new read-only routes, new named
+rate limits, and an index on `Offer.productUrl`. No existing route changed, no scraper touched,
+no threshold moved. `docs/API.md` is the spec. The soak's measured inputs are unaffected because
+nothing the nightly audits read is written by any of it.
+
+**2026-09-10 — GDPR erasure cascade.** `onDelete: Cascade` on five relations, applied with
+`prisma db push`. Schema-only; no offer, product or match row is touched by it.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
