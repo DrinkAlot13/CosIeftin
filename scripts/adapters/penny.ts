@@ -64,10 +64,43 @@ export const penny: Adapter = {
     card: '[data-test="product-tile"]',
     // the tile's accessible name lives in .show-sr-and-print
     name: [".show-sr-and-print", '[data-test="product-tile-link"]', ".ws-product-tile__title"],
-    // IMPORTANT: NOT a loose [class*="price"] — that also matches the validity-range and
-    // 30-day-low blocks, whose dates parsed as a price and wrote 1092026 lei onto real
-    // products (caught by the sanity gate). Target the regular-price node only.
-    price: [".ws-product-price-wrapper__container", '[data-test="product-price"]', ".ws-product-price"],
+    // ── THE PRICE NODE, AND WHY IT IS THIS NARROW.
+    //
+    // Penny's tile stacks FOUR amounts inside one wrapper:
+    //
+    //     preț fără PENNY card   22,99 LEI     ← the shelf price: what anyone pays
+    //     1 BC 0,58 LEI                        ← per-unit
+    //     preț cu PENNY card     17,99 LEI     ← loyalty price
+    //     1 BC 0,45 LEI                        ← per-unit
+    //
+    // `.ws-product-price-wrapper__container` is the wrapper, so its textContent was all four
+    // concatenated and the parser took the LAST currency-attached amount: **0,45**. We
+    // published 0,45 lei for a pack that costs 22,99. Found by `audit:discount-truth`, when
+    // Penny's own 30-day minimum of 22,99 could not be reconciled with our 0,45.
+    //
+    // It hid because Penny's catalogue is mostly produce sold by the kilo, where the pack IS
+    // one unit and the two figures coincide. It was wrong on 4 of 29 offers — LIBRESSE 40 buc
+    // stored at 0,45 against a real 17,99, a 40x error on a live comparison page.
+    //
+    // `.ws-product-price-value__main` is the amount alone, and the FIRST one is the non-card
+    // price. That is the right choice for a cross-store comparison: a loyalty price is not
+    // available to everyone, and storing it in `price` made Penny undercut every merchant
+    // whose shelf price we hold.
+    price: [".ws-product-price-value__main", '[data-test="product-price-type-value"]'],
+    // The card price, kept rather than discarded — a different claim, its own column.
+    loyalty: ['[data-test="product-price-type"]:nth-of-type(2) .ws-product-price-value__main'],
+    // ── THE 30-DAY MINIMUM, read explicitly instead of being avoided.
+    //
+    // Penny prints the EU-Omnibus figure on every tile, in its own node with its own test
+    // hook: `preț minim ultimele 30 de zile: 6,99 LEI`. Narrowing the `price` selector above
+    // to dodge the validity dates threw this away too, and it is the reason the OMNIBUS_30D
+    // column held ZERO rows across the entire database while `probe:omnibus` found the figure
+    // on 5 of 5 Penny pages. Of the eleven merchants that probe reads, Penny is the only one
+    // that publishes it.
+    //
+    // Reading it here is safe in a way widening `price` was not: the runner takes ONLY the
+    // reference fields from this node and discards any current price it might yield.
+    reference: ['[data-test="product-price-lowest-price"]', ".ws-product-price-information__lowest-price"],
     image: ["img.ws-product-image", "img"],
     link: ['a[data-test="product-tile-link"]', "a[href]"],
   },

@@ -108,6 +108,38 @@ describe("route config — a page cannot claim caching an ancestor has already d
     expect(undocumented.length).toBe(0);
   });
 
+  // ── A PAGE WHOSE EXISTENCE DEPENDS ON AN ENV VAR MAY NOT BE PRERENDERED.
+  //
+  // `/shrinkflation` shipped declaring `revalidate = 3600` and calling `trustFeaturesEnabled()`.
+  // The build ran without FEATURE_TRUST, `notFound()` fired during static generation, and the
+  // 404 was baked into the output — so setting FEATURE_TRUST=true on the running server did
+  // NOTHING. Verified by starting a production server with the flag on and fetching the path:
+  // 404, with the flag on.
+  //
+  // `lib/flags.ts` guards hard against a feature turning on by accident and says nothing about
+  // a deliberate ON silently failing, which is the direction nobody thinks to test. "Publish
+  // this" must not require a rebuild.
+  it("a page that reads a feature flag is force-dynamic, not prerendered", () => {
+    const bad: string[] = [];
+    for (const f of FILES.filter((x) => x.endsWith("page.tsx"))) {
+      const src = read(f);
+      if (!/from\s+["']@\/lib\/flags["']/.test(src)) continue;
+      const rel = relative(process.cwd(), f).split(sep).join("/");
+      if (!declaresForceDynamic(src)) {
+        bad.push(`${rel} reads a flag but does not declare dynamic = "force-dynamic"`);
+      }
+      if (declaresRevalidate(src)) {
+        bad.push(`${rel} reads a flag and declares revalidate — the flag is then read at BUILD time`);
+      }
+    }
+    if (bad.length) {
+      throw new Error(
+        "A feature flag decides at RUN time or it does not decide at all:\n  " + bad.join("\n  "),
+      );
+    }
+    expect(bad.length).toBe(0);
+  });
+
   it("every route file is real (guards the walker itself)", () => {
     for (const f of FILES) expect(statSync(f).size > 0).toBeTruthy();
   });

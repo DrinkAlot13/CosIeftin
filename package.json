@@ -176,7 +176,9 @@
     "assign:private-label": "tsx scripts/assign-private-label.ts",
     "audit:staple-search": "tsx scripts/audit-staple-search.ts",
     "audit:alternatives": "tsx scripts/audit-alternatives.ts",
-    "probe:overflow": "tsx scripts/probe-overflow.ts"
+    "probe:overflow": "tsx scripts/probe-overflow.ts",
+    "probe:omnibus": "tsx scripts/probe-omnibus.ts",
+    "audit:discount-truth": "tsx scripts/audit-discount-truth.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

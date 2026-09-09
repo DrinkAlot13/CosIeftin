@@ -4,7 +4,7 @@
 // the same stance: a false accusation is worse than a missed one. Where evidence is thin,
 // the expected answer is "we don't know", not a verdict.
 import { describe, it, expect } from "./run";
-import { verifyDiscount, ourMinimum, verdictLabel } from "../src/lib/discount-verify";
+import { verifyDiscount, priorMinimum, verdictLabel } from "../src/lib/discount-verify";
 import { detectShrinkflation, type PackObservation } from "../src/lib/shrinkflation";
 
 const day = (n: number) => new Date(Date.now() - n * 864e5);
@@ -80,14 +80,66 @@ describe("discount verification — cross-checking the retailer's own figure", (
     expect(e.disagreesWithOurHistory).toBeFalsy();
   });
 
-  it("ourMinimum ignores observations outside the window", () => {
-    const r = ourMinimum([{ priceBani: 500, recordedAt: day(60) }, { priceBani: 900, recordedAt: day(5) }]);
-    expect(r.minBani).toBe(900);
-    expect(r.count).toBe(1);
-  });
-
   it("copy is factual, not accusatory", () => {
     expect(verdictLabel("FARA_REDUCERE").label).toBe("Fără reducere față de ultimele 30 de zile");
+  });
+
+  // The label may not claim thirty days of evidence when the baseline is our own shorter history.
+  it("names the window we actually have, not the legal one", () => {
+    expect(verdictLabel("FARA_REDUCERE", 18).label).toBe("Fără reducere față de ultimele 18 de zile");
+  });
+});
+
+// ── PriceHistory APPENDS ON CHANGE ONLY, and the first version of this module read it as if
+// it were a nightly sample. These four cases are the three defects that produced, each with the
+// wrong answer the naive filter gave.
+describe("discount verification — reading an append-on-change series", () => {
+  // THIS CASE PREVIOUSLY ASSERTED THE BUG. It expected 900 — "observations outside the window
+  // are ignored" — but 5,00 was the price IN FORCE from day 60 until day 5, which is most of
+  // the window. The true floor is 500 and the price went UP, which the old reading could not
+  // see at all. A fixture can encode a defect as confidently as code can.
+  it("carries the price INTO the window instead of dropping it", () => {
+    const r = priorMinimum([{ priceBani: 500, recordedAt: day(60) }, { priceBani: 900, recordedAt: day(5) }], 900);
+    expect(r.minBani).toBe(500);
+    expect(r.carriedIn).toBeTruthy();
+    expect(r.count).toBe(0); // no points INSIDE the window — and that is not the same as no evidence
+  });
+
+  // The dangerous direction: a genuine cut classified as "the price only came back to normal".
+  it("excludes the current price's own run, so a real cut is visible", () => {
+    const e = verifyDiscount({
+      currentBani: 900, advertisedWasBani: 1100,
+      history: [
+        { priceBani: 1100, recordedAt: day(25) }, { priceBani: 1100, recordedAt: day(18) },
+        { priceBani: 900, recordedAt: day(1) },
+      ],
+    });
+    expect(e.ourMin30dBani).toBe(1100);
+    expect(e.verdict).toBe("REDUCERE_REALA");
+    expect(e.realSavingBani).toBe(200);
+  });
+
+  // A steady price is perfectly known, and used to report zero observations.
+  it("treats a long-unchanged price as evidence, not as silence", () => {
+    const e = verifyDiscount({ currentBani: 1000, history: [{ priceBani: 1000, recordedAt: day(45) }] });
+    expect(e.coverageDays).toBe(30); // capped at the window
+    expect(e.ourMin30dBani).toBe(1000);
+    expect(e.verdict).toBe("FARA_REDUCERE");
+  });
+
+  // Confidence is TIME WATCHED, not rows recorded. A price that thrashed four times in three
+  // days is not better evidence about a 30-day floor than one watched for three weeks.
+  it("gates on days watched, not on how often the price moved", () => {
+    const thrashy = verifyDiscount({
+      currentBani: 800, advertisedWasBani: 1200,
+      history: [
+        { priceBani: 1000, recordedAt: day(3) }, { priceBani: 900, recordedAt: day(2) },
+        { priceBani: 1000, recordedAt: day(2) }, { priceBani: 950, recordedAt: day(1) },
+      ],
+    });
+    expect(thrashy.ourObservations).toBe(4);
+    expect(thrashy.verdict).toBe("NECUNOSCUT");
+    expect(thrashy.baselineSource).toBe("NONE");
   });
 });
 

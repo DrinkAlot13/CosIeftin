@@ -189,6 +189,36 @@ export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Ad
 }
 
 /** Extract cards from a live page using a DOM map. Runs in the browser context. */
+/**
+ * Merge a dedicated reference node into the reference already found in the price text.
+ *
+ * ── THE ONE RULE: THIS NODE MAY NEVER SUPPLY A CURRENT PRICE.
+ *
+ * `parsePriceDetailed` returns both a price and a reference from any string, and the reference
+ * node is exactly the block that made that dangerous — Penny prints the promo validity range
+ * "de mi 09.09.2026 până ma 15.09.2026" as a sibling of the 30-day minimum, and a date read as
+ * an amount wrote **1092026 lei** onto real products. The response then was to narrow the price
+ * selector, which also discarded the 30-day figure and left `OMNIBUS_30D` empty everywhere.
+ *
+ * So the node is readable again, and `priceBani` from it is dropped on the floor here — not by
+ * selector discipline, which is what failed the first time, but structurally.
+ *
+ * Exported for `tests/adapter-penny.test.ts`, which runs it over the real captured tile text
+ * with no network and no browser.
+ */
+export function readReferenceStatement(
+  fromPrice: { referencePriceBani?: number; referencePriceKind?: string | null },
+  referenceText: string | undefined | null,
+): { bani: number | null; kind: string | null } {
+  if (referenceText) {
+    const refDet = parsePriceDetailed(referenceText);
+    if (refDet.referencePriceBani != null) {
+      return { bani: refDet.referencePriceBani, kind: refDet.referencePriceKind ?? null };
+    }
+  }
+  return { bani: fromPrice.referencePriceBani ?? null, kind: fromPrice.referencePriceKind ?? null };
+}
+
 async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): Promise<StoreProduct[]> {
   const rows = await page.$$eval(map.card, (els, m) => {
     const pick = (el: Element, sels: string[] | undefined): string => {
@@ -200,6 +230,7 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       }
       return "";
     };
+
     const pickAttr = (el: Element, sel: string, attr: string): string => {
       const n = sel ? el.querySelector(sel) : el;
       return (n?.getAttribute(attr) || "").trim();
@@ -212,9 +243,11 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
       const brand = mm.brand ? mm.brand.map((b) => pickAttr(el, b.sel, b.attr)).find(Boolean) || "" : "";
       const ean = mm.ean ? mm.ean.map((b) => pickAttr(el, b.sel, b.attr)).find(Boolean) || "" : "";
       const priceText = mm.priceAttr ? pickAttr(el, mm.priceAttr.sel, mm.priceAttr.attr) : pick(el, mm.price);
+      const referenceText = mm.reference ? pick(el, mm.reference) : "";
+      const loyaltyText = mm.loyalty ? pick(el, mm.loyalty) : "";
       let unavailable = false;
       if (mm.unavailable) unavailable = pickAttr(el, mm.unavailable.sel, mm.unavailable.attr) === mm.unavailable.equals;
-      return { name: nameAttr || pick(el, mm.name), priceText, img, link, brand, ean, unavailable };
+      return { name: nameAttr || pick(el, mm.name), priceText, referenceText, loyaltyText, img, link, brand, ean, unavailable };
     });
   }, map as unknown as Record<string, unknown>);
 
@@ -223,15 +256,27 @@ async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapter, tall
     const name = String(r.name || "").trim();
     if (!name) continue;
     const det = parsePriceDetailed(r.priceText);
+
     // Same rule as the JSON path: an unparseable price is refused and RECORDED, not dropped.
     const price = tally ? tally.record(r.priceText, det.priceBani) : det.priceBani;
+
+    const { bani: refBani, kind: refKind } = readReferenceStatement(det, r.referenceText);
+    // A loyalty node yields a price and nothing else. It can never move `price`, which stays
+    // what a shopper without a card pays.
+    const loyaltyBani = r.loyaltyText ? parsePriceDetailed(r.loyaltyText).priceBani : null;
+
     const p: StoreProduct = {
       name,
       brand: r.brand || "",
       price: price == null ? 0 : baniToLei(price),
+      // NOT widened to include the reference text. `rawPriceText` means "the exact string THIS
+      // PRICE was parsed from", and `audit:price-truth` re-derives all 46,414 live prices from
+      // it through `parsePrice`. Appending another amount to that column would change what it
+      // means for the sake of provenance the reference's own columns already carry.
       rawPriceText: r.priceText,
-      referencePriceBani: det.referencePriceBani ?? null,
-      referencePriceKind: det.referencePriceKind ?? null,
+      referencePriceBani: refBani,
+      referencePriceKind: refKind ?? null,
+      loyaltyPriceBani: loyaltyBani,
       available: !r.unavailable,
       url: r.link ? abs(ad.websiteUrl, r.link) : ad.websiteUrl,
       productUrl: r.link ? abs(ad.websiteUrl, r.link) : null,

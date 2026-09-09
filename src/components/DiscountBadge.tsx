@@ -8,7 +8,7 @@ import { verdictLabel, verdictExplanation } from "@/lib/discount-verify";
 export function DiscountBadge({ evidence, compact = false }: { evidence: DiscountEvidence; compact?: boolean }) {
   // Nothing to say without evidence — an empty badge is better than a hedged one.
   if (evidence.verdict === "NECUNOSCUT") return null;
-  const { label, tone } = verdictLabel(evidence.verdict);
+  const { label, tone } = verdictLabel(evidence.verdict, evidence.windowDays);
   const colors: Record<string, { bg: string; fg: string }> = {
     good: { bg: "rgba(31,107,74,.12)", fg: "#1f6b4a" },
     neutral: { bg: "rgba(90,97,87,.12)", fg: "#5a6157" },

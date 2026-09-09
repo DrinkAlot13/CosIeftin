@@ -80,6 +80,16 @@ export type StoreProduct = {
   /// advertised "was"/30-day-low price, in bani
   referencePriceBani?: number | null;
   referencePriceKind?: string | null;
+  /// ── THE LOYALTY-CARD PRICE, WHEN THE MERCHANT QUOTES TWO.
+  ///
+  /// `price` is what anyone pays; this is what a card holder pays. Penny prints both on every
+  /// tile ("preț fără PENNY card 22,99" / "preț cu PENNY card 17,99") and we stored the CARD
+  /// price in `price`, which made Penny systematically undercut every merchant whose shelf
+  /// price we store — in a basket optimiser whose entire job is to say which shop is cheaper.
+  ///
+  /// Keeping both is the point. Storing the card price alone overstates the saving; dropping
+  /// it loses a real observed number. They are different claims and go in different columns.
+  loyaltyPriceBani?: number | null;
   promoValidFrom?: Date | null;
   promoValidTo?: Date | null;
   /// SOLD BY WEIGHT. Set ONLY where the merchant publishes its own per-unit price alongside an
@@ -1286,6 +1296,8 @@ export async function matchPoolToCatalog(
             rawSourceBlob: o.sp.rawSourceBlob ? o.sp.rawSourceBlob.slice(0, 4096) : null,
             referencePriceBani: o.sp.referencePriceBani ?? null,
             referencePriceKind: o.sp.referencePriceKind ?? null,
+            loyaltyPriceBani: o.sp.loyaltyPriceBani ?? null,
+            loyaltyPrice: o.sp.loyaltyPriceBani != null ? o.sp.loyaltyPriceBani / 100 : null,
           }),
     };
     // BANI IS THE VALUE WE WRITE; the float is derived from it, never the reverse.

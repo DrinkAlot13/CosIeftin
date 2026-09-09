@@ -55,6 +55,31 @@ export type DomMap = {
   price: string[];
   /** attribute to read the price from instead of textContent (e.g. "data-price") */
   priceAttr?: { sel: string; attr: string };
+  /**
+   * Selectors for the merchant's own REFERENCE-PRICE statement — the EU-Omnibus 30-day
+   * minimum, or a struck "was" price — read SEPARATELY from the price.
+   *
+   * WHY IT IS ITS OWN FIELD RATHER THAN A WIDER `price` SELECTOR. Penny prints
+   * "preț minim ultimele 30 de zile: 6,99 LEI" in a sibling of the price node, next to a
+   * validity range reading "de mi 09.09.2026 până ma 15.09.2026". A loose `[class*="price"]`
+   * caught all three, the date parsed as a number, and **1092026 lei** was written onto real
+   * products. The fix at the time was to narrow the price selector, which also threw the
+   * 30-day figure away — and that is why the OMNIBUS_30D column held zero rows across the
+   * whole database while the figure sat on the page.
+   *
+   * Text matched here can NEVER become a price: the runner takes only the reference fields
+   * from it and discards `priceBani`. The dangerous block is readable again because the one
+   * thing it must not supply is unreachable by construction, not by selector discipline.
+   */
+  reference?: string[];
+  /**
+   * Selectors for a LOYALTY-CARD price, where the merchant quotes one beside the shelf price.
+   *
+   * `price` must stay the price anyone pays. Penny prints both on every tile and the wrapper
+   * selector swept up all of it, so `price` ended up holding the card price — and, worse, the
+   * PER-UNIT figure printed under it. See `penny.ts`.
+   */
+  loyalty?: string[];
   image?: string[];
   link?: string[];
   brand?: { sel: string; attr: string }[];

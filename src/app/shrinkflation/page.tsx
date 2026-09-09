@@ -6,7 +6,19 @@ import { prisma } from "@/lib/db";
 import { trustFeaturesEnabled } from "@/lib/flags";
 import { formatRON } from "@/lib/format";
 
-export const revalidate = 3600;
+// ── force-dynamic BECAUSE THE FLAG IS READ AT RUN TIME.
+//
+// This page's existence depends on FEATURE_TRUST, and `revalidate` made that decision at BUILD
+// time: the build ran without the variable, `notFound()` fired, and the 404 was baked into the
+// output. Setting FEATURE_TRUST=true on a running server then changed nothing — verified by
+// starting one and fetching this path, which returned 404 with the flag on.
+//
+// That breaks the flag in the direction nobody checks. `lib/flags.ts` is careful that an
+// ambiguous value never turns a feature ON; it says nothing about a deliberate ON silently
+// doing nothing, and "publish this" requiring a rebuild is not a publishing workflow.
+//
+// Caching costs nothing here: both trust pages are small, rarely visited, and gated off.
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Ambalaje micșorate — CoșMic",
