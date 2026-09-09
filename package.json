@@ -174,7 +174,9 @@
     "audit:merchant-contribution": "tsx scripts/audit-merchant-contribution.ts",
     "withhold:unit-prices": "tsx scripts/withhold-impossible-unit-prices.ts",
     "assign:private-label": "tsx scripts/assign-private-label.ts",
-    "audit:staple-search": "tsx scripts/audit-staple-search.ts"
+    "audit:staple-search": "tsx scripts/audit-staple-search.ts",
+    "audit:alternatives": "tsx scripts/audit-alternatives.ts",
+    "probe:overflow": "tsx scripts/probe-overflow.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

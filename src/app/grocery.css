@@ -24,6 +24,14 @@
 
 /* /lista layout */
 .lista-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+/* A GRID ITEM DEFAULTS TO min-width:auto, SO A 1fr TRACK CANNOT SHRINK BELOW ITS CONTENT.
+   The store comparison table is 910px wide once the "Completeaza cosul la <shop>" buttons are
+   in it, so at 390px the track grew to 910px and THE WHOLE PAGE scrolled sideways — even though
+   the table already sits in a container declaring overflow-x:auto, which never got the chance
+   to scroll because nothing was constraining it. Measured with npm run probe:overflow.
+   This is the single most likely thing to make a person on a phone close the tab, and it
+   produces no error anywhere. */
+.lista-layout > * { min-width: 0; }
 @media (max-width: 860px) { .lista-layout { grid-template-columns: 1fr; } }
 .lista-items { padding: 16px; }
 .lista-add { position: relative; margin-bottom: 12px; }

@@ -356,10 +356,26 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
               diferite acum. Se actualizează singure când revine semnalul.
             </div>
           )}
-          {result && items.length > 0 && (
+          {result && items.length > 0 && (() => {
+            // ── WHICHEVER IS CHEAPER IS THE ONE WE HIGHLIGHT, and only when the two describe
+            //    the SAME basket.
+            //
+            // `best` used to be hard-coded on the split card. Somebody used the site with twenty
+            // staples and got "Cel mai ieftin intr-un magazin  Mega Image 267,16 (16/20)" beside
+            // a HIGHLIGHTED "Cel mai ieftin impartit  7 magazine 436,03" — 63% MORE expensive,
+            // 111,50 of it delivery, with no savings note because the saving was negative. The
+            // page showed two numbers, emphasised the larger one, and said nothing.
+            //
+            // WORSE, THE TWO NUMBERS DESCRIBED DIFFERENT BASKETS: 267,16 was for 16 of 20
+            // products and 436,03 for all 20. Nothing said so, so "one shop is cheaper" was a
+            // comparison that had never been made.
+            const oneStoreTotal = result.bestComplete?.total ?? null;
+            const sameBasket = oneStoreTotal !== null;          // only bestComplete has every item
+            const splitWins = !sameBasket || result.splitTotal <= oneStoreTotal;
+            return (
             <>
               <div className="result-cards">
-                <div className="card result-card">
+                <div className={`card result-card${sameBasket && !splitWins ? " best" : ""}`}>
                   <div className="rc-label">🏪 Cel mai ieftin într-un magazin</div>
                   {result.bestComplete ? (
                     <>
@@ -385,7 +401,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                     <div className="muted">—</div>
                   )}
                 </div>
-                <div className="card result-card best">
+                <div className={`card result-card${splitWins ? " best" : ""}`}>
                   <div className="rc-label">🧩 Cel mai ieftin împărțit</div>
                   <div className="rc-store">{result.storesInSplit} {result.storesInSplit === 1 ? "magazin" : "magazine"}</div>
                   <div className="rc-total">{formatRON(result.splitTotal)}</div>
@@ -412,8 +428,25 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                 </div>
               )}
 
-              {result.savings != null && result.savings > 0.005 ? (
+              {/* ── SAY WHICH IS CHEAPER, INCLUDING WHEN IT IS THE SINGLE SHOP.
+                     The old version had a note for "the split saves you money" and a note for
+                     "they tie", and NOTHING for the case where splitting costs MORE — which is
+                     exactly the case a shopper most needs told, because seven delivery fees are
+                     invisible until you add them up. */}
+              {!sameBasket ? (
+                <div className="save-note muted">
+                  ⚖️ Cele două totaluri <b>nu sunt pentru același coș</b>: niciun magazin nu are toate
+                  cele {result.itemCount} produse, așa că prețul „într-un magazin" e pentru mai puține
+                  produse. Doar totalul împărțit acoperă tot coșul.
+                </div>
+              ) : result.savings != null && result.savings > 0.005 ? (
                 <div className="save-note">💰 Economisești <b>{formatRON(result.savings)}</b> dacă mergi în {result.storesInSplit} magazine în loc de unul.</div>
+              ) : oneStoreTotal !== null && result.splitTotal > oneStoreTotal + 0.005 ? (
+                <div className="save-note">
+                  🏪 <b>Un singur magazin e mai ieftin.</b> {result.bestComplete?.name} are tot coșul cu{" "}
+                  <b>{formatRON(result.splitTotal - oneStoreTotal)}</b> mai puțin decât împărțirea în{" "}
+                  {result.storesInSplit} magazine{result.splitDelivery > 0 ? " — livrarea plătită de mai multe ori" : ""}.
+                </div>
               ) : result.bestComplete ? (
                 <div className="save-note muted">Un singur magazin ({result.bestComplete.name}) e la fel de bun ca împărțirea — o singură tură.</div>
               ) : null}
@@ -473,7 +506,8 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                 </table>
               </div>
             </>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>

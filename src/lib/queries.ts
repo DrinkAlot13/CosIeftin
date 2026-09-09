@@ -346,8 +346,27 @@ export type ItemPage = NonNullable<Awaited<ReturnType<typeof getItemPage>>>;
 export type OfferRow = ItemPage["offers"][number];
 
 const ALT_STOP = new Set(["de", "cu", "la", "si", "din", "fara", "pentru", "sau", "un", "cel", "bio"]);
-function headNounOf(name: string): string {
-  return normalizeText(name).split(/\s+/).find((t) => t.length >= 3 && !ALT_STOP.has(t) && !/\d/.test(t)) ?? "";
+/**
+ * The anchor noun for "similar products" — the first significant token that is NOT the brand.
+ *
+ * ── THE THIRD COPY OF THIS LOGIC, and the one that shipped the worst result.
+ *
+ * `scrape-util.headNoun` was made brand-aware after measurement showed 27.2% of branded grocery
+ * rows lead with their brand. This function is a separate implementation and was left behind, so
+ * for `aro Ulei Floarea Soarelui 6 x 1 L` it returned **"aro"** — and every other `aro` product
+ * at a similar size became a "similar" suggestion. That is how a shopper looking at sunflower
+ * oil was offered LEMONADE at 4,23 with a one-click "+ adauga":
+ *
+ *     aro Ulei Floarea Soarelui 6 x 1 L
+ *        similar: aro Bautura Carbogazoasa Aroma Lamaie si Lime SGR 12 x 0,5 L
+ *
+ * Three implementations of one idea is two too many; this one now takes the brand, like the
+ * matcher's.
+ */
+function headNounOf(name: string, brand?: string | null): string {
+  const brandTokens = new Set(normalizeText(brand ?? "").split(/\s+/).filter(Boolean));
+  const toks = normalizeText(name).split(/\s+/).filter((t) => t.length >= 3 && !ALT_STOP.has(t) && !/\d/.test(t));
+  return toks.find((t) => !brandTokens.has(t)) ?? toks[0] ?? "";
 }
 
 /** Similar items: same section + same type (head-noun) + same size, other products — so a
@@ -360,7 +379,7 @@ export type Strictness = "same-brand" | "equivalent";
 export async function getAlternatives(productId: number, limit = 8, strictness: Strictness = "equivalent") {
   const p = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true, brand: true, unit: true, unitSize: true, section: true } });
   if (!p) return [];
-  const head = headNounOf(p.name);
+  const head = headNounOf(p.name, p.brand);
   if (!head) return [];
   const cands = await prisma.product.findMany({
     where: {
@@ -374,7 +393,17 @@ export async function getAlternatives(productId: number, limit = 8, strictness: 
     take: 500,
   });
   const nbrand = normalizeText(p.brand ?? "");
-  let matched = cands.filter((c) => normalizeText(c.name).split(/\s+/).some((t) => t === head));
+  // ── BOTH SIDES MUST BE THE SAME KIND OF THING, not merely share a word.
+  //
+  // The old test was "the candidate's name CONTAINS the source's head noun anywhere", which is
+  // satisfied by any name that happens to include the word. `Unt Albalact, 82% grasime, 200 g`
+  // was offered `MUNTE LACT Creminos cu Unt 60% 200 g` — a cheese spread — because that name
+  // contains the token "unt". Sorted cheapest-first, so the wrong product led.
+  //
+  // Requiring the candidate's OWN head noun to be the same word makes both sides assert what
+  // they are, rather than one side merely mentioning it. A cheese spread's head noun is
+  // `creminos`, not `unt`.
+  let matched = cands.filter((c) => headNounOf(c.name, c.brand) === head);
   // "same brand only": the shopper wants a better price on THIS product, not a substitute.
   // With no brand on the source product there is nothing to hold constant, so the filter
   // would silently return nothing — fall back to equivalents rather than an empty list.
