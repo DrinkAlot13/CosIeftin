@@ -172,7 +172,9 @@
     "flow:user": "tsx scripts/flow-user.ts",
     "audit:search-comparability": "tsx scripts/audit-search-comparability.ts",
     "audit:merchant-contribution": "tsx scripts/audit-merchant-contribution.ts",
-    "withhold:unit-prices": "tsx scripts/withhold-impossible-unit-prices.ts"
+    "withhold:unit-prices": "tsx scripts/withhold-impossible-unit-prices.ts",
+    "assign:private-label": "tsx scripts/assign-private-label.ts",
+    "audit:staple-search": "tsx scripts/audit-staple-search.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

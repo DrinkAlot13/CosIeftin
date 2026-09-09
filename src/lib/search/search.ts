@@ -194,8 +194,56 @@ export function scoreOne<T extends Searchable>(
     if (f > 0) { score += f * 0.4; reasons.push(`fuzzy ${f.toFixed(2)}`); }
   }
 
+  // ── SPECIFICITY: how much of the PRODUCT the query explains.
+  //
+  // `coverage` above measures how much of the QUERY the product accounts for. That is only half
+  // the question, and the missing half is why seven of twenty staple searches returned the wrong
+  // KIND of product. Measured (`npm run audit:staple-search`): dozens of products reach tier 300
+  // with `name-phrase + coverage 1.00 + head-noun` and score IDENTICALLY at 1.600, so the order
+  // among them fell through to the tie-breakers — merchant count, then ALPHABETICAL NAME.
+  //
+  //     "apa plata"  ->  Apa plata AQUA Carpatica Kids, 0.25 l    "Aqua" sorts before "Borsec"
+  //     "zahar"      ->  Zahar PUDRA cu aroma de vanilie, 80 g
+  //     "piept de pui" -> Piept Pui CRISPY cca. 2 Kg
+  //
+  // Nothing was ranking these. The SORT was.
+  //
+  // A product whose name is mostly the query is more likely the thing meant: "Apa plata Borsec"
+  // is 2 of 3 words, "Apa plata Aqua Carpatica Kids" is 2 of 5. This is standard, and its
+  // absence is what left the ties.
+  //
+  // BOUNDED BELOW THE HEAD-NOUN BOOST so relevance still dominates, and it can only reorder
+  // products that already matched — it never promotes something the query does not describe.
+  // The product's own significant tokens — stopwords and pure sizes excluded, so "0.25 l" and
+  // "de" do not make a name look longer than it reads.
+  const nameSize = [...nameTokens].filter((t) => !isStopword(t) && !/^\d/.test(t)).length;
+  if (nameSize > 0 && hit > 0) {
+    // A FLOOR, because a two-word name is not meaningfully more "about" the query than a
+    // three-word one — and without it the term simply rewards the shortest name, which is a
+    // different product as often as it is a better one. Measured: "cartofi" flipped from
+    // "Cartofi albi la sac 5 kg" (right) to "Cartofi Dulci" (SWEET potatoes, a different
+    // vegetable) at every weight from 0.10 to 0.50, because 1/2 beats 1/3 whatever it is
+    // multiplied by. The signal this term should carry is "this name has a lot of EXTRA words",
+    // and that only starts meaning something past three.
+    const specificity = Math.min(1, hit / Math.max(nameSize, SPECIFICITY_FLOOR));
+    score += SPECIFICITY_WEIGHT * specificity;
+    reasons.push(`specificity ${specificity.toFixed(2)}`);
+  }
+
   return { item, score, tier, reason: reasons.join(" + ") || "none" };
 }
+
+/**
+ * What "the query explains most of this product's name" is worth.
+ *
+ * Below the 0.6 a head-noun match earns, so what a product IS still beats how concisely it is
+ * named, and well below the tier gap so an exact-name match at one shop stays above a category
+ * match at five.
+ */
+export const SPECIFICITY_WEIGHT = 0.5;
+
+/** Names shorter than this are all treated as equally concise. See the note at the call site. */
+export const SPECIFICITY_FLOOR = 3;
 
 /**
  * Search a catalog.

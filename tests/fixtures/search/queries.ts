@@ -33,6 +33,15 @@ export type SearchCase = {
   /** if set, the FIRST result's name must contain this */
   topMustContain?: string;
   /**
+   * None of these may be the FIRST result.
+   *
+   * Stronger than `mustNotFindInTop` about position and weaker about reach, and it is the right
+   * strength for most "wrong kind of product" complaints: a shopper typing "zahar" can live
+   * with icing sugar fourth, but not first. Asserting the top five instead made cases fail on
+   * catalogs where the near neighbour legitimately belongs in the list.
+   */
+  topMustNotContain?: string[];
+  /**
    * None of these may appear in the TOP 5. Weaker than `mustNotFind`, and the right strength
    * for a near neighbour that legitimately belongs in the long tail: body lotion is a real
    * answer to "lapte" for someone who wants it, but it must not lead.
@@ -127,4 +136,46 @@ export const SEARCH_CASES: SearchCase[] = [
   { q: "", why: "empty query must return nothing rather than the whole catalog", expectEmpty: true },
   { q: "   ", why: "whitespace-only query", expectEmpty: true },
   { q: "qwertyuiop", why: "keyboard mash: must return nothing, not a page of fuzzy near-misses", expectEmpty: true },
+
+  // ── 8. THE TWENTY STAPLES, TYPED THE WAY A PERSON BUILDING A WEEKLY SHOP TYPES THEM.
+  //
+  // Added after somebody actually used the site (docs/GAP2-USER-FLOWS.md). Adding twenty
+  // staples to a list of forty queries sounds redundant until you read what they returned:
+  // the FIRST suggestion for seven of them was the wrong KIND of product.
+  //
+  //     branza telemea  ->  a Dr. Oetker CAKE MIX that mentions telemea
+  //     zahar           ->  vanilla ICING sugar, 80 g
+  //     apa plata       ->  a 250 ml CHILDREN'S bottle
+  //     cafea           ->  a kilo of whole BEANS at 99,99
+  //     cartofi         ->  ORGANIC potatoes at 16 lei/kg
+  //     piept de pui    ->  frozen BREADED "Crispy", 2 kg
+  //     ulei ...        ->  a 6 x 1 L CATERING pack
+  //
+  // THE DIAGNOSIS, from `npm run audit:staple-search` rather than from a guess: they all score
+  // IDENTICALLY. Dozens of products reach tier 300 with `name-phrase + coverage 1.00 +
+  // head-noun` = 1.600, and the order among them is settled by the tie-breakers — merchant
+  // count, then ALPHABETICAL NAME. "Apa plata **Aqua** Carpatica Kids" wins because "Aqua"
+  // sorts before "Borsec". Nothing was ranking these; the sort was.
+  //
+  // The expectations below are written as `mustNotFindInTop` wherever "what a shopper means" is
+  // a judgement — a cake mix is never what "branza telemea" means, but which coffee leads is
+  // genuinely arguable and is not asserted.
+  { q: "branza telemea", why: "a cheese, never a cake mix that merely mentions it", topMustNotContain: ["pandispan"] },
+  { q: "zahar", why: "plain sugar leads; icing sugar with vanilla is a different product", topMustNotContain: ["pudra"] },
+  { q: "apa plata", why: "still water for a household, not a 250 ml children's bottle", topMustNotContain: ["Kids"] },
+  { q: "cartofi", why: "ordinary potatoes lead; organic at triple the price is a choice, not a default", topMustNotContain: ["eco", "dulci"] },
+  { q: "piept de pui", why: "chicken breast, not frozen breaded 'Crispy'", topMustNotContain: ["Crispy"] },
+  { q: "oua", why: "eggs — three letters, and a substring of many longer words", mustFind: ["Oua"], topMustContain: "Oua" },
+  { q: "paine", why: "bread — the loaf must outrank breadcrumbs and toast products", mustFind: ["Paine"] },
+  { q: "iaurt", why: "yoghurt — plain yoghurt, not a drink or a dessert built on it", mustFind: ["Iaurt"], topMustContain: "aurt" },
+  { q: "faina", why: "flour — plain wheat flour, not a cake mix that contains it", mustFind: ["Faina"], topMustContain: "aina" },
+  { q: "orez", why: "rice — the grain, not rice cakes or rice drinks", mustFind: ["Orez"], topMustContain: "rez" },
+  { q: "paste", why: "pasta — dry pasta, and a word that also means toothpaste in Romanian", mustFind: ["Paste"] },
+  { q: "rosii", why: "tomatoes — fresh, and the word also appears as a colour adjective", mustFind: ["Rosii"] },
+  { q: "ceapa", why: "onions — fresh onions, not dried seasoning that names them", mustFind: ["Ceapa"], topMustContain: "eapa" },
+  { q: "mere", why: "apples — must not lead with anything whose name merely contains those letters", mustFind: ["Mere"] },
+  { q: "hartie igienica", why: "toilet paper — a two-word category with many pack sizes", mustFind: ["Hartie igienica"] },
+  { q: "detergent vase", why: "dishwashing liquid, not laundry detergent", mustFind: ["Detergent"], mustNotFindInTop: ["rufe"] },
+  { q: "ulei floarea soarelui", why: "a household bottle; a 6-pack catering case is not the default answer", mustFind: ["Ulei"] },
+  { q: "cafea", why: "coffee — which kind leads is arguable, so only presence is asserted", mustFind: ["Cafea"] },
 ];

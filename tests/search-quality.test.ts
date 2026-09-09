@@ -30,7 +30,11 @@ const hay = (r: Row): string => normalizeRo(`${r.brand ?? ""} ${r.name}`);
 const contains = (rows: Row[], needle: string): boolean => rows.some((r) => hay(r).includes(normalizeRo(needle)));
 
 describe("search quality — the fixture itself", () => {
-  it("holds 40 queries", () => expect(SEARCH_CASES.length).toBe(40));
+  // 58, not 40: eighteen staples were added after somebody actually used the site and found
+  // the FIRST suggestion was the wrong KIND of product for seven of twenty ordinary shopping
+  // words. The count is pinned rather than loosened to `>= 40`, because a case silently
+  // disappearing is exactly what pinning it prevents.
+  it("holds 58 queries", () => expect(SEARCH_CASES.length).toBe(58));
   it("every case states why it is in the set", () =>
     expect(SEARCH_CASES.every((c) => c.why.length > 10)).toBeTruthy());
   it("runs against a real catalog, not an invented one", () =>
@@ -78,6 +82,13 @@ describe("search quality — 40 real queries", () => {
       }
       for (const avoid of c.mustNotFindInTop ?? []) {
         if (contains(rows.slice(0, 5), avoid)) problems.push(`"${avoid}" must not be in the top 5`);
+      }
+      // The first result specifically. Most "wrong kind of product" complaints are about
+      // position one: a shopper typing "zahar" can live with icing sugar fourth, not first.
+      for (const avoid of c.topMustNotContain ?? []) {
+        if (rows.length > 0 && hay(rows[0]).includes(normalizeRo(avoid))) {
+          problems.push(`top result must not contain "${avoid}", got "${rows[0].name}"`);
+        }
       }
       if (c.topMustContain && (rows.length === 0 || !hay(rows[0]).includes(normalizeRo(c.topMustContain)))) {
         problems.push(`top result should contain "${c.topMustContain}", got "${rows[0]?.name ?? "(nothing)"}"`);

@@ -59,6 +59,24 @@ function grade(c: SearchCase, out: SearchOutcome<Row>): string[] {
     if (rows.length === 0) bad.push(`no results, expected top to contain "${c.topMustContain}"`);
     else if (!hay(rows[0]).includes(normalizeRo(c.topMustContain))) bad.push(`top is "${rows[0].name}", expected to contain "${c.topMustContain}"`);
   }
+  // ── `mustNotFindInTop` WAS DECLARED BY THE FIXTURE AND CHECKED BY NOTHING HERE.
+  //
+  // `tests/search-quality.test.ts` applies it against a 1,444-name fixture catalog; this audit
+  // runs the same cases against the LIVE catalog and silently skipped the assertion. So twenty
+  // staple cases added to catch a real live defect all reported PASS while the audit's own
+  // output, three lines above the verdict, showed `apa plata -> Aqua Carpatica Kids`.
+  //
+  // A check that can silently do nothing is worse than no check — the same rule `probe:links`
+  // earned when it mis-parsed its arguments and printed a green tick over zero links.
+  for (const no of c.topMustNotContain ?? []) {
+    if (rows.length > 0 && hay(rows[0]).includes(normalizeRo(no))) {
+      bad.push(`top result must not contain "${no}" — got "${rows[0].name}"`);
+    }
+  }
+  for (const no of c.mustNotFindInTop ?? []) {
+    const hit = rows.slice(0, 5).find((r) => hay(r).includes(normalizeRo(no)));
+    if (hit) bad.push(`must not be in the top 5: "${no}" — got "${hit.name}"`);
+  }
   if (c.brandRequired) {
     const wrong = rows.filter((r) => !hay(r).includes(normalizeRo(c.brandRequired!)));
     if (rows.length === 0) bad.push(`no results at all for brand "${c.brandRequired}"`);

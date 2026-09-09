@@ -1101,6 +1101,49 @@ async function auditUnitPrices() {
     "bounds live in lib/price/unit-price-bounds.ts and are applied by the scrape write path too — a rule only the audit knows is a rule the writer does not apply");
 }
 
+// ── CONTROLS WITH NOTHING BEHIND THEM ─────────────────────────────────────────────
+//
+// THE RULE, EARNED TWICE: **any UI control whose backing data is empty everywhere is a
+// defect.** Not a quiet state, not "nobody has used it yet" — a defect, because the control
+// says the site can do something it cannot, and nothing anywhere says otherwise.
+//
+//   EquivalenceClass  the first. Classes existed with no live members, so "produse echivalente"
+//                     was offered over an empty set.
+//   isPrivateLabel    the second, and worse. `ProductAttribute` was COMPLETELY EMPTY — no keys,
+//                     zero rows — so `preferPrivateLabel` in `lib/substitution/pick.ts` could
+//                     never fire. A shopper who asked to prefer own-brand products got the
+//                     ordinary cheapest-per-unit answer with nothing saying their preference
+//                     did nothing. It went unnoticed because every code path was correct: the
+//                     branch was reachable, the query was right, and the data was absent.
+//
+// This is the project's most-repeated defect wearing its plainest form — a value never
+// observed, read as an observation. The check below is deliberately CRUDE: it asks only
+// "is this empty everywhere", because that is the question no amount of correct code answers.
+async function auditControlsHaveData() {
+  // ONLY DATA WE ARE RESPONSIBLE FOR POPULATING.
+  //
+  // The first version of this check also counted `UserFavorite` and duly reported it as a
+  // defect. It is not one: favourites are written by SHOPPERS, and an empty table on a site
+  // nobody has used yet is an unused feature, not a broken control. Conflating the two is how a
+  // check earns a permanent red mark that everyone learns to ignore — which would destroy the
+  // one thing this invariant is for.
+  //
+  // The test is therefore: WE fill it, and it is empty. User-populated tables are listed
+  // separately and reported, never failed.
+  const ours: { name: string; control: string; count: number }[] = [
+    { name: "isPrivateLabel", control: "the 'prefer own brand' option and the product page's own-brand sentence", count: await prisma.productAttribute.count({ where: { key: "isPrivateLabel", value: "true" } }) },
+    { name: "EquivalenceClass members", control: "'produse echivalente' on the product page", count: await prisma.product.count({ where: { equivalenceClassId: { not: null } } }) },
+  ];
+  const theirs: { name: string; count: number }[] = [
+    { name: "UserFavorite", count: await prisma.userFavorite.count() },
+    { name: "UserProductAdd", count: await prisma.userProductAdd.count() },
+  ];
+
+  record("Controls", "no UI control is backed by data WE fill that is empty everywhere",
+    ours.filter((c) => c.count === 0).map((c) => `${c.name} has ZERO rows — ${c.control} cannot work and says nothing`),
+    `an empty backing table is a defect, not a quiet state. User-populated tables are exempt and merely reported: ${theirs.map((t) => `${t.name}=${t.count}`).join(", ")}`);
+}
+
 // ── FAVOURITES ────────────────────────────────────────────────────────────────────
 //
 // The invariants for `UserProductAdd.distinctDays` / `lastAddDay`, added when inferred
@@ -1175,6 +1218,7 @@ async function main() {
   await auditProductUrlsAreProducts();
   await auditDerivedDataIsFresh();
   await auditUnitPrices();
+  await auditControlsHaveData();
   await auditFavourites();
 
   let lastGroup = "";
