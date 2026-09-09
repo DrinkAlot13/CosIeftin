@@ -20,6 +20,7 @@ import { parseSize } from "./ingest-core";
 import { normalizeText } from "./matching";
 import { parseEan } from "./product/ean";
 import { baniToLei, leiToBaniExact, perUnitBaniOrNull } from "./price/parsePrice";
+import { unitPriceRefusal } from "./price/unit-price-bounds";
 import { tally as tallyCensus } from "./offer-census";
 import { ensureBackup } from "./ensure-backup";
 import { recordRefusal, MAX_PRE_OFFER_REFUSALS } from "./record-refusal";
@@ -81,6 +82,14 @@ export type StoreProduct = {
   referencePriceKind?: string | null;
   promoValidFrom?: Date | null;
   promoValidTo?: Date | null;
+  /// SOLD BY WEIGHT. Set ONLY where the merchant publishes its own per-unit price alongside an
+  /// approximate pack weight — see `lib/price/variable-weight.ts`. Three facts kept apart,
+  /// because a per-kilo price, an approximate weight and a till price are different claims and
+  /// only the first is comparable between shops.
+  ///
+  /// Set at the READ SITE like everything else on this contract. A scraper that knows its own
+  /// payload knows this; nothing downstream can recover it from a number.
+  variableWeight?: { quotedUnitPrice: number; unit: string; approxSize: number } | null;
 };
 
 /** What a pool carries, as a fraction of its rows. Reported per run and gated on. */
@@ -1301,16 +1310,46 @@ export async function matchPoolToCatalog(
     //
     // If the offer's own size cannot be parsed there is no honest unit price, so none is stored.
     // A fallback to the catalog size would reintroduce exactly this bug.
-    const ppu = ownSize && ownSize.unitSize > 0 ? writeFloat / ownSize.unitSize : 0;
+    const rawPpu = ownSize && ownSize.unitSize > 0 ? writeFloat / ownSize.unitSize : 0;
+
+    // ── AND THE SIZE MUST PRODUCE A PRICE SOMEBODY COULD PAY.
+    //
+    // The INT32 guard below catches an overflow; it does not catch 9,500,000 lei/kg, which fits
+    // in the column perfectly. 28 offers were live with figures like that, every one of them
+    // arithmetically consistent with its own size — a DOSE ("Spray oral cu nicotina, 1 mg")
+    // read as a pack weight, or a bin bag's CAPACITY ("SACI MENAJ 320L") read as its contents.
+    //
+    // A GATE DEFERS; IT NEVER DISCARDS. The PRICE is correct in every case examined and is
+    // written unchanged — it is the per-unit figure that is refused, and the refusal is
+    // recorded so the size can be fixed rather than forgotten. Withholding the offer instead
+    // would remove a price we can stand behind.
+    // ── A MERCHANT'S OWN PER-UNIT PRICE OUTRANKS ONE WE DERIVE.
+    //
+    // Where the shop publishes a per-kilo figure next to an approximate weight, that figure was
+    // computed by the shop from the real pack with no involvement from us — the same class of
+    // evidence `audit:unit-oracle` already trusts from Kaufland. Dividing our till price by an
+    // APPROXIMATE weight would reintroduce exactly the guess this replaces, and be wrong by
+    // however much the piece differs from typical.
+    const vwSrc = o.sp.variableWeight ?? null;
+    const vw = vwSrc
+      ? { isVariableWeight: true, quotedUnitPriceBani: leiToBaniExact(vwSrc.quotedUnitPrice), approxUnitSize: vwSrc.approxSize }
+      : { isVariableWeight: false, quotedUnitPriceBani: null, approxUnitSize: null };
+
+    const ppuRefusal = unitPriceRefusal(vwSrc ? vwSrc.quotedUnitPrice : rawPpu, vwSrc ? vwSrc.unit : ownSize?.unit);
+    const ppu = ppuRefusal ? 0 : (vwSrc ? vwSrc.quotedUnitPrice : rawPpu);
     // Null rather than a crash or a lie: a mis-parsed pack size ("3 mg/ml" read as the pack)
     // can push this past what an INT column holds, and the column is nullable for exactly
     // that reason. See perUnitBaniOrNull.
-    const ppuBani = ownSize && ownSize.unitSize > 0 ? perUnitBaniOrNull(writeFloat, ownSize.unitSize) : null;
+    const ppuBani = ppuRefusal
+      ? null
+      : vwSrc
+        ? leiToBaniExact(vwSrc.quotedUnitPrice)
+        : ownSize && ownSize.unitSize > 0 ? perUnitBaniOrNull(writeFloat, ownSize.unitSize) : null;
     const avail = o.available ? "in stock" : "out of stock";
     const offer = await prisma.offer.upsert({
       where: { productId_merchantId: { productId, merchantId } },
-      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
-      create: { productId, merchantId, price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...provenance },
+      update: { price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...vw, ...provenance },
+      create: { productId, merchantId, price: writeFloat, priceBani, pricePerUnit: ppu, pricePerUnitBani: ppuBani, availability: avail, url: o.url, currency: "RON", matchedBy: o.reason, matchScore: o.score, priceSource: o.source, flagged, flagReason, ...vw, ...provenance },
     });
     // append a history point only when the price actually changed (20–50× fewer rows)
     if (prev === undefined || Math.abs(prev - writePrice) > 1e-9) {
@@ -1336,6 +1375,20 @@ export async function matchPoolToCatalog(
         acceptedPriceBani: priceBani,
         rawPriceText: o.sp.rawPriceText ?? null,
         reason: `${flagReason ?? "large move"} — written and flagged for review, not refused`,
+      });
+    }
+    // A REFUSED PER-UNIT PRICE IS RECORDED, not silently zeroed. The price we wrote is right;
+    // the SIZE that produced the per-unit figure is not, and the row below is what lets someone
+    // find and fix the size instead of rediscovering it in six months.
+    if (ppuRefusal) {
+      await recordRefusal({
+        offerId: offer.id,
+        merchantId,
+        storeName: o.sp.name,
+        rejectedPriceBani: 0,
+        acceptedPriceBani: priceBani,
+        rawPriceText: o.sp.rawPriceText ?? null,
+        reason: `${ppuRefusal} (size ${ownSize?.unitSize} ${ownSize?.unit}) — price kept, unit price withheld`,
       });
     }
   }

@@ -198,6 +198,32 @@ model Offer {
   storeName    String?
   ownUnit      String?
   ownUnitSize  Float?
+
+  /// ── SOLD BY WEIGHT, PRICED PER KILO, HANDED OVER AS A PIECE.
+  ///
+  /// Mega Image offer 480057 read 25,19 from us and 35,99 from the shop's own page, and both
+  /// were right. Their payload carries BOTH numbers and they mean different things:
+  ///
+  ///     PriceLabel1 "+/- 25.19 LEI"   PriceLabel2 "+/- 0.700 Kg"   Price 35.99
+  ///     35.99 lei/kg  x  0.700 kg  =  25.193  ->  25.19
+  ///
+  /// 35,99 is the price PER KILOGRAM; 25,19 is roughly what a typical piece costs. We stored
+  /// the piece price against a `1 buc` product with no unit price, so the shopper saw
+  /// "25,19 lei" with nothing saying it is about 700 g — and the product could not enter the
+  /// per-unit comparison this site exists to perform.
+  ///
+  /// THE THREE FACTS ARE KEPT APART ON PURPOSE. Collapsing them is what caused the defect:
+  /// a per-kilo price, an approximate weight and the resulting till price are different
+  /// claims, and only the first is comparable between shops.
+  ///
+  /// NULL MEANS NOT RECORDED, never zero. A merchant that does not publish a per-kilo figure
+  /// genuinely has none, and inventing one from price ÷ weight would re-derive the number this
+  /// column exists to stop us guessing.
+  isVariableWeight    Boolean @default(false)
+  /// The merchant's OWN price per canonical unit, in bani. The comparable number.
+  quotedUnitPriceBani Int?
+  /// The approximate pack weight the merchant states, in the offer's own unit.
+  approxUnitSize      Float?
   /// ── ELECTRONICS (affiliate feeds). Absent for grocery offers.
   /// WHO IS ACTUALLY SELLING THIS. An eMAG marketplace listing is a third-party seller, not
   /// eMAG, and showing its price as "eMAG price" is a lie the shopper discovers at checkout.

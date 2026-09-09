@@ -18,6 +18,7 @@
 import { PrismaClient } from "@prisma/client";
 import { GROCERY_TREE, ALL_LEAVES } from "../src/lib/category/tree";
 import { emitJson } from "../src/lib/audit-json";
+import { unitPriceRefusal, isPriceUnit } from "../src/lib/price/unit-price-bounds";
 import { membershipOk, rulesFromAttributes } from "../src/lib/substitution/class-rules";
 import { parsePrice } from "../src/lib/price/parsePrice";
 import { findDisagreeingGroups, nameVerdict, baniOf, MEDIAN_DEVIATION } from "../src/lib/outlier";
@@ -558,7 +559,17 @@ async function auditTiers() {
   const tiers = await prisma.bulkTier.findMany({
     select: {
       id: true, offerId: true, minQuantity: true, unitPriceBani: true,
-      offer: { select: { price: true, priceBani: true, flagged: true, merchant: { select: { name: true } }, product: { select: { name: true } }, anomalies: { where: { resolved: false }, select: { id: true } } } },
+      // ── ONLY ANOMALIES THAT IMPUGN THE PRICE COUNT HERE.
+      //
+      // A quantity ladder hanging off a price we do not believe is the defect this rule exists
+      // for. But `PriceAnomaly` now also records a refused UNIT price — where the price is
+      // correct and the SIZE is not (see lib/price/unit-price-bounds.ts). Those rows say
+      // nothing about whether the base price can carry a ladder, and counting them made this
+      // invariant fail the moment the unit-price backfill ran.
+      //
+      // One column, two meanings, so the meaning is made explicit rather than inferred from a
+      // row's existence. CLAUDE.md: "One vocabulary per column."
+      offer: { select: { price: true, priceBani: true, flagged: true, merchant: { select: { name: true } }, product: { select: { name: true } }, anomalies: { where: { resolved: false, NOT: { reason: { contains: "unit price withheld" } } }, select: { id: true } } } },
     },
   });
   const byOffer = new Map<number, typeof tiers>();
@@ -1056,6 +1067,40 @@ async function auditDerivedDataIsFresh() {
     "cleared by the sweep at the end of compute:home; a stale signal here is the recurring 'default read as an observation' shape");
 }
 
+// ── UNIT PRICES ───────────────────────────────────────────────────────────────────
+//
+// THE INVARIANT THE 86-MILLION-LEI SPRAY EARNED. `audit:price-truth` proves pricePerUnit is
+// internally CONSISTENT — price divided by it yields a real size — and it did, for every one of
+// the 28 impossible figures that were live. The arithmetic was right and the SIZE was nonsense:
+// a dose read as a pack weight, a bin bag's capacity read as its contents.
+//
+// A consistency check cannot see that by construction, because both halves agree. So this is a
+// bound on the WORLD, imported from the same module the scrape write path uses, so the rule the
+// audit enforces and the rule the writer applies cannot drift apart.
+async function auditUnitPrices() {
+  const offers = await prisma.offer.findMany({
+    where: { merchant: { active: true }, isStale: false, flagged: false, pricePerUnit: { gt: 0 } },
+    select: {
+      id: true, pricePerUnit: true, ownUnit: true, ownUnitSize: true,
+      merchant: { select: { slug: true } },
+      product: { select: { name: true, unit: true, unitSize: true } },
+    },
+  });
+
+  const bad: string[] = [];
+  for (const o of offers) {
+    const unit = ((o.ownUnitSize && o.ownUnitSize > 0 ? o.ownUnit : o.product.unit) ?? o.product.unit).toLowerCase();
+    if (!isPriceUnit(unit)) continue;
+    const refusal = unitPriceRefusal(o.pricePerUnit, unit);
+    if (refusal) {
+      bad.push(`offer #${o.id} [${o.merchant.slug}] ${o.pricePerUnit.toFixed(2)}/${unit} — ${o.product.name.slice(0, 50)}`);
+    }
+  }
+
+  record("Prices", "no live per-unit price is outside what a shopper could pay", bad,
+    "bounds live in lib/price/unit-price-bounds.ts and are applied by the scrape write path too — a rule only the audit knows is a rule the writer does not apply");
+}
+
 // ── FAVOURITES ────────────────────────────────────────────────────────────────────
 //
 // The invariants for `UserProductAdd.distinctDays` / `lastAddDay`, added when inferred
@@ -1129,6 +1174,7 @@ async function main() {
   await auditUnplacedPile();
   await auditProductUrlsAreProducts();
   await auditDerivedDataIsFresh();
+  await auditUnitPrices();
   await auditFavourites();
 
   let lastGroup = "";

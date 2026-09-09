@@ -39,6 +39,26 @@ const MAX_AGE = 14 * 86_400_000;
 /** The merchant's own "approximately" marker, as it appears in the stored payload. */
 const APPROX = /\+\/-\s*([\d.,]+)\s*(kg|g|lei)/gi;
 
+/**
+ * EVERY WAY A MERCHANT MIGHT SAY "PRICED BY WEIGHT", not just Mega Image's.
+ *
+ * The first version of this audit matched only "+/-", which is Mega Image's and Auchan's
+ * spelling, and reported those two as though they were the whole population. A detector shaped
+ * around one merchant's payload cannot tell "nobody else does this" from "I only looked in one
+ * place" — the same mistake the Freshful brand-omission survey made before it was widened.
+ *
+ * So the sweep looks for the SHAPE: a per-unit price quoted by the merchant, a unit-price
+ * label, or a weight-priced marker, in any payload.
+ */
+const WEIGHT_PRICING_SIGNALS: { name: string; re: RegExp }[] = [
+  { name: "+/- approximate", re: /\+\/-\s*[\d.,]+\s*(kg|g)\b/i },
+  { name: "unitPrice field", re: /"unitPrice"\s*:\s*[\d.]+/i },
+  { name: "lei/kg label", re: /lei\s*\/\s*kg/i },
+  { name: "price per kg text", re: /pret[^"]{0,12}\/\s*kg/i },
+  { name: "formattedBasePrice", re: /formattedBasePrice/i },
+  { name: "unitCode kilogram", re: /"unitCode"\s*:\s*"kilogram"/i },
+];
+
 async function main(): Promise<void> {
   const cutoff = new Date(Date.now() - MAX_AGE);
   const offers = await prisma.offer.findMany({
@@ -95,6 +115,27 @@ async function main(): Promise<void> {
   console.log(`  live offers carrying a source payload            ${offers.length}`);
   console.log(`  ...whose payload says "+/-" (approximately)      ${hits.length}` +
     `  (${((hits.length / Math.max(1, offers.length)) * 100).toFixed(2)}%)`);
+
+  // ── THE SWEEP: does any OTHER merchant price by weight in a different vocabulary?
+  const signalHits = new Map<string, Map<string, number>>();
+  for (const o of offers) {
+    const blob = o.rawSourceBlob ?? "";
+    for (const sig of WEIGHT_PRICING_SIGNALS) {
+      if (!sig.re.test(blob)) continue;
+      let m = signalHits.get(sig.name);
+      if (!m) signalHits.set(sig.name, (m = new Map()));
+      m.set(o.merchant.slug, (m.get(o.merchant.slug) ?? 0) + 1);
+    }
+  }
+  console.log(`
+  WEIGHT-PRICING SIGNALS, ACROSS EVERY MERCHANT`);
+  console.log(`  (the "+/-" count above is ONE merchant's spelling; these are the others)`);
+  for (const sig of WEIGHT_PRICING_SIGNALS) {
+    const m = signalHits.get(sig.name);
+    if (!m || m.size === 0) { console.log(`    ${sig.name.padEnd(22)} —`); continue; }
+    const parts = [...m.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => `${s} ${n}`);
+    console.log(`    ${sig.name.padEnd(22)} ${parts.join("  ")}`);
+  }
 
   if (hits.length === 0) {
     console.log(`\n  NONE TODAY. The marker is merchant-specific, so this measures Mega Image's`);

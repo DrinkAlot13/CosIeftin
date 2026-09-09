@@ -10,6 +10,7 @@
 import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { readVariableWeight } from "../src/lib/price/variable-weight";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -88,7 +89,12 @@ function extract(json: any, pool: Cand[], seen: Set<string>, categoryPath: strin
       if (!seen.has(code)) {
         seen.add(code);
         const abs = o.url ? (String(o.url).startsWith("http") ? o.url : BASE + o.url) : BASE;
-        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), rawSourceBlob: JSON.stringify(o).slice(0, 4096), image: firstImage(o.images), categoryPath });
+        // SOLD BY WEIGHT? Mega Image publishes its own per-kilo price beside an approximate
+        // pack weight ("+/- 0.700 Kg"), and `price.value` is only the approximate TILL price
+        // for a typical piece. Read at the site that knows the payload; see
+        // lib/price/variable-weight.ts for why the three facts stay apart.
+        const variableWeight = readVariableWeight(o.price);
+        pool.push({ name: o.name, brand: o.manufacturerName || "", sourceId: code, price: o.price.value, available: o.available !== false, url: abs, productUrl: o.url ? abs : null, rawPriceText: String(o.price.value), rawSourceBlob: JSON.stringify(o).slice(0, 4096), image: firstImage(o.images), categoryPath, variableWeight });
         added++;
       }
     }
