@@ -8,6 +8,8 @@ import { searchCatalog } from "@/lib/search/search";
 import { getSearchableCatalog, type SearchableProduct } from "@/lib/search/index-cache";
 import { buildDailyLowSeries, dropPercent, isCurrent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
 import { visibleTiers } from "./bulk-tiers";
+import { MEDIAN_DEVIATION } from "./outlier";
+import { INDEX_BASKET, type BasketItem } from "./index-basket";
 
 const activeInclude = {
   where: { merchant: { active: true } },
@@ -224,13 +226,41 @@ export async function getCategoryPage(slug: string, sort: SortKey = "unit-asc") 
     where: { categoryId: { in: ids }, section: "grocery" },
     select: { ...cardProductSelect, offers: cardOfferSelect },
   });
-  const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
-  decorated.sort((a, b) => {
+
+  // ── HOW MANY SHOPS ACTUALLY SHOW A PRICE, counted over the SAME offers the card summarises.
+  //
+  // Counted from `isCurrent` offers rather than from every row, so it agrees with the price the
+  // card displays. A product whose second shop is stale is not comparable today, whatever the
+  // database says about it in general.
+  const withShops = decorate(products)
+    .filter((p) => p.summary.offerCount > 0)
+    .map((p, i) => ({
+      ...p,
+      shopCount: new Set(
+        products[i].offers.filter((o) => isCurrent(o as never)).map((o) => o.merchantId),
+      ).size,
+    }));
+
+  // ── THE FILTERING ITSELF LIVES IN THE BROWSER, and it has to.
+  //
+  // Reading `searchParams` makes a page dynamic in Next 14, which is exactly why sorting moved
+  // client-side in the first place — see `SortableProductGrid`. A `?comparabile=` link would
+  // undo that and re-render every category for every visitor to change which subset is drawn.
+  //
+  // So the server hands over EVERY product with the shop count attached, and the grid decides
+  // what to draw. The page stays generated once and revalidated when prices change.
+  withShops.sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name, "ro");
     if (sort === "price-asc") return a.summary.lowestBani - b.summary.lowestBani;
     return a.unitLowest - b.unitLowest;
   });
-  return { category, products: decorated };
+
+  return {
+    category,
+    products: withShops,
+    /** So the toggle can say what it is hiding without recounting in the browser. */
+    comparableCount: withShops.filter((p) => p.shopCount >= 2).length,
+  };
 }
 
 /**
@@ -266,6 +296,10 @@ export async function getItemPage(slug: string, showDeliveryPlatform = false) {
     where: { slug },
     include: {
       category: true,
+      // Whether this is a shop's OWN brand. Needed to explain, in Romanian, WHY a product sits
+      // at one shop: "only Auchan sells it" is a fact about the product, while "only one shop
+      // has a price today" is a fact about our coverage, and a shopper deserves to know which.
+      attributes: { where: { key: "isPrivateLabel" }, select: { value: true } },
       // A WITHHELD OFFER DOES NOT RENDER AT ALL.
       //
       // Out-of-stock rows stay, greyed, with their last-seen date — that is a fact about a
@@ -775,4 +809,162 @@ export async function getAdminStats() {
   });
   const newest = await prisma.offer.findFirst({ orderBy: { lastObservedAt: "desc" }, select: { lastObservedAt: true } });
   return { products, offers, chains, merchantRows, lastUpdated: newest?.lastObservedAt ?? null };
+}
+
+// ── THE HOMEPAGE LEADS WITH WHAT THE SITE IS GOOD AT ──────────────────────────────────────
+//
+// Measured: 7.3% of grocery products are comparable, but 52.5% of the forty pinned staples are.
+// The site is strong on what people actually buy and thin on the long tail — and the homepage
+// opened with a category grid, which shows neither. The two queries below surface the strength.
+
+export type SpreadRow = {
+  id: number; slug: string; name: string; brand: string | null; image: string | null;
+  unit: string; unitSize: number;
+  lowestBani: number; highestBani: number; spreadBani: number; spreadPct: number;
+  cheapestShop: string; dearestShop: string; shopCount: number;
+  categoryId: number | null;
+};
+
+/**
+ * Products where shopping at the right shop saves the most.
+ *
+ * ── WHY THE BOUNDS, and they are not decoration.
+ *
+ * A price spread across shops is EXACTLY the shape that a false match also produces: two
+ * different products under one row, one cheap and one dear. CLAUDE.md's peer-median section is
+ * explicit that such a check "flags disagreement, not guilt", and the gelatine case showed the
+ * flagged row being the CORRECT one. Publishing the biggest spreads on the homepage without
+ * bounds would put this project's most likely data errors on its most visited page.
+ *
+ * So: `flagged` offers are excluded (they already are, by `currentOfferWhere`), and anything
+ * above `MEDIAN_DEVIATION` — a spread wider than a factor the median cannot explain — is
+ * withheld rather than celebrated. A 30% saving on yoghurt is a real finding a shopper can act
+ * on; a 400% "saving" is almost always two products wearing one name.
+ */
+export async function getBiggestSpreads(limit = 12): Promise<SpreadRow[]> {
+  const live = currentOfferWhere();
+  const rows = await prisma.product.findMany({
+    where: { section: "grocery", offers: { some: live } },
+    select: {
+      id: true, slug: true, name: true, brand: true, image: true, unit: true, unitSize: true,
+      categoryId: true,
+      offers: { where: live, select: { price: true, priceBani: true, merchant: { select: { name: true, slug: true } } } },
+    },
+  });
+
+  const out: SpreadRow[] = [];
+  for (const p of rows) {
+    const byMerchant = new Map<string, { bani: number; name: string }>();
+    for (const o of p.offers) {
+      const bani = o.priceBani ?? Math.round(o.price * 100);
+      if (!(bani > 0)) continue;
+      const prev = byMerchant.get(o.merchant.slug);
+      if (!prev || bani < prev.bani) byMerchant.set(o.merchant.slug, { bani, name: o.merchant.name });
+    }
+    if (byMerchant.size < 2) continue;
+
+    const entries = [...byMerchant.values()].sort((a, b) => a.bani - b.bani);
+    const lowest = entries[0];
+    const highest = entries[entries.length - 1];
+    const spread = highest.bani - lowest.bani;
+    if (spread <= 0) continue;
+
+    // ── THE BOUND, AND IT DEPENDS ON HOW MANY SHOPS THERE ARE.
+    //
+    // With exactly TWO prices there is no median worth the name: one cheap row and one dear row
+    // are equally likely to be two different products under one name as they are to be a
+    // bargain. CLAUDE.md's peer-median section is about precisely this, and the homepage is the
+    // worst possible place to publish that ambiguity.
+    //
+    // The first version allowed any spread under 2.4x regardless of shop count, and the top
+    // twelve came back as brandy, caviar, five coffees and three detergents — every one of them
+    // "2 magazine" with an 80-90% gap. Expensive, thin evidence, and not what anybody buys.
+    //
+    // So a two-shop product must be modest to appear at all, while three or more shops — where
+    // a middle price exists to make the outer ones legible — may be wider.
+    const ratio = highest.bani / lowest.bani - 1;
+    const allowed = byMerchant.size >= 3 ? MEDIAN_DEVIATION : 0.5;
+    if (ratio > allowed) continue;
+
+    out.push({
+      id: p.id, slug: p.slug, name: p.name, brand: p.brand, image: p.image,
+      unit: p.unit, unitSize: p.unitSize,
+      lowestBani: lowest.bani, highestBani: highest.bani,
+      spreadBani: spread, spreadPct: (spread / lowest.bani) * 100,
+      cheapestShop: lowest.name, dearestShop: highest.name, shopCount: byMerchant.size,
+      categoryId: p.categoryId,
+    });
+  }
+
+  // Rank by MONEY SAVED, not by percentage. Saving 8 lei on cheese beats saving 60% on a 2-lei
+  // packet of yeast, and the shopper is deciding where to spend an afternoon.
+  out.sort((a, b) => b.spreadBani - a.spreadBani);
+
+  // ── AT MOST TWO PER CATEGORY, because absolute lei has a bias and it shows.
+  //
+  // Expensive goods have larger absolute gaps, so ranking on money saved returns the expensive
+  // tail: the unfiltered top twelve was SEVEN COFFEES, a caviar and a gin. Every row was
+  // individually correct and the page was useless — nobody's weekly shop is decided by the
+  // eleventh coffee.
+  //
+  // This does not pretend to know what people buy; `getBasketStaples` is the section that does.
+  // It just refuses to spend the whole shelf on one aisle.
+  const perCategory = new Map<number, number>();
+  const spread: SpreadRow[] = [];
+  for (const r of out) {
+    const key = r.categoryId ?? -1;
+    const n = perCategory.get(key) ?? 0;
+    if (n >= 2) continue;
+    perCategory.set(key, n + 1);
+    spread.push(r);
+    if (spread.length >= limit) break;
+  }
+  return spread;
+}
+
+export type StapleRow = {
+  key: string; label: string; group: string; slug: string;
+  lowestBani: number | null; cheapestShop: string | null; shopCount: number;
+  spreadBani: number;
+};
+
+/**
+ * The forty pinned staples, each with its cheapest shop and its spread.
+ *
+ * This is the site's strongest surface — 52.5% of these compare across two or more shops against
+ * 7.3% of the catalog — and until now nothing on the homepage linked to it.
+ *
+ * A line whose slug no longer resolves is returned with nulls rather than dropped. Dropping it
+ * would quietly shrink the basket, which is the exact failure `lib/index-basket.ts` was written
+ * to prevent: an index whose contents move cannot measure anything.
+ */
+export async function getBasketStaples(): Promise<StapleRow[]> {
+  const live = currentOfferWhere();
+  const products = await prisma.product.findMany({
+    where: { slug: { in: INDEX_BASKET.map((b: BasketItem) => b.slug) } },
+    select: {
+      slug: true,
+      offers: { where: live, select: { price: true, priceBani: true, merchant: { select: { name: true, slug: true } } } },
+    },
+  });
+  const bySlug = new Map(products.map((p) => [p.slug, p]));
+
+  return INDEX_BASKET.map((b: BasketItem) => {
+    const p = bySlug.get(b.slug);
+    const byMerchant = new Map<string, { bani: number; name: string }>();
+    for (const o of p?.offers ?? []) {
+      const bani = o.priceBani ?? Math.round(o.price * 100);
+      if (!(bani > 0)) continue;
+      const prev = byMerchant.get(o.merchant.slug);
+      if (!prev || bani < prev.bani) byMerchant.set(o.merchant.slug, { bani, name: o.merchant.name });
+    }
+    const entries = [...byMerchant.values()].sort((a, b2) => a.bani - b2.bani);
+    return {
+      key: b.key, label: b.label, group: b.group, slug: b.slug,
+      lowestBani: entries[0]?.bani ?? null,
+      cheapestShop: entries[0]?.name ?? null,
+      shopCount: entries.length,
+      spreadBani: entries.length >= 2 ? entries[entries.length - 1].bani - entries[0].bani : 0,
+    };
+  });
 }

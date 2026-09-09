@@ -46,8 +46,24 @@ export function storeUrl(c: StorefrontConfig): string {
 export const STOREFRONTS: StorefrontConfig[] = [
   { key: "glovo-kaufland-buc", platform: "glovo", merchantSlug: "glovo-kaufland", merchantName: "Kaufland (Glovo)", city: "bucharest", storeSlug: "kaufland-buc", section: "grocery", enabled: true },
 
+  // ── PENNY AND PROFI, enabled 2026-09-09 after the measurement said merchant overlap is the
+  //    binding constraint on comparability and matching is not (docs/PHASE2-BRAND-GAP.md).
+  //
+  //    `robots.txt` re-fetched the same day and byte-for-byte unchanged from the 2026-09-02
+  //    record: `User-Agent: *` disallowing only `/embedded-web-views/*`,
+  //    `/*/order-tracking/*/share` and `/*/password-recovery`. Store catalogs are permitted.
+  //    PetalBot is blocked; we are not PetalBot.
+  //
+  //    LIDL IS NOT HERE AND MUST NOT BE ADDED SPECULATIVELY. `npm run discover:stores` lists
+  //    eight storefronts in Bucharest and Lidl is not among them — confirmed absent, not
+  //    missed. A config row for a store that does not exist fails with the SAME message as an
+  //    expired delivery-address session, and telling those apart costs an evening.
+  { key: "glovo-penny-buc", platform: "glovo", merchantSlug: "glovo-penny", merchantName: "Penny (Glovo)", city: "bucharest", storeSlug: "penny-buc", section: "grocery", enabled: true },
+  // Discovery probed `profi-buc` directly: HTTP 200, 117 product tiles. `profi` (no suffix)
+  // renders "Această pagină nu există", which is why the suffix is not optional.
+  { key: "glovo-profi-buc", platform: "glovo", merchantSlug: "glovo-profi", merchantName: "Profi (Glovo)", city: "bucharest", storeSlug: "profi-buc", section: "grocery", enabled: true },
+
   // Discovered, deliberately NOT enabled. The owner decides whether to extend.
-  { key: "glovo-penny-buc", platform: "glovo", merchantSlug: "glovo-penny", merchantName: "Penny (Glovo)", city: "bucharest", storeSlug: "penny-buc", section: "grocery", enabled: false },
   { key: "glovo-carrefour-buc", platform: "glovo", merchantSlug: "glovo-carrefour", merchantName: "Carrefour (Glovo)", city: "bucharest", storeSlug: "carrefour-buc", section: "grocery", enabled: false },
   { key: "glovo-mega-buc", platform: "glovo", merchantSlug: "glovo-mega-image", merchantName: "Mega Image (Glovo)", city: "bucharest", storeSlug: "mega-image-buc", section: "grocery", enabled: false },
   { key: "glovo-freshful-buc", platform: "glovo", merchantSlug: "glovo-freshful", merchantName: "Freshful (Glovo)", city: "bucharest", storeSlug: "freshful-buc", section: "grocery", enabled: false },

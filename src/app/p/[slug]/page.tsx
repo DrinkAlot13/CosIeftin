@@ -11,6 +11,7 @@ import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ProductImage } from "@/components/ProductImage";
 import { TrackPrice } from "@/components/TrackPrice";
 import { formatPerUnit, formatRON } from "@/lib/format";
+import { isCurrent } from "@/lib/pricing";
 import { getAlternatives, getClassEquivalents, getItemPage } from "@/lib/queries";
 import { showDeliveryPlatform } from "@/lib/platform/visibility";
 import { abs, breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
@@ -53,6 +54,11 @@ export default async function ItemPage({
   const data = await getItemPage(params.slug, showDeliveryPlatform(searchParams ?? null));
   if (!data) notFound();
   const { product, offers, summary, bestOffer, priceInsight } = data;
+  // A shop's OWN brand cannot be sold anywhere else, so "one shop" is the product's nature
+  // rather than a gap in our coverage. Read from the attribute the substitution engine already
+  // uses, so the page and the optimizer cannot disagree about which products are private label.
+  const isOwnBrand = product.attributes.some((a) => a.value === "true");
+  const onlyShopName = offers.filter((o) => isCurrent(o as never)).map((o) => o.merchant.name)[0] ?? null;
   const alternatives = await getAlternatives(product.id);
   const equivalents = await getClassEquivalents(product.id);
 
@@ -217,6 +223,25 @@ export default async function ItemPage({
           </h2>
         </div>
         <div className="card" style={{ padding: 4 }}><OfferTable offers={offers} unit={product.unit} /></div>
+        {/* ── WHY ONE SHOP, IN WORDS.
+            "1 magazine" is a number, not an explanation, and it reads as a broken site — which
+            is the wrong conclusion 89% of the time. There are two genuinely different reasons a
+            product sits at one shop, and they deserve different sentences:
+
+              OWN BRAND   nobody else CAN sell it. Nothing is missing and nothing will improve.
+              EVERYTHING  one shop has a price we can stand behind TODAY. That is a fact about
+              ELSE        our coverage, and it may change tomorrow.
+
+            Saying "doar un magazin" for an Auchan own-brand product implies we failed to find
+            the others. Saying it for a national brand is honest. The distinction is the whole
+            point of the copy. */}
+        {summary.inStockCount === 1 && (
+          <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
+            {isOwnBrand
+              ? <>ℹ️ <b>Doar {onlyShopName ?? "un magazin"}</b> vinde acest produs dintre magazinele urmărite — este marca proprie a magazinului, așa că nu are preț de comparat în altă parte.</>
+              : <>ℹ️ Momentan doar un magazin are un preț pe care ne putem baza pentru acest produs. {equivalents.equivalentCount > 0 ? "Mai jos găsești produse echivalente pe care le poți compara." : "Verificăm zilnic — dacă apare în alt magazin, îl vezi aici."}</>}
+          </p>
+        )}
         {/*
           Every item page carries the report link. A comparison site's only asset is that
           people believe the numbers, and the cheapest way to find a wrong match is to let

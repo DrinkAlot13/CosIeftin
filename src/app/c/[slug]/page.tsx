@@ -57,7 +57,9 @@ export default async function CategoryPage({ params }: { params: { slug: string 
             <h1 style={{ fontSize: 26 }}>{category.icon ? `${category.icon} ` : ""}{category.name}</h1>
           </div>
 
-          <SortableProductGrid products={products} emptyText="Niciun produs în această categorie." />
+          {/* ON for browsing. Someone who has not named a product is best served by the set
+              this site can actually compare; the toggle restores the rest in one click. */}
+          <SortableProductGrid products={products} emptyText="Niciun produs în această categorie." comparableOnlyByDefault />
 
           <div style={{ height: 32 }} />
         </div>

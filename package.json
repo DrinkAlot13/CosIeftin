@@ -169,7 +169,9 @@
     "audit:variable-weight": "tsx scripts/audit-variable-weight.ts",
     "audit:slug-size": "tsx scripts/audit-slug-size.ts",
     "audit:unit-price-sanity": "tsx scripts/audit-unit-price-sanity.ts",
-    "flow:user": "tsx scripts/flow-user.ts"
+    "flow:user": "tsx scripts/flow-user.ts",
+    "audit:search-comparability": "tsx scripts/audit-search-comparability.ts",
+    "audit:merchant-contribution": "tsx scripts/audit-merchant-contribution.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

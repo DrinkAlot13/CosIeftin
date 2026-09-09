@@ -59,3 +59,4 @@ logs/*.json
 logs/*.txt
 logs/*.xml
 logs/flow/
+logs/cmp/

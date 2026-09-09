@@ -91,13 +91,24 @@ describe("delivery-platform prices are hidden by default", () => {
 });
 
 describe("storefronts are config rows", () => {
-  it("only Kaufland is enabled — the brief asked for one store", () => {
-    expect(enabledStorefronts().length).toBe(1);
-    expect(enabledStorefronts()[0].storeSlug).toBe("kaufland-buc");
+  // THESE PIN A DECISION, NOT A FACT, and the decision changed on 2026-09-09: Phase 2 measured
+  // merchant overlap as the binding constraint on comparability, so Penny and Profi were
+  // enabled. Updated deliberately rather than loosened — an assertion that reads
+  // `>= 1` would stop noticing a storefront enabled by accident, which is the whole job here.
+  it("exactly the three chosen storefronts are enabled", () => {
+    expect(enabledStorefronts().map((s) => s.storeSlug).sort())
+      .toEqual(["kaufland-buc", "penny-buc", "profi-buc"]);
   });
 
-  it("all six discovered storefronts are recorded", () => {
-    expect(STOREFRONTS.length).toBe(6);
+  it("every discovered storefront is recorded, enabled or not", () => {
+    expect(STOREFRONTS.length).toBe(7);
+  });
+
+  // LIDL IS NOT A STOREFRONT HERE and must not acquire a row speculatively. Discovery lists
+  // eight in Bucharest and Lidl is not among them — confirmed absent, not overlooked. A row for
+  // a store that does not exist fails with the SAME message as an expired delivery session.
+  it("no Lidl storefront is configured", () => {
+    expect(STOREFRONTS.some((s) => /lidl/i.test(s.storeSlug))).toBe(false);
   });
 
   it("keys and merchant slugs are unique", () => {

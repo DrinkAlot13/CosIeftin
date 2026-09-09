@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/ProductCard";
-import { countStats, getHomeSections } from "@/lib/queries";
+import { countStats, getHomeSections, getBiggestSpreads, getBasketStaples } from "@/lib/queries";
 import { getCategoryNav } from "@/lib/category-nav";
 import { UNPLACED_DEPARTMENT_SLUG } from "@/lib/category/tree";
 
@@ -9,11 +9,17 @@ import { UNPLACED_DEPARTMENT_SLUG } from "@/lib/category/tree";
 export const revalidate = 3600;
 
 export default async function HomePage() {
-  const [{ featured, drops }, nav, stats] = await Promise.all([
+  const [{ featured, drops }, nav, stats, spreads, staples] = await Promise.all([
     getHomeSections(),
     getCategoryNav("grocery"),
     countStats(),
+    getBiggestSpreads(12),
+    getBasketStaples(),
   ]);
+  const lei = (bani: number) => `${(bani / 100).toFixed(2).replace(".", ",")} lei`;
+  // The staples worth showing first: priced, and comparable. The rest of the forty stay on
+  // /index-cosmic, where the whole basket including its gaps is the point.
+  const shownStaples = staples.filter((s) => s.lowestBani !== null && s.shopCount >= 2).slice(0, 12);
   // EIGHT TILES, CHOSEN BY LIVE PRODUCT COUNT — not sixty in alphabetical-by-id order.
   //
   // This rendered every grocery category, which became 93 the moment the two-level tree was
@@ -68,6 +74,67 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── WHAT THIS SITE IS ACTUALLY GOOD AT, FIRST.
+          Measured: 7.3% of grocery products compare across two shops, but 52.5% of the forty
+          staples people actually buy do. The homepage opened with a category grid, which shows
+          neither — so the strong part was invisible on first load and a shopper met the weak
+          part by browsing. These two sections lead now; the grid moved below them. */}
+      {spreads.length > 0 && (
+        <section className="section">
+          <div className="container">
+            <div className="section-head">
+              <h2>💸 Cele mai mari diferențe de preț</h2>
+              <Link href="/oferte" className="section-more">Vezi toate ofertele →</Link>
+            </div>
+            <p className="muted" style={{ marginTop: -6 }}>
+              Același produs, prețuri diferite. Atât economisești dacă îl iei din magazinul potrivit.
+            </p>
+            <div className="grid-products">
+              {spreads.map((p) => (
+                <Link key={p.id} className="card catcard" href={`/p/${p.slug}`} style={{ alignItems: "flex-start", textAlign: "left", padding: 14 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}>{p.name.slice(0, 64)}</span>
+                  <span style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
+                    economisești {lei(p.spreadBani)}
+                  </span>
+                  <span className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+                    {lei(p.lowestBani)} la {p.cheapestShop} · {lei(p.highestBani)} la {p.dearestShop}
+                  </span>
+                  <span className="muted" style={{ fontSize: 12 }}>{p.shopCount} magazine</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {shownStaples.length > 0 && (
+        <section className="section">
+          <div className="container">
+            <div className="section-head">
+              <h2>🧺 Coșul de bază</h2>
+              <Link href="/index-cosmic" className="section-more">Vezi tot coșul →</Link>
+            </div>
+            <p className="muted" style={{ marginTop: -6 }}>
+              Produsele pe care le cumpără toată lumea — și unde sunt cel mai ieftine azi.
+            </p>
+            <div className="grid-cats">
+              {shownStaples.map((s) => (
+                <Link key={s.key} className="card catcard" href={`/p/${s.slug}`} style={{ alignItems: "flex-start", textAlign: "left", padding: 14 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13.5, lineHeight: 1.3 }}>{s.label}</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, marginTop: 6 }}>{lei(s.lowestBani as number)}</span>
+                  <span className="muted" style={{ fontSize: 12.5 }}>la {s.cheapestShop}</span>
+                  {s.spreadBani > 0 && (
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      până la {lei((s.lowestBani as number) + s.spreadBani)} în altă parte
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <div className="container">
