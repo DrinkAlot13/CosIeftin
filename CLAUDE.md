@@ -231,6 +231,36 @@ So the rules:
 - This is a LIMIT, not a bug. Do not "fix" it by tightening thresholds — a tighter band flags
   more correct rows, not fewer wrong ones.
 
+## ONE NAMED CONCEPT, ONE IMPLEMENTATION
+
+A rule stated in two places drifts, and the copy goes stale **silently** — nothing fails, and the
+stale copy keeps answering. Three instances in two sessions:
+
+| where | what the copy did |
+|---|---|
+| `audit:sitemap` | kept its own copy of the sitemap's predicate; the sitemap was fixed, the copy was not, and it went on reporting 246 dead URLs that no longer existed |
+| `audit:rate-limit` | RECOMPUTED the limiter's budget, missed the 50× shared multiplier, sent 65 requests at a threshold of 3,000, and reported "NO LIMIT FIRED" about a working limiter |
+| **head noun** | three implementations. `scrape-util.headNoun` was made brand-aware after measuring that 27.2% of branded grocery rows lead with their brand; `queries.headNounOf` was left behind and returned **"aro"** for `aro Ulei Floarea Soarelui`, so a shopper looking at sunflower oil was offered LEMONADE with a one-click "+ adaugă" |
+
+`npm run check:concepts` enforces it, and is part of `verify:code`.
+
+**It is a hand-written REGISTER, not a general rule, and that was measured rather than assumed.**
+The obvious version — flag any top-level name defined in more than one file — was built and run
+first: across 413 files it reported **395 duplicates**, almost all local `products` and `offers`
+variables inside audit scripts. That is the same failure as `audit:discriminator` (see below): a
+rule that fires almost always detects nothing. A concept enters the register when someone decides
+it is load-bearing, which is the property the general version cannot supply.
+
+- **A known restatement is listed with its reason and its referee**, the way
+  `check:parsepricelei` reports "confined to 14 allowlisted call sites". An entry is a decision
+  on the record, not an exemption. Anything NOT listed fails the build.
+- **Express the concept precisely, do not widen the allowlist.** The check's first run flagged
+  `search.ts`'s `headNounFrequency`, which returns a Map OF head nouns and reimplements nothing.
+  The repair was to require the return type in the pattern. An allowlist that collects false
+  positives is one nobody reads.
+- **A register whose canonical module no longer defines the concept is itself a failure**, not a
+  pass — otherwise the register decays into exactly the thing it guards against.
+
 ## A SCRIPT THAT ASSIGNS MUST BE ABLE TO UNASSIGN
 
 Any script that assigns, flags, or classifies must be able to CLEAR ITS OWN PAST OUTPUT. A
@@ -277,6 +307,36 @@ parser.** Verification has to come from code that does not share the assumption.
   the declaration is a lie. Guarded by `tests/route-config.test.ts`.
 - A `force-dynamic` layout disables caching for **every** route beneath it. If you add one, say
   why in a comment directly above it.
+- **A page whose existence depends on an env var may not be prerendered.** `/shrinkflation`
+  declared `revalidate` and called `trustFeaturesEnabled()`. The build ran without
+  `FEATURE_TRUST`, `notFound()` fired during static generation, and the 404 was baked into the
+  output — so setting `FEATURE_TRUST=true` on a running server did **nothing**. `lib/flags.ts`
+  guards hard against a feature turning on by accident and says nothing about a deliberate ON
+  silently failing, which is the direction nobody thinks to test. "Publish this" must not
+  require a rebuild. Guarded by `tests/route-config.test.ts`.
+
+### A FLEX OR GRID TRACK WILL NOT SHRINK BELOW ITS CONTENT
+
+**This has now caused a full-page horizontal scroll twice, in both layout systems.** A flex or
+grid item defaults to `min-width: auto`, so a `1fr` track — or a `flex: 1 1 320px` one — grows
+to its content's intrinsic width rather than clipping it, and the whole page scrolls sideways
+on a phone.
+
+| | where | what grew |
+|---|---|---|
+| first | `.listing-search` (flex) | the search input + button + count in one row |
+| second | `.lista-layout` (grid) | the store comparison table, 910px in a 390px viewport |
+
+The second is the instructive one: **the table already sat inside a container declaring
+`overflow-x: auto`, and that container never got the chance to scroll**, because nothing was
+constraining the track it lived in. An `overflow-x: auto` ancestor is not protection on its own.
+
+- **Any flex or grid child that can contain wide content gets `min-width: 0`.**
+- It produces no error, no warning and no failing test. `npm run probe:overflow` drives a real
+  browser, fills the basket, and reports EVERY element past the right edge innermost-first —
+  the innermost one is the cause. Run it at 390px after any layout change.
+- It is the single most likely thing to make a person on a phone close the tab, which puts it
+  in the same class as a wrong price: invisible to every check that reads our own data.
 
 ---
 

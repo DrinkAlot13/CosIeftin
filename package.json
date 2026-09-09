@@ -61,7 +61,7 @@
     "backup": "tsx scripts/backup.ts",
     "export:history": "tsx scripts/export-history.ts",
     "check:hygiene": "tsx scripts/check-source-hygiene.ts",
-    "verify:code": "npm run typecheck && npm run check:hygiene && npm run check:parsepricelei && npm test",
+    "verify:code": "npm run typecheck && npm run check:hygiene && npm run check:parsepricelei && npm run check:concepts && npm test",
     "audit:promo": "tsx scripts/audit-promo-packs.ts",
     "backfill:unitsize": "tsx scripts/backfill-unitsize.ts",
     "gen:postgres": "tsx scripts/gen-postgres-schema.ts",
@@ -178,7 +178,8 @@
     "audit:alternatives": "tsx scripts/audit-alternatives.ts",
     "probe:overflow": "tsx scripts/probe-overflow.ts",
     "probe:omnibus": "tsx scripts/probe-omnibus.ts",
-    "audit:discount-truth": "tsx scripts/audit-discount-truth.ts"
+    "audit:discount-truth": "tsx scripts/audit-discount-truth.ts",
+    "check:concepts": "tsx scripts/check-concepts.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
