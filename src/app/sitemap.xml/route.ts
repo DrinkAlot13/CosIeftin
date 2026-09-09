@@ -1,13 +1,19 @@
 import { prisma } from "@/lib/db";
 import { abs } from "@/lib/seo";
-import { CHUNK, liveOfferWhere } from "@/lib/sitemap-shape";
+import { sitemapChunkCount } from "@/lib/sitemap-shape";
 
 /**
  * THE SITEMAP INDEX, written by hand because Next does not write it.
  *
  * ── THE TRAP, caught by fetching rather than by reasoning.
  *
- * `generateSitemaps()` in `app/sitemap.ts` splits the sitemap into `/sitemap/0.xml`,
+ * Splitting the sitemap into `/sitemap/0.xml`, `/sitemap/1.xml`, … moved the metadata route off
+ * `/sitemap.xml`. (It was `generateSitemaps()` in `app/sitemap.ts` then; the children are now
+ * explicit routes at `app/sitemap/[id]/route.ts`, because the metadata convention's generated
+ * `/sitemap.xml[[...__metadata_id__]]` collided with THIS file and `next dev` refused to start.)
+ * Historically:
+ *
+ * `generateSitemaps()` in `app/sitemap.ts` split the sitemap into `/sitemap/0.xml`,
  * `/sitemap/1.xml`, … and moves the metadata route off `/sitemap.xml`. On Next 14.2 nothing
  * then serves `/sitemap.xml` at all — it falls through to the app's 404 page:
  *
@@ -32,10 +38,11 @@ import { CHUNK, liveOfferWhere } from "@/lib/sitemap-shape";
 export const revalidate = 3600;
 
 export async function GET(): Promise<Response> {
-  const products = await prisma.product.count({ where: { offers: { some: liveOfferWhere } } });
-  const productChunks = Math.max(1, Math.ceil(products / CHUNK));
-  // +1 for chunk 0, which carries the static pages and the grocery categories.
-  const ids = Array.from({ length: productChunks + 1 }, (_, i) => i);
+  // The count comes from `sitemap-shape`, not from arithmetic repeated here. The children
+  // pre-render exactly this range and 404 outside it, so an index that counted for itself could
+  // advertise a file that does not exist — invisible from inside, because the index is
+  // well-formed either way and every child it DOES list resolves.
+  const ids = Array.from({ length: await sitemapChunkCount() }, (_, i) => i);
 
   const body =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +

@@ -18,7 +18,7 @@
 // a frozen catalog; `npm run audit:search-quality` runs the same 40 against the live one.
 
 import { normalizeRo, isStopword } from "../text/normalizeRo";
-import { headNounRo } from "../text/normalizeRo";
+import { leadTokenRo } from "../text/normalizeRo";
 import { catalogBrands, isKnownBrand, type BrandBearing } from "./brands";
 import { fuzzyHit } from "./rank";
 
@@ -79,7 +79,7 @@ export function catalogVocabulary(catalog: Searchable[]): Map<string, number> {
 function headNounFrequency(catalog: Searchable[]): Map<string, number> {
   const freq = new Map<string, number>();
   for (const p of catalog) {
-    const h = headNounRo(p.name);
+    const h = leadTokenRo(p.name);
     if (h) freq.set(h, (freq.get(h) ?? 0) + 1);
   }
   return freq;
@@ -165,7 +165,7 @@ export function scoreOne<T extends Searchable>(
   // "Lapte Zuzu" is milk. In Romanian the head noun leads the name, so a query word landing
   // there is worth more than the same word anywhere else. A boost, never a filter — "lapte de
   // cocos" is a real query whose head noun genuinely is lapte.
-  const head = headNounRo(item.name);
+  const head = leadTokenRo(item.name);
   if (head) {
     let bestHead = 0;
     for (const t of tokens) {

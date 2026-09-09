@@ -59,16 +59,21 @@ const CONCEPTS: Concept[] = [
     // wrong repair — an allowlist that collects false positives is one nobody reads.
     pattern: /^\s*(?:export\s+)?function\s+headNoun\w*\s*\([^)]*\)\s*:\s*string\b/m,
     why: "the anchor noun decides both what matches and what is offered as similar; a stale copy offered lemonade for sunflower oil",
-    known: [
-      {
-        file: "src/lib/queries.ts",
-        note: "headNounOf — brand-aware since the lemonade fix, but on its OWN stopword list (ALT_STOP) and token rule (len>=3). Collapsing it into scrape-util.headNoun changes which alternatives render, so `audit:alternatives` is the referee and must be run before and after.",
-      },
-      {
-        file: "src/lib/text/normalizeRo.ts",
-        note: "headNounRo — NOT brand-aware; it is still the pre-fix version and returns the brand for a brand-first name. Used by search for a frequency heuristic (headNounFrequency, catalogBrands), not as a matching gate, so the blast radius is unmeasured. `audit:search-quality` is the referee.",
-      },
-    ],
+    // ── DOWN FROM THREE IMPLEMENTATIONS TO ONE, AND THE TWO WERE RESOLVED DIFFERENTLY.
+    //
+    // `queries.headNounOf` WAS a restatement and is gone: measured over all 56,609 names the two
+    // tokenizers differ by a single token in 5,000, and the two head nouns disagreed on 64 names
+    // (0.1%), entirely because its stopword list excluded `bio`. It now calls this one.
+    // `audit:alternatives` is unchanged across the collapse — 85.7% coverage, 2.99 per product.
+    //
+    // `normalizeRo.headNounRo` was NOT a restatement, and this register said it was, on an
+    // assumption nobody had measured. It disagrees on 11.8% because it deliberately does not
+    // skip the brand — and it must not, since `catalogBrands` uses it to spot a brand token that
+    // is also a common leading noun. It is renamed `leadTokenRo`, which is what it computes.
+    //
+    // The register was wrong about one of its own entries for a day. That is the failure mode of
+    // a hand-written list, and the fix is the same as for the code: measure before asserting.
+    known: [],
   },
   {
     name: "the current-offer predicate",

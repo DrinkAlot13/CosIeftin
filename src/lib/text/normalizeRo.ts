@@ -91,8 +91,29 @@ export function overlapTokensRo(input: string): string[] {
     .filter((t) => t.length >= 1 && !STOPWORDS.has(t) && !/\d/.test(t));
 }
 
-/** The anchor noun: Romanian product names are noun-first ("Lapte Zuzu 1L"). */
-export function headNounRo(input: string): string {
+/**
+ * The FIRST significant token of a name. Romanian product names are noun-first ("Lapte Zuzu 1L").
+ *
+ * ── IT MUST NOT BE BRAND-AWARE, AND IT WAS ONCE RENAMED FOR SAYING SO BADLY.
+ *
+ * This was called `headNounRo`, which made it look like a stale third copy of
+ * `scrape-util.headNoun` — the register in `check:concepts` recorded it as exactly that, on an
+ * assumption nobody had measured. Measured across all 56,609 product names it disagrees with the
+ * matcher's head noun on **11.8%**, and on inspection the difference is not staleness:
+ *
+ *     Oua de Sibiu, marime L    headNoun → "marime"    this → "oua"
+ *     Kiwi gold, 500 g          headNoun → "gold"      this → "kiwi"
+ *
+ * `headNoun` skips the brand ON PURPOSE, so a brand-first name can still find its counterpart.
+ * That is right for matching and wrong here, because the one thing this feeds is
+ * `catalogBrands`, which excludes a candidate brand token when it is *also* a common leading
+ * noun ("ciocolata" is a brand value on a few rows and the head of hundreds of products). A
+ * brand-aware version returns zero for every brand by construction, the exclusion never fires,
+ * and a brand requirement quietly becomes no requirement at all.
+ *
+ * So: two functions, two purposes, one of which was badly named. Named for what it does now.
+ */
+export function leadTokenRo(input: string): string {
   return tokensRo(input)[0] ?? "";
 }
 

@@ -1,8 +1,10 @@
+import { prisma } from "@/lib/db";
+
 /**
  * THE SHAPE OF THE SITEMAP, in ONE place.
  *
  * The sitemap is now an index (`app/sitemap.xml/route.ts`) plus chunked children
- * (`app/sitemap.ts`). Both must agree on two things — how many URLs go in a chunk, and which
+ * (`app/sitemap/[id]/route.ts`). Both must agree on two things — how many URLs go in a chunk, and which
  * products count as live — or the index advertises a child that does not exist, or omits one
  * that does. Neither failure is visible from inside the app: the index is well-formed either
  * way and every child it DOES list resolves.
@@ -45,3 +47,19 @@ export const sitemapCategoryWhere = {
   section: SITEMAP_SECTION,
   products: { some: { offers: { some: liveOfferWhere } } },
 } as const;
+
+/**
+ * HOW MANY FILES THE SITEMAP HAS, computed in exactly one place.
+ *
+ * The index at `app/sitemap.xml/route.ts` advertises `0 … N-1`; the children at
+ * `app/sitemap/[id]/route.ts` pre-render the same range and 404 outside it. Both used to
+ * compute `Math.max(1, ceil(products / CHUNK)) + 1` for themselves, which is two files deriving
+ * one number — the defect this whole module exists to prevent, restated inside it.
+ *
+ * The `+ 1` is chunk 0, which carries the static pages and the grocery categories rather than
+ * products. Forgetting it advertises one file fewer than exists and silently drops 10,000 URLs.
+ */
+export async function sitemapChunkCount(): Promise<number> {
+  const products = await prisma.product.count({ where: { offers: { some: liveOfferWhere } } });
+  return Math.max(1, Math.ceil(products / CHUNK)) + 1;
+}

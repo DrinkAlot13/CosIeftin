@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { deliveryPlatformWhere } from "@/lib/platform/visibility";
 import { normalizeText } from "@/lib/matching";
+import { headNoun } from "@/lib/scrape-util";
 
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
@@ -345,29 +346,29 @@ export async function getItemPage(slug: string, showDeliveryPlatform = false) {
 export type ItemPage = NonNullable<Awaited<ReturnType<typeof getItemPage>>>;
 export type OfferRow = ItemPage["offers"][number];
 
-const ALT_STOP = new Set(["de", "cu", "la", "si", "din", "fara", "pentru", "sau", "un", "cel", "bio"]);
 /**
- * The anchor noun for "similar products" — the first significant token that is NOT the brand.
+ * The anchor noun for "similar products" — the matcher's, not a second one.
  *
- * ── THE THIRD COPY OF THIS LOGIC, and the one that shipped the worst result.
+ * ── THIS WAS THE THIRD COPY OF THE IDEA, AND IT SHIPPED THE WORST RESULT.
  *
  * `scrape-util.headNoun` was made brand-aware after measurement showed 27.2% of branded grocery
- * rows lead with their brand. This function is a separate implementation and was left behind, so
+ * rows lead with their brand. This file kept a separate implementation and was left behind, so
  * for `aro Ulei Floarea Soarelui 6 x 1 L` it returned **"aro"** — and every other `aro` product
  * at a similar size became a "similar" suggestion. That is how a shopper looking at sunflower
- * oil was offered LEMONADE at 4,23 with a one-click "+ adauga":
+ * oil was offered LEMONADE at 4,23 with a one-click "+ adaugă":
  *
  *     aro Ulei Floarea Soarelui 6 x 1 L
  *        similar: aro Bautura Carbogazoasa Aroma Lamaie si Lime SGR 12 x 0,5 L
  *
- * Three implementations of one idea is two too many; this one now takes the brand, like the
- * matcher's.
+ * It was then made brand-aware TOO, which fixed the symptom and left two implementations that
+ * could drift apart again. Measured across all 56,609 product names before collapsing them: the
+ * two tokenizers are effectively identical (one token differs in 5,000 names) and the two head
+ * nouns disagreed on **64 names, 0.1%** — entirely because this copy's stopword list excluded
+ * `bio` and the matcher's does not. `audit:alternatives` is the referee and reports 85.7%
+ * coverage at 2.99 suggestions per product either way.
  */
-function headNounOf(name: string, brand?: string | null): string {
-  const brandTokens = new Set(normalizeText(brand ?? "").split(/\s+/).filter(Boolean));
-  const toks = normalizeText(name).split(/\s+/).filter((t) => t.length >= 3 && !ALT_STOP.has(t) && !/\d/.test(t));
-  return toks.find((t) => !brandTokens.has(t)) ?? toks[0] ?? "";
-}
+const headNounOf = (name: string, brand?: string | null): string =>
+  headNoun(normalizeText(name), normalizeText(brand ?? ""));
 
 /** Similar items: same section + same type (head-noun) + same size, other products — so a
  *  shopper can find substitutes (other brands / shops), especially for single-shop items. */

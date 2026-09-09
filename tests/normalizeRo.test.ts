@@ -2,7 +2,7 @@
 // must fold identically, because both appear in scraped data and NFD does not unify them.
 import { describe, it, expect } from "./run";
 import {
-  normalizeRo, foldDiacritics, tokensRo, overlapTokensRo, headNounRo, jaccard, isStopword,
+  normalizeRo, foldDiacritics, tokensRo, overlapTokensRo, leadTokenRo, jaccard, isStopword,
 } from "../src/lib/text/normalizeRo";
 
 // Explicit codepoints so the test cannot be defeated by an editor silently converting them.
@@ -84,10 +84,10 @@ describe("overlapTokensRo — scoring tokens KEEP short words", () => {
     expect(overlapTokensRo("Lapte 1L").includes("1l")).toBeFalsy());
 });
 
-describe("headNounRo", () => {
-  it("takes the first significant token", () => expect(headNounRo("Lapte Zuzu 1.5% 1L")).toBe("lapte"));
-  it("skips a leading stopword", () => expect(headNounRo("de Brânză")).toBe("branza"));
-  it("empty input → empty string", () => expect(headNounRo("")).toBe(""));
+describe("leadTokenRo", () => {
+  it("takes the first significant token", () => expect(leadTokenRo("Lapte Zuzu 1.5% 1L")).toBe("lapte"));
+  it("skips a leading stopword", () => expect(leadTokenRo("de Brânză")).toBe("branza"));
+  it("empty input → empty string", () => expect(leadTokenRo("")).toBe(""));
 });
 
 describe("jaccard", () => {
