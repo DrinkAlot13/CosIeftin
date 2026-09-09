@@ -376,6 +376,7 @@ export async function parseDom(page: Page, map: DomMap, route: Route, ad: Adapte
       referencePriceBani: refBani,
       referencePriceKind: refKind ?? null,
       loyaltyPriceBani: loyaltyBani,
+      quotedUnit: r.unitLabel || null,
       available: !r.unavailable,
       url: r.link ? abs(ad.websiteUrl, r.link) : ad.websiteUrl,
       productUrl: r.link ? abs(ad.websiteUrl, r.link) : null,

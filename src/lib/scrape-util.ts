@@ -80,6 +80,24 @@ export type StoreProduct = {
   /// advertised "was"/30-day-low price, in bani
   referencePriceBani?: number | null;
   referencePriceKind?: string | null;
+  /// ── THE UNIT THE MERCHANT QUOTES ITS PRICE IN, in the merchant's own words.
+  ///
+  /// Selgros prints "per BUC." on 36 of 64 cards and "per kg" on 24. Those are different claims:
+  /// the first is what the thing costs, the second is what a kilogram of it costs. Nothing
+  /// downstream can recover which one a bare number was, and guessing from the product name is
+  /// how a per-kilo price becomes a pack price — see `loyaltyPriceBani` below for the same
+  /// mistake made at Penny.
+  ///
+  /// Captured verbatim rather than normalised, because a merchant's own wording is evidence and
+  /// our interpretation of it is not.
+  quotedUnit?: string | null;
+  /// ── WHY THIS ITEM CARRIES NO PRICE, when the scraper declines to supply one.
+  ///
+  /// A pool item with price 0 is recorded as a refusal, and until now every one of them read
+  /// "no usable price in the pool" — true for an unparseable string, and misleading for a price
+  /// that parsed perfectly and was DECLINED because it is not the kind of price we can publish.
+  /// Those are different findings and a reviewer needs to tell them apart.
+  refusalReason?: string | null;
   /// ── THE LOYALTY-CARD PRICE, WHEN THE MERCHANT QUOTES TWO.
   ///
   /// `price` is what anyone pays; this is what a card holder pays. Penny prints both on every
@@ -822,7 +840,8 @@ export async function matchPoolToCatalog(
         preOfferRefusals.push({
           storeName: sp.name,
           rawPriceText: sp.rawPriceText ?? null,
-          reason: `no usable price in the pool (price=${sp.price})`,
+          // A scraper that DECLINED a price says why; anything else could not read one.
+          reason: sp.refusalReason ?? `no usable price in the pool (price=${sp.price})`,
         });
       }
       continue;

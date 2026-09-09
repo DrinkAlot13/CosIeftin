@@ -24,7 +24,6 @@ import { describe, it, expect } from "./run";
  * list and `scrape-all` is the bug.
  */
 const UNSCHEDULED: Record<string, string> = {
-  selgros: "adapter exists, has not been through acceptance",
   monitorul: "a price index source, not a merchant catalog — no offers to write",
   store: "the generic adapter entry point, invoked by name from the others",
   "dcneu-tiers": "runs after scrape:all as its own nightly step",

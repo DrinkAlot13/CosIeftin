@@ -46,6 +46,7 @@ async function main(): Promise<void> {
   console.log(`SELGROS — what the real parser reads from ${route.url}`);
   console.log("═".repeat(104));
   console.log(`  cards pooled      ${pool.length}`);
+  console.log(`  DECLINED by the per-kg rule: ${pool.filter((p) => p.refusalReason).length}`);
   console.log(`  with a price      ${priced.length}`);
   console.log(`  REFUSED (price 0) ${refused.length}`);
   console.log(`  with a reference  ${pool.filter((p) => p.referencePriceBani != null).length}`);
@@ -62,12 +63,32 @@ async function main(): Promise<void> {
 
   if (refused.length > 0) {
     console.log(`\n${"─".repeat(104)}`);
-    console.log("REFUSED — the card shape the reader would not guess at:");
+    console.log("NOT WRITTEN, AND WHY — each carries its reason into the refusal log:");
     console.log("─".repeat(104));
-    for (const p of refused.slice(0, 12)) {
-      console.log(`  raw=${JSON.stringify(p.rawPriceText)}  ${p.name.slice(0, 56)}`);
+    const byReason = new Map<string, string[]>();
+    for (const p of refused) {
+      const key = (p.refusalReason ?? "price could not be read at all")
+        .replace(/[\d.,]+ per/, "N,NN per")
+        .replace(/\(parsed size:.*/, "");
+      const l = byReason.get(key) ?? [];
+      l.push(p.name.slice(0, 52));
+      byReason.set(key, l);
+    }
+    for (const [reason, names] of [...byReason].sort((a, b) => b[1].length - a[1].length)) {
+      console.log(`\n  ${names.length} x  ${reason}`);
+      for (const n of [...new Set(names)].slice(0, 6)) console.log(`         ${n}`);
+      const uniq = new Set(names).size;
+      if (uniq > 6) console.log(`         … and ${uniq - 6} more distinct products`);
     }
   }
+
+  // ── THE HOMEPAGE RENDERS EACH TILE TWICE (a carousel plus a grid), so the card count is
+  // NOT the product count. Reporting 36 offers from 36 duplicated cards would double what this
+  // merchant actually contributes — the same shape as counting an offer per merchant listing.
+  const distinctPriced = new Set(priced.map((p) => p.name)).size;
+  const distinctAll = new Set(pool.map((p) => p.name)).size;
+  console.log(`\n  DISTINCT PRODUCTS: ${distinctAll} on the page, ${distinctPriced} of them writable.`);
+  console.log(`  (${pool.length} cards, because the homepage renders each tile twice.)`);
 
   // ── THE FABRICATION GUARD. Every wrong answer this card makes available, checked for.
   console.log(`\n${"═".repeat(104)}`);

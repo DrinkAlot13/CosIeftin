@@ -19,9 +19,15 @@ import { ensureBackup } from "../src/lib/ensure-backup";
 // it with 0 live offers and an old abort reason, which read as "the guard is blocking it" when
 // the truth was "nothing has asked it to run for five days".
 //
-// `selgros` and `monitorul` are also absent and are deliberately left so: neither has been
-// through the acceptance the others have. Written down here rather than left as a silence.
-const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "platform"];
+// `monitorul` is also absent and deliberately so: it is a price index source, not a merchant
+// catalog. Written down here rather than left as a silence.
+//
+// `selgros` JOINED on 2026-09-09 after acceptance: 64 cards read with a fabrication guard
+// clean on every one, 25 offers written, 0 flagged, and the 7 it declines are variable-weight
+// fish whose pack weight the card does not state. Its price is split across two <span>s with no
+// currency symbol anywhere, so `composeSplitPrice` refuses anything that is not exactly
+// (lei, bani) — see `scripts/adapters/selgros.ts`.
+const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "selgros", "platform"];
 
 function run(script: string): boolean {
   const r = spawnSync("npm", ["run", script], { stdio: "inherit", shell: true });
