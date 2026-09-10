@@ -29,6 +29,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { buildDailyLowSeries, dropPercent, isCurrent } from "../src/lib/pricing";
+import { priceStory } from "../src/lib/price-story";
 
 const prisma = new PrismaClient();
 
@@ -50,6 +51,7 @@ async function main(): Promise<void> {
       offers: {
         where: { isStale: false, merchant: { active: true } },
         select: {
+          id: true,
           price: true, priceBani: true, availability: true, isStale: true,
           flagged: true, priceSource: true, lastObservedAt: true,
           history: { where: { recordedAt: { gte: since } }, select: { price: true, recordedAt: true }, orderBy: { recordedAt: "asc" } },
@@ -59,8 +61,28 @@ async function main(): Promise<void> {
   });
   console.log(`  ${products.length} products, history since ${since.toISOString().slice(0, 10)} (${Date.now() - t0} ms)`);
 
+  // ── THE PRICE STORY NEEDS ALL OUR OBSERVATIONS, NOT THE 30-DAY WINDOW ABOVE.
+  //
+  // `dropPct` is "fallen from its recent peak", so it is deliberately windowed. `observedLowBani`
+  // is "the lowest WE have ever seen", which is a different question and must not inherit the
+  // other's window — a 30-day filter would quietly turn it into the 30-day low the design
+  // explicitly refuses to claim. Fetched separately so widening one cannot move the other.
+  const allHistory = await prisma.priceHistory.findMany({
+    select: { offerId: true, priceBani: true, price: true, recordedAt: true },
+  });
+  const historyByOffer = new Map<number, { priceBani: number; at: Date }[]>();
+  for (const h of allHistory) {
+    const v = h.priceBani ?? Math.round(h.price * 100);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    const a = historyByOffer.get(h.offerId) ?? [];
+    a.push({ priceBani: v, at: h.recordedAt });
+    historyByOffer.set(h.offerId, a);
+  }
+  console.log(`  ${allHistory.length} history rows loaded for the price story`);
+
   const now = new Date();
-  type Row = { id: number; dropPct: number; spreadPct: number; dealScore: number; liveOfferCount: number };
+  type Row = { id: number; dropPct: number; spreadPct: number; dealScore: number; liveOfferCount: number;
+    observedLowBani: number | null; atObservedLow: boolean };
   const rows: Row[] = [];
 
   for (const p of products) {
@@ -77,12 +99,21 @@ async function main(): Promise<void> {
       if (hi > 0) spread = ((hi - lo) / hi) * 100;
     }
 
+    // `priceStory` is the ONE implementation of "is this a good price" — the product page
+    // renders the same function's output, so the badge on a category card and the panel on the
+    // product page cannot disagree.
+    const observations = p.offers.flatMap((o) => historyByOffer.get(o.id) ?? []);
+    const currentLow = live.length ? Math.min(...live.map(bani)) : null;
+    const st = priceStory(currentLow, observations, now);
+
     rows.push({
       id: p.id,
       dropPct: drop,
       spreadPct: spread,
       dealScore: Math.max(spread, drop),
       liveOfferCount: live.length,
+      observedLowBani: st.kind === "story" ? st.lowBani : null,
+      atObservedLow: st.kind === "story" && st.goodTime,
     });
   }
 
@@ -101,6 +132,8 @@ async function main(): Promise<void> {
             spreadPct: r.spreadPct,
             dealScore: r.dealScore,
             liveOfferCount: r.liveOfferCount,
+            observedLowBani: r.observedLowBani,
+            atObservedLow: r.atObservedLow,
             dropComputedAt: now,
           },
         }),
@@ -117,7 +150,7 @@ async function main(): Promise<void> {
     where: {
       section: "grocery",
       id: { notIn: [] },
-      OR: [{ dropPct: { not: null } }, { spreadPct: { not: null } }, { dealScore: { not: null } }, { liveOfferCount: { not: null } }],
+      OR: [{ dropPct: { not: null } }, { spreadPct: { not: null } }, { dealScore: { not: null } }, { liveOfferCount: { not: null } }, { observedLowBani: { not: null } }, { atObservedLow: { not: null } }],
     },
     select: { id: true },
   });
@@ -125,7 +158,7 @@ async function main(): Promise<void> {
   for (let i = 0; i < toClear.length; i += CHUNK) {
     await prisma.product.updateMany({
       where: { id: { in: toClear.slice(i, i + CHUNK) } },
-      data: { dropPct: null, spreadPct: null, dealScore: null, liveOfferCount: null, dropComputedAt: null },
+      data: { dropPct: null, spreadPct: null, dealScore: null, liveOfferCount: null, observedLowBani: null, atObservedLow: null, dropComputedAt: null },
     });
   }
   console.log(`  ${toClear.length} products cleared (no live offer left — a stale spread is a lie)`);

@@ -145,6 +145,17 @@ model Product {
   /// (productId, merchantId), so this is both the offer count and the merchant count.
   liveOfferCount Int?
 
+  /// ── THE PRICE STORY, PRECOMPUTED. Same nightly, same NULL-means-not-computed rule.
+  ///
+  /// The lowest price WE have observed for this product, in bani, across all its offers. Not a
+  /// "30-day low" and not a "90-day low": the history table began 2026-08-06, so any named window
+  /// would be a claim the data cannot support. `lib/price-story` states the span it measured.
+  observedLowBani Int?
+  /// True when the current lowest price is at or within 2% of `observedLowBani`, AND the price
+  /// has actually moved over a fortnight or more. Precomputed because the alternative is loading
+  /// every price-history row to render a category page, which is the bug `dealScore` exists for.
+  atObservedLow Boolean?
+
   specs       ProductSpec[]
   createdAt  DateTime          @default(now())
 
@@ -157,8 +168,11 @@ model Product {
   @@index([categoryId])
   /// The /oferte sort key.
   @@index([section, dealScore])
+  /// The "preț bun acum" filter on category pages.
+  @@index([section, atObservedLow])
   @@index([section, categoryId])
 }
+
 
 /// One chain's price for one item.
 model Offer {

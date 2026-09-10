@@ -21,6 +21,8 @@ export type SortableProduct = CardProduct & {
   unitLowest: number;
   /** Distinct merchants showing a price we can stand behind. 1 means "not comparable today". */
   shopCount?: number;
+  /** Precomputed nightly: the current price is at the lowest we have observed. May be null. */
+  atObservedLow?: boolean | null;
 };
 
 const SORTS = [
@@ -70,6 +72,15 @@ export function SortableProductGrid({
   const [sort, setSort] = useState<SortKey>("unit-asc");
   const [shown, setShown] = useState(PAGE_SIZE);
   const [comparableOnly, setComparableOnly] = useState(comparableOnlyByDefault);
+  // "PREȚ BUN ACUM" — products whose current price is at the lowest WE have observed.
+  //
+  // Client-side, like the sort and for the same reason: a category page that reads searchParams
+  // cannot be cached in Next 14, and this page is cached on purpose. `atObservedLow` is one
+  // precomputed boolean per card, so the filter costs nothing to carry.
+  //
+  // It is OFF by default. This is a claim about 5 weeks of observation, not a sale, and a filter
+  // that hides most of a shelf by default would misrepresent how much we actually know.
+  const [goodPriceOnly, setGoodPriceOnly] = useState(false);
 
   // NOTHING IS HIDDEN PERMANENTLY: the toggle is on the page, it says how many it is holding
   // back, and one click restores them.
@@ -78,8 +89,11 @@ export function SortableProductGrid({
     [products],
   );
 
+  const goodPriceCount = useMemo(() => products.filter((p) => p.atObservedLow === true).length, [products]);
+
   const sorted = useMemo(() => {
-    const copy = comparableOnly ? products.filter((p) => (p.shopCount ?? 0) >= 2) : [...products];
+    let copy = comparableOnly ? products.filter((p) => (p.shopCount ?? 0) >= 2) : [...products];
+    if (goodPriceOnly) copy = copy.filter((p) => p.atObservedLow === true);
     // Identical comparators to the ones the server used, so a page rendered before hydration
     // and the same page after it are in the same order.
     copy.sort((a, b) => {
@@ -92,7 +106,7 @@ export function SortableProductGrid({
       return au - bu;
     });
     return copy;
-  }, [products, sort, comparableOnly]);
+  }, [products, sort, comparableOnly, goodPriceOnly]);
 
   // Re-sorting reorders the whole set, so the first 120 of the new order is a different 120.
   // Keeping the old `shown` would silently show a slice of one ordering under the heading of
@@ -117,6 +131,20 @@ export function SortableProductGrid({
         >
           {comparableOnly ? "✓ " : ""}Doar produse comparabile
         </button>
+        {/* Shown only when the shelf HAS any, so the control never promises a set that is empty.
+            The count is in the label because "preț bun" is a claim and the reader should see how
+            much of the shelf it covers before trusting it. */}
+        {goodPriceCount > 0 && (
+          <button
+            type="button"
+            className={`linklike${goodPriceOnly ? " active" : ""}`}
+            aria-pressed={goodPriceOnly}
+            onClick={() => { setGoodPriceOnly((v) => !v); setShown(PAGE_SIZE); }}
+            title="Produse al căror preț de acum este la minimul observat de noi, după ce prețul chiar s-a mișcat"
+          >
+            {goodPriceOnly ? "✓ " : ""}Preț bun acum ({goodPriceCount.toLocaleString("ro-RO")})
+          </button>
+        )}
         <div className="sortlinks">
           <span className="muted">Sortează:</span>
           {SORTS.map((s) => (

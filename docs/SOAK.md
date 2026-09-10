@@ -257,6 +257,19 @@ UNCHANGED at 3,526; comparable-or-equivalent 4,585 → 4,690. Reversible with
 `seed:batch1 --remove --write`. Every class printed in full by
 `audit:private-label-classes --slugs=…`.
 
+**2026-09-10 — PHASE 2: price history on product pages. SCHEMA CHANGE + NIGHTLY CHANGE.**
+Two nullable columns on `Product` (`observedLowBani`, `atObservedLow`) plus one index, applied
+with `prisma db push`; `schema.postgres.prisma` regenerated. `compute:home` now fills them and
+CLEARS them to NULL like the other precomputed signals, and its runtime went from ~25 s to
+**29.4 s** because it loads 116,827 history rows for the price story — a soak reader seeing the
+nightly a few seconds longer from this date should attribute it here. **No matcher rule,
+threshold, coverage figure or merchant-list entry touched; no price, offer or match row written.**
+
+Also REPLACES a live over-claim: the product page rendered *"Moment bun de cumpărat — preț la
+minimul istoric"* off four observations with no check on the observed span. History began
+2026-08-06, so "istoric" described 35 days. `lib/price-story` now states the span it measured and
+refuses to speak under 14 days.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any

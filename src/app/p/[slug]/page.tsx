@@ -6,6 +6,8 @@ import { BulkTierTable } from "@/components/BulkTierTable";
 import { visibleTiers } from "@/lib/bulk-tiers";
 import { priceDisplayFor, priceRange } from "@/lib/reference-price";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
+import { PriceStoryPanel } from "@/components/PriceStoryPanel";
+import { spanLabelRo } from "@/lib/price-story";
 import { ProductCard } from "@/components/ProductCard";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ProductImage } from "@/components/ProductImage";
@@ -53,7 +55,7 @@ export default async function ItemPage({
   // ?dp=1 opts THIS request into delivery-platform rows and nothing else. Default is off.
   const data = await getItemPage(params.slug, showDeliveryPlatform(searchParams ?? null));
   if (!data) notFound();
-  const { product, offers, summary, bestOffer, priceInsight } = data;
+  const { product, offers, summary, bestOffer, story } = data;
   // A shop's OWN brand cannot be sold anywhere else, so "one shop" is the product's nature
   // rather than a gap in our coverage. Read from the attribute the substitution engine already
   // uses, so the page and the optimizer cannot disagree about which products are private label.
@@ -69,6 +71,13 @@ export default async function ItemPage({
     const byDate = new Map(o.history.map((h) => [h.recordedAt.toISOString().slice(0, 10), h.price]));
     return { name: o.merchant.name, colorIndex: ((o.merchant.id - 1) % 8) + 1, prices: chartDates.map((d) => byDate.get(d) ?? null) };
   });
+
+  // The retailer's OWN Omnibus 30-day figure, taken from the offer whose price we are showing.
+  // Carried through so the panel can label it as THEIRS. No discount is computed from it.
+  const refOffer = offers.find((o) => isCurrent(o as never) && o.referencePriceBani && o.referencePriceBani > 0);
+  const retailerReference = refOffer?.referencePriceBani
+    ? { bani: refOffer.referencePriceBani, merchantName: refOffer.merchant.name }
+    : null;
 
   // Structured data. Built from the SAME offers rendered below, so the price Google shows and
   // the price on the page cannot disagree.
@@ -175,11 +184,16 @@ export default async function ItemPage({
               ? `${offers.length} magazine`
               : `${summary.inStockCount} din ${offers.length} magazine au stoc azi`}
           </div>
-          {priceInsight.atLow ? (
-            <div className="save-note" style={{ marginBottom: 14 }}>🔥 Moment bun de cumpărat — preț la minimul istoric{priceInsight.belowAvgPct > 3 ? ` (cu ${Math.round(priceInsight.belowAvgPct)}% sub media perioadei)` : ""}.</div>
-          ) : priceInsight.belowAvgPct > 6 ? (
-            <div className="save-note muted" style={{ marginBottom: 14 }}>📉 Sub media prețului cu {Math.round(priceInsight.belowAvgPct)}%.</div>
-          ) : null}
+          {/* "Moment bun de cumpărat — preț la minimul ISTORIC" used to render here off four
+              observations, with no check on how long we had actually been watching. The history
+              table began 2026-08-06, so "istoric" was a claim about 35 days. The verdict now
+              comes from `lib/price-story`, which states the span it measured, and the full
+              reasoning sits in the panel further down rather than as a bare badge. */}
+          {story.kind === "story" && story.goodTime && (
+            <div className="save-note" style={{ marginBottom: 14 }}>
+              🔥 Moment bun de cumpărat — prețul e la minimul observat de noi {spanLabelRo(story.observedDays)}.
+            </div>
+          )}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             {bestOffer && (
               <a className="btn btn-accent" href={bestOffer.url || "#"} target="_blank" rel="nofollow noopener">
@@ -255,6 +269,9 @@ export default async function ItemPage({
 
       <section className="section">
         <div className="section-head"><h2>Evoluția prețurilor</h2></div>
+        <div style={{ marginBottom: 14 }}>
+          <PriceStoryPanel story={story} retailerReference={retailerReference} />
+        </div>
         <div className="card chart-card">
           <PriceHistoryChart dates={chartDates} series={chartSeries} />
           <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Treci cu mouse-ul peste grafic pentru prețul fiecărui magazin.</p>

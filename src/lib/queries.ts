@@ -8,6 +8,7 @@ const baniOf = (o: { price: number; priceBani?: number | null }): number => o.pr
 import { searchCatalog } from "@/lib/search/search";
 import { getSearchableCatalog, type SearchableProduct } from "@/lib/search/index-cache";
 import { buildDailyLowSeries, dropPercent, isCurrent, summarize, MAX_DISPLAY_AGE_DAYS } from "@/lib/pricing";
+import { priceStory } from "@/lib/price-story";
 import { visibleTiers } from "./bulk-tiers";
 import { MEDIAN_DEVIATION } from "./outlier";
 import { INDEX_BASKET, type BasketItem } from "./index-basket";
@@ -51,6 +52,10 @@ const cardOfferSelect = {
 const cardProductSelect = {
   id: true, slug: true, name: true, brand: true, unit: true, unitSize: true,
   image: true, section: true, categoryId: true, dropPct: true,
+  // Precomputed by `compute:home`. Carried so the "preț bun acum" filter can run in the BROWSER
+  // — a category page that reads searchParams cannot be cached in Next 14, and this page is
+  // cached on purpose. One boolean per card is cheaper than the history it stands for.
+  atObservedLow: true,
 } as const;
 
 /**
@@ -329,18 +334,24 @@ export async function getItemPage(slug: string, showDeliveryPlatform = false) {
   const inStock = offers.filter((o) => isCurrent(o as never));
   const bestOffer = inStock[0] ?? offers[0] ?? null;
 
-  // "Best time to buy": compare today's lowest to its own price history.
-  const lows = series.map((s) => s.price);
-  const lowestEver = lows.length ? Math.min(...lows) : summary.lowest;
-  const avg = lows.length ? lows.reduce((a, b) => a + b, 0) / lows.length : summary.lowest;
-  const priceInsight = {
-    points: series.length,
-    lowestEver,
-    avg,
-    atLow: series.length >= 4 && summary.lowest <= lowestEver * 1.01,
-    belowAvgPct: series.length >= 4 && avg > 0 ? Math.max(0, ((avg - summary.lowest) / avg) * 100) : 0,
-  };
-  return { product, offers, summary, series, bestOffer, priceInsight };
+  // ── "IS THIS A GOOD PRICE?" — ONE IMPLEMENTATION, IN `lib/price-story`.
+  //
+  // This used to be computed inline here and rendered as **"preț la minimul istoric"**. On 35
+  // days of history — the table began 2026-08-06 — "istoric" is a claim the data cannot support,
+  // and it fired on `series.length >= 4` without ever checking how long that span actually was.
+  // Four observations inside one week would have announced a historic low.
+  //
+  // `priceStory` states the span it measured instead of naming a window, and refuses to speak at
+  // all under a fortnight. Keeping the old computation beside it would be two answers to one
+  // question, which is the defect `check:concepts` exists for.
+  const observations = product.offers.flatMap((o) =>
+    o.history
+      .map((h) => ({ priceBani: h.priceBani ?? Math.round(h.price * 100), at: h.recordedAt }))
+      .filter((x) => Number.isFinite(x.priceBani) && x.priceBani > 0),
+  );
+  const story = priceStory(summary.lowestBani ?? Math.round(summary.lowest * 100), observations);
+
+  return { product, offers, summary, series, bestOffer, story };
 }
 
 export type ItemPage = NonNullable<Awaited<ReturnType<typeof getItemPage>>>;

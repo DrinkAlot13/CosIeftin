@@ -129,3 +129,47 @@ it stays.
 - Every batch of classes is printed in full to be read.
 - Log everything in `docs/SOAK.md`; the soak is running, and the matcher rules, thresholds and
   merchant list are not to be touched.
+
+
+---
+
+## Phase 1 — CLOSED. The classes route is measured and finished at ~4,690.
+
+**Phase 1a** ranked 1,833 candidate groups. **Phase 1b built 8 classes from the 60-group
+shortlist and stopped.** That is the answer, not a shortfall, and this section exists so nobody
+revisits it and concludes the shortlist was underworked.
+
+```
+strict comparable         3,526 -> 3,526   equivalence never touches it
+comparable-or-equivalent  4,585 -> 4,690   +105 from 8 classes (~13 each)
+classes resolving to 2+   116/128 -> 127/137
+```
+
+### Why the other 52 groups were refused, grouped by reason
+
+| reason | groups | worked examples |
+|---|---|---|
+| **Branded variants of one product line** — merging them is the failure the golden set exists to prevent | ~14 | `fixativ 0.25l` (31 products, 5 shops): Taft Ultimate, Taft Power&Fullness, Taft Invisible Power, Nivea Diamond Gloss, Nivea Volum, Syoss Max Hold. **"nivel fixare 5+" is printed on the pack.** Also `palmolive 0.5l`, `nivea 0.5l`. |
+| **Flavour or filling IS the product** — different variety driving choice, which the brief forbids merging | ~12 | `humus 0.2kg` (jalapeño / pesto / sfeclă / zatar / țelină), `smoothie 0.25l`, `cozonac 0.45kg` (cacao / nucă / rahat / caramel / mac), `strudel 0.1kg` (măr / vișină / brânză / dovleac / șuncă) |
+| **The head noun is a BRAND, because the merchant supplies no brand field** | ~10 | `alpro 1l`, `aloma 1l`, `siviero 1l`, `lay 0.1kg`, `alce 0.5kg`, `guseppe 0.4kg`, `lido 1l`. 39.6% of live grocery products carry no brand, so `headNoun` returns the leading token — see `docs/BRAND-GAP.md` |
+| **Head-noun collision — the group holds unrelated goods** | ~6 | `zmeura 0.1kg` held chocolate, yoghurt, biscuits, **a Dove deodorant and a depilatory cream**; `bors 0.5-1.2l` **matched Borsec mineral water** on the substring; `lapte 0.5l` held VASELINE body lotion |
+| **Junk head noun — not a product category at all** | ~5 | `produs 0.15kg`, `set 1buc` (102.6× spread), `margele 0.2kg`, `pernite 0.2kg`, `suport 1buc` |
+| **Resolves at one merchant** — not a comparison | ~5 | `creveti 0.2kg` (one raw-shrimp line at one shop); most of `humus` |
+
+**The pattern**: the two mechanical filters in Phase 1a (spread < 2×, ≤ 3 size buckets) select for
+*price homogeneity*, and inside a single brand's range prices are homogeneous. So the filters
+promote brand families, which are exactly what must not be merged. That is a limit of the method,
+not a backlog.
+
+**Do not build more classes from this shortlist.** The route that would change the answer is
+brand coverage — `docs/BRAND-BACKFILL-QUEUE.md` — because giving Sezamo a brand dissolves the
+third category above and changes which groups are plausible at all. Re-run
+`propose:class-opportunities` after that, not before.
+
+### One class to re-check in Phase 3
+
+`cidru-pere-033` resolves at **one merchant** only because its siblings (STRONGBOW PERE at
+glovo-kaufland and glovo-profi) are hidden platform offers. When Phase 3 makes them visible,
+re-run the class audit and report **how many classes gain a merchant purely from platform prices
+becoming visible** — that number separates real comparison from platform-only comparison, which a
+shopper must be able to tell apart.
