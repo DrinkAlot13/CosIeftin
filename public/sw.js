@@ -18,12 +18,25 @@
 //   • static assets → cache-first (they're content-hashed by Next).
 //   • API/POST      → never cached; a stale basket total would be worse than an error.
 
-const VERSION = "cosmic-v2";
+const VERSION = "cosmic-v3";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const OFFLINE_URL = "/offline.html";
 
-const PRECACHE = ["/", "/lista", OFFLINE_URL, "/manifest.webmanifest", "/icon.svg"];
+// v3 adds the in-shop screen. It is the ONE route that must open with the radio off — a person
+// standing in an aisle who gets the offline page instead of their list has been failed at the
+// only moment this app exists for. Its data comes from `cosmic_basket_cache_v1` in localStorage,
+// which the worker does not touch; precaching the SHELL is what makes the route reachable.
+const PRECACHE = [
+  "/",
+  "/lista",
+  "/lista/in-magazin",
+  OFFLINE_URL,
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/icons/icon-192.png",
+  "/icons/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

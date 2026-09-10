@@ -153,6 +153,12 @@ worse than one that answers rarely.
 Logged here per the rule above. None touched the matcher, thresholds, coverage, the merchant
 list or any measured input.
 
+**2026-09-10 — SERVICE WORKER v2 → v3. Flagged because the soak rules single this out.**
+Precache list gains `/lista/magazin` (the new in-shop screen) and the two new PNG icons; the
+cache VERSION is bumped so v2's caches are deleted on activate, which is what the versioning was
+built for. No change to the fetch strategy, the online/offline distinction, or the five states
+`verify:offline` walks — all five re-verified after the change and reported in the session notes.
+
 **2026-09-10 — the public read API (`/api/v1/*`).** Additive: new read-only routes, new named
 rate limits, and an index on `Offer.productUrl`. No existing route changed, no scraper touched,
 no threshold moved. `docs/API.md` is the spec. The soak's measured inputs are unaffected because

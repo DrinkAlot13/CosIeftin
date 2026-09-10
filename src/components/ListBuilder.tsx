@@ -4,6 +4,7 @@ import { isShelfPrice, normalizePriceSource } from "@/lib/price-source";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadBasket, saveBasket } from "@/lib/offline-cache";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import {
   addItem,
   CART_EVENT,
@@ -253,6 +254,20 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
           </span>
         )}
       </div>
+
+      {/* ── THE WAY INTO THE AISLE. Only once there is something to shop for: a link to an
+          in-shop screen for an empty list is a link to an empty screen. */}
+      {items.length > 0 && (
+        <div style={{ margin: "4px 0 14px" }}>
+          <Link className="btn btn-accent" href="/lista/in-magazin" style={{ minHeight: 48, display: "inline-flex", alignItems: "center" }}>
+            🛒 Mod magazin — bifează pe raft
+          </Link>
+        </div>
+      )}
+
+      {/* Asked after a list exists, never on arrival — see InstallPrompt for why that matters
+          on Chrome specifically, where the event fires exactly once. */}
+      <InstallPrompt ready={items.length > 0} />
 
       <div className="lista-layout">
         <div className="card lista-items">

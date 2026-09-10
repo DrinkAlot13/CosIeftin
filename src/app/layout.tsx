@@ -21,6 +21,24 @@ export const metadata: Metadata = {
   // social preview reject outright.
   metadataBase: new URL(siteUrl()),
   alternates: { canonical: "/" },
+  // ── iOS IGNORES THE MANIFEST ENTIRELY. Measured with `npm run probe:pwa`: all three of these
+  // were absent, so adding to the home screen produced an icon that was a SCREENSHOT OF THE PAGE
+  // and a launch that opened inside Safari's chrome rather than standalone. Chrome reads the
+  // manifest and needs none of this; Safari reads none of the manifest and needs all of it.
+  // The two platforms overlap almost nowhere, which is why the probe checks them separately.
+  appleWebApp: {
+    capable: true,
+    title: "CoșMic",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    // A PNG, and 180px, because that is what iOS reads and it does not scale an SVG.
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   openGraph: {
     siteName: "CoșMic",
     locale: "ro_RO",

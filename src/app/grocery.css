@@ -143,3 +143,73 @@
     background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer;
   }
 }
+
+/* ── IN-SHOP MODE. Sized for a phone at arm's length, one hand, in a supermarket.
+   Tap targets are 56px, above the 44px both platforms recommend, because the failure here is a
+   mis-tap while pushing a trolley — not a mis-tap while sitting down. */
+.shopmode-page { max-width: 640px; padding-bottom: 96px; }
+.shopmode-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 0 8px; }
+.shopmode-head h1 { font-size: 22px; margin: 0; }
+
+.shopmode-age {
+  font-size: 13.5px; padding: 10px 12px; border-radius: 10px;
+  background: var(--surface-2, #f3f4f6); color: var(--text); margin-bottom: 12px;
+}
+/* Past six hours the age stops being reassurance and starts being a warning. */
+.shopmode-age.is-old { background: rgba(185, 106, 21, .14); color: #8a4f10; }
+
+.shopmode-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; }
+/* min-width:0 on a flex child that can hold wide content — the rule CLAUDE.md records after
+   two full-page horizontal scrolls, applied before it can be a third. */
+.shopmode-tabs > * { min-width: 0; flex: 0 0 auto; }
+.shopmode-tab {
+  min-height: 48px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-weight: 600; font-size: 15px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;
+}
+.shopmode-tab.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.shopmode-tab-n { font-size: 12.5px; opacity: .75; }
+
+.shopmode-list { list-style: none; margin: 0; padding: 0; }
+.shopmode-row {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  min-height: 56px; padding: 12px 8px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.shopmode-row:active { background: var(--surface-2, #f3f4f6); }
+.shopmode-check {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px;
+  border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800; color: #fff;
+}
+.shopmode-row.is-done .shopmode-check { background: var(--primary); border-color: var(--primary); }
+/* Struck through AND faded: colour alone is not a signal everyone receives. */
+.shopmode-row.is-done .shopmode-name { text-decoration: line-through; opacity: .5; }
+.shopmode-row.is-done .shopmode-price { opacity: .5; }
+.shopmode-name { flex: 1; min-width: 0; font-size: 16.5px; line-height: 1.35; }
+.shopmode-qty { color: var(--muted); font-weight: 600; }
+.shopmode-card { display: inline-block; margin-left: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.shopmode-price { flex: 0 0 auto; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* The total sits where a thumb reaches, not at the end of a scroll. */
+.shopmode-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border);
+  background: var(--surface); box-shadow: 0 -6px 20px rgba(0,0,0,.06);
+}
+.shopmode-bar-n { font-size: 15px; font-weight: 700; }
+.shopmode-bar-sub { font-size: 12.5px; color: var(--muted); }
+.shopmode-bar-total { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.shopmode-foot { display: flex; justify-content: space-between; gap: 12px; padding: 16px 4px; font-size: 14px; }
+
+/* ── INSTALL PROMPT. Bottom sheet, dismissible, never on first visit. */
+.install-sheet {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 60;
+  padding: 16px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--surface); box-shadow: 0 10px 30px rgba(0,0,0,.18);
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.install-sheet > * { min-width: 0; }
+.install-sheet p { margin: 0 0 4px; font-size: 14px; line-height: 1.45; }
+.install-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }

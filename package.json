@@ -187,7 +187,9 @@
     "erase:user": "tsx scripts/erase-user.ts",
     "export:user": "tsx scripts/export-user.ts",
     "gen:openapi": "tsx scripts/gen-openapi.ts",
-    "probe:api": "tsx scripts/probe-api.ts"
+    "probe:api": "tsx scripts/probe-api.ts",
+    "probe:pwa": "tsx scripts/probe-pwa.ts",
+    "gen:icons": "tsx scripts/gen-icons.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
