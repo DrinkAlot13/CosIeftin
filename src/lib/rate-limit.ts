@@ -80,6 +80,18 @@ export const LIMITS = {
   /** Everything else that writes. `/api/basket` recomputes on every list change, so this has
    *  to accommodate roughly ten concurrent shoppers before it starts refusing anyone. */
   write: { max: 60, windowMs: 60_000, sharedMax: 600 },
+
+  // ── THE PUBLIC READ API (/api/v1). Three budgets, not one, because the three shapes cost
+  // wildly different amounts and a single limit would have to be set for the most expensive.
+  /** Catalog reads: product, search, meta. An extension makes ONE call per page view, so a
+   *  person browsing hard is nowhere near this; a script enumerating the catalog is. */
+  apiRead: { max: 300, windowMs: 60_000, sharedMax: 3_000 },
+  /** Lookup. Tighter, because the name+size branch runs the MATCHER — the same `decide()` the
+   *  ingestion path uses, over a candidate set. It is the only read that does real work. */
+  apiLookup: { max: 120, windowMs: 60_000, sharedMax: 1_200 },
+  /** Basket optimisation. By far the most expensive call: up to 100 products, every offer,
+   *  substitution resolution and per-store totals. An open one is a free compute service. */
+  apiOptimize: { max: 30, windowMs: 60_000, sharedMax: 300 },
 } as const satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

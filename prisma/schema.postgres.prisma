@@ -322,6 +322,11 @@ model Offer {
   @@unique([productId, merchantId])
   @@index([isStale, isExpired])
   @@index([flagged])
+  /// `/api/v1/lookup?url=…` is the extension's PRIMARY call — a merchant's own product URL is
+  /// the only identifier we hold on twelve of sixteen merchants (SKU is 96% DCNeu and 0%
+  /// everywhere else; see docs/API.md §0). Without this index that lookup table-scans 52,125
+  /// rows on every page a shopper opens.
+  @@index([productUrl])
   @@index([merchantId])
   @@index([productId, price])
 }
