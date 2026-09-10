@@ -190,7 +190,8 @@
     "probe:api": "tsx scripts/probe-api.ts",
     "probe:pwa": "tsx scripts/probe-pwa.ts",
     "gen:icons": "tsx scripts/gen-icons.ts",
-    "probe:extension-ids": "tsx scripts/probe-extension-ids.ts"
+    "probe:extension-ids": "tsx scripts/probe-extension-ids.ts",
+    "audit:off-hitrate": "tsx scripts/audit-off-hitrate.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

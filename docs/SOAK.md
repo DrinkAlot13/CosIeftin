@@ -154,7 +154,7 @@ Logged here per the rule above. None touched the matcher, thresholds, coverage, 
 list or any measured input.
 
 **2026-09-10 — SERVICE WORKER v2 → v3. Flagged because the soak rules single this out.**
-Precache list gains `/lista/magazin` (the new in-shop screen) and the two new PNG icons; the
+Precache list gains `/lista/in-magazin` (the new in-shop screen) and the two new PNG icons; the
 cache VERSION is bumped so v2's caches are deleted on activate, which is what the versioning was
 built for. No change to the fetch strategy, the online/offline distinction, or the five states
 `verify:offline` walks — all five re-verified after the change and reported in the session notes.
@@ -166,6 +166,17 @@ nothing the nightly audits read is written by any of it.
 
 **2026-09-10 — GDPR erasure cascade.** `onDelete: Cascade` on five relations, applied with
 `prisma db push`. Schema-only; no offer, product or match row is touched by it.
+
+**2026-09-10 — the browser extension (`extension/`).** Entirely outside the app: a Manifest V3
+content script plus its own tests. It reads `/api/v1/lookup` over the network like any other
+client and writes nothing. No route, scraper, threshold or migration involved.
+
+**2026-09-10 — `audit:off-hitrate`, the barcode-scanning measurement.** Read-only and additive:
+one new script, one new `package.json` entry. It issues 200 outbound requests to Open Food Facts
+at 1.1 s intervals and calls `decide()` in-process to score candidates; **it writes nothing to
+the database and does not touch the matcher, thresholds, coverage or the merchant list.** It
+imports `AUTO_MATCH_THRESHOLD` rather than restating it, per the oracle rule. A soak reader
+seeing outbound traffic to `openfoodfacts.org` on this date should attribute it here.
 
 ### Bug fixes made during the soak
 
