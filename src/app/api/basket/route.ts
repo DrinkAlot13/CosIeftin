@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
     .filter((r: { slug: string }) => r.slug);
 
   const slugs = [...new Set(items.map((i: { slug: string }) => i.slug))] as string[];
-  const products = await getBasketProducts(slugs);
+  // Opt-in only. See getBasketProducts — the default excludes platform prices from every basket.
+  const products = await getBasketProducts(slugs, Boolean(body.includeDeliveryPlatform));
   const bySlug = new Map(products.map((p) => [p.slug, p]));
 
   const pfb: ProductForBasket[] = products.map((p) => ({

@@ -317,12 +317,22 @@ export async function getItemPage(slug: string, showDeliveryPlatform = false) {
       // neither of them sells. Those rows were stale AND withheld, and still claimed two
       // shops carried the product. Greying a false claim does not make it true.
       //
-      // AND A DELIVERY-PLATFORM OFFER DOES NOT RENDER EITHER, unless explicitly asked for.
-      // This where clause is its own — `currentOfferWhere` carries the exclusion but is not
-      // used here — so the item page was the one surface that would have listed a Glovo price
-      // in the same table as shelf prices, under a heading that says "cel mai mic preț".
+      // ── DELIVERY-PLATFORM OFFERS NOW RENDER, AND VISIBLE IS NOT THE SAME AS ELIGIBLE.
+      //
+      // Phase 3 decision: a Bucharest shopper can genuinely order Kaufland through Glovo, so
+      // hiding the price hides a real purchasing option — and `audit:platform` found 3,142
+      // products (9.8% of live grocery) that are IN STOCK only at a platform and therefore
+      // showed no price at all.
+      //
+      // The guarantee that makes this safe is already in `isCurrent`, which excludes
+      // DELIVERY_PLATFORM by default: `summarize` and `bestOffer` are both built from it, so a
+      // platform price cannot become "cel mai mic preț" or the recommended shop no matter how
+      // cheap it is. The row is listed and labelled; it is not eligible to win.
+      //
+      // `showDeliveryPlatform` no longer gates whether the rows EXIST — it is kept for the API,
+      // which has its own callers and its own default.
       offers: {
-        where: { merchant: { active: true }, flagged: false, ...deliveryPlatformWhere(showDeliveryPlatform) },
+        where: { merchant: { active: true }, flagged: false },
         include: { merchant: true, history: { orderBy: { recordedAt: "asc" } }, tiers: { orderBy: { minQuantity: "asc" } } },
       },
     },
@@ -332,7 +342,18 @@ export async function getItemPage(slug: string, showDeliveryPlatform = false) {
   const summary = summarize(offers);
   const series = buildDailyLowSeries(offers);
   const inStock = offers.filter((o) => isCurrent(o as never));
-  const bestOffer = inStock[0] ?? offers[0] ?? null;
+  // ── THE FALLBACK MAY NOT REACH A PLATFORM OFFER.
+  //
+  // `?? offers[0]` was safe while delivery-platform rows were filtered out of this query. Now
+  // that they render (Phase 3), `offers[0]` is the cheapest row of ANY kind — so on a product
+  // whose only in-stock prices are Glovo, the "best offer" became a Glovo offer, and with it the
+  // lei/L figure and the "Vezi la …" button. Caught on the Zuzu 1,8 l page, which showed
+  // "7,77 lei/L" derived from a platform price with no label anywhere near it.
+  //
+  // The rule is that a platform price is never the recommendation, so the fallback is over SHELF
+  // rows only. When there are none, there is no best offer, and the page says that.
+  const shelfOffers = offers.filter((o) => (o.priceSource ?? "") !== "DELIVERY_PLATFORM");
+  const bestOffer = inStock[0] ?? shelfOffers[0] ?? null;
 
   // ── "IS THIS A GOOD PRICE?" — ONE IMPLEMENTATION, IN `lib/price-story`.
   //
@@ -344,11 +365,13 @@ export async function getItemPage(slug: string, showDeliveryPlatform = false) {
   // `priceStory` states the span it measured instead of naming a window, and refuses to speak at
   // all under a fortnight. Keeping the old computation beside it would be two answers to one
   // question, which is the defect `check:concepts` exists for.
-  const observations = product.offers.flatMap((o) =>
-    o.history
-      .map((h) => ({ priceBani: h.priceBani ?? Math.round(h.price * 100), at: h.recordedAt }))
-      .filter((x) => Number.isFinite(x.priceBani) && x.priceBani > 0),
-  );
+  const observations = product.offers
+    .filter((o) => (o.priceSource ?? "") !== "DELIVERY_PLATFORM")
+    .flatMap((o) =>
+      o.history
+        .map((h) => ({ priceBani: h.priceBani ?? Math.round(h.price * 100), at: h.recordedAt }))
+        .filter((x) => Number.isFinite(x.priceBani) && x.priceBani > 0),
+    );
   const story = priceStory(summary.lowestBani ?? Math.round(summary.lowest * 100), observations);
 
   return { product, offers, summary, series, bestOffer, story };
@@ -665,12 +688,31 @@ export async function getHomeSections() {
 
 export type HomeProduct = Awaited<ReturnType<typeof getHomeSections>>["featured"][number];
 
-/** Products (with active offers) for a basket, by slug. */
-export async function getBasketProducts(slugs: string[]) {
+/**
+ * Products (with active offers) for a basket, by slug.
+ *
+ * ── DELIVERY-PLATFORM OFFERS ARE EXCLUDED BY DEFAULT, AND THEY WERE NOT.
+ *
+ * `activeInclude` is `{ merchant: { active: true } }` and the three Glovo storefronts ARE
+ * active, so every basket the optimizer built could spend the shopper's money at a platform
+ * price — /lista was rendering "Completează coșul la Profi (Glovo)" with a marked-up total and
+ * no label anywhere on it. CLAUDE.md states the optimizer excludes these; nothing implemented it.
+ *
+ * Phase 3 splits the two ideas: a platform price is VISIBLE on a product page, where it can be
+ * labelled and where it cannot win "cel mai mic preț" — and it is OUT of a basket
+ * recommendation unless the shopper opts in, because a median +11.8% markup buried inside one
+ * total is not something a reader can see.
+ */
+export async function getBasketProducts(slugs: string[], includeDeliveryPlatform = false) {
   if (slugs.length === 0) return [];
   return prisma.product.findMany({
     where: { slug: { in: slugs } },
-    include: { offers: activeInclude },
+    include: {
+      offers: {
+        ...activeInclude,
+        where: { ...activeInclude.where, ...deliveryPlatformWhere(includeDeliveryPlatform) },
+      },
+    },
   });
 }
 

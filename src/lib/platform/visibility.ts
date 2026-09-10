@@ -55,8 +55,33 @@ export function isDeliveryPlatform(o: { priceSource?: string | null }): boolean 
   return (o.priceSource ?? "") === DELIVERY_PLATFORM;
 }
 
-/** Romanian label required on every delivery-platform price that is shown. */
-export const DELIVERY_PLATFORM_LABEL = "preț prin Glovo — include adaosul platformei";
+/**
+ * Romanian label required on every delivery-platform price that is shown.
+ *
+ * ── IT DOES NOT SAY "include adaosul platformei", AND THAT WAS MEASURED.
+ *
+ * The brief specified that wording and it is false often enough to matter. `audit:platform`
+ * compared every in-stock platform offer against the same product's cheapest in-stock SHELF
+ * price, 782 pairs:
+ *
+ *     glovo-kaufland  345 compared   median +11.8%   36 exactly at shelf    99 CHEAPER
+ *     glovo-profi     296 compared   median +23.8%   15 exactly at shelf    65 CHEAPER
+ *     glovo-penny     141 compared   median  −1.0%   10 exactly at shelf    72 CHEAPER
+ *
+ * 297 of 782 — **38%** — are at or below the shelf price, and Penny's median is NEGATIVE. A label
+ * asserting a markup on those rows states as fact something we measured to be untrue, which is
+ * the same defect as a wrong price with a friendlier face.
+ *
+ * What is true of every row without exception is that it is not a shelf price: it is what the
+ * platform charges, and it carries delivery terms the shelf price does not. So the label says
+ * that, and the panel beside it gives the measured distribution instead of a blanket claim.
+ */
+export const DELIVERY_PLATFORM_LABEL = "preț prin Glovo — nu este prețul de la raft";
+
+/** The longer sentence, for surfaces with room for it. */
+export const DELIVERY_PLATFORM_NOTE =
+  "Preț prin Glovo. Poate fi mai mare decât la raft (adaosul platformei), dar nu întotdeauna — " +
+  "l-am măsurat și la același preț, uneori mai mic. Nu intră niciodată în „cel mai mic preț”.";
 
 /** Guard used by tests: the vocabulary must still contain the value this module keys on. */
 export function vocabularyStillContainsDeliveryPlatform(): boolean {

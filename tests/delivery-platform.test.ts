@@ -15,7 +15,7 @@ import { describe, it, expect } from "./run";
 import { isPriceSource, toPriceSource, PRICE_SOURCES } from "../src/lib/price-source";
 import {
   deliveryPlatformEnabledByEnv, deliveryPlatformWhere, isDeliveryPlatform,
-  showDeliveryPlatform, DELIVERY_PLATFORM, DELIVERY_PLATFORM_LABEL,
+  showDeliveryPlatform, DELIVERY_PLATFORM, DELIVERY_PLATFORM_LABEL, DELIVERY_PLATFORM_NOTE,
 } from "../src/lib/platform/visibility";
 import { STOREFRONTS, enabledStorefronts, storeUrl, storefrontByKey } from "../src/lib/platform/config";
 import { isCurrent } from "../src/lib/pricing";
@@ -84,9 +84,26 @@ describe("delivery-platform prices are hidden by default", () => {
     expect(isDeliveryPlatform({})).toBeFalsy();
   });
 
-  it("the required Romanian label names the platform and the markup", () => {
+  // ── THE LABEL MAY NOT ASSERT A MARKUP, AND THAT IS A MEASUREMENT, NOT A PREFERENCE.
+  //
+  // `audit:platform` compared 782 in-stock platform offers against the same product's cheapest
+  // in-stock SHELF price. 297 of them — 38% — are at or BELOW it, and glovo-penny's median
+  // markup is −1.0%. A label reading "include adaosul platformei" states as fact something we
+  // measured to be untrue on more than a third of the rows it would appear on.
+  //
+  // What IS true of every row is that it is not a shelf price. The label says that; the measured
+  // distribution goes in the note beside it rather than into a blanket claim.
+  it("the label names the platform and does NOT assert a markup", () => {
     expect(DELIVERY_PLATFORM_LABEL).toContain("Glovo");
-    expect(DELIVERY_PLATFORM_LABEL).toContain("adaosul platformei");
+    expect(DELIVERY_PLATFORM_LABEL.includes("include adaosul")).toBe(false);
+    expect(DELIVERY_PLATFORM_LABEL).toContain("raft");
+  });
+
+  it("the longer note is hedged, because 38% of rows carry no markup", () => {
+    expect(DELIVERY_PLATFORM_NOTE).toContain("Poate fi mai mare");
+    expect(DELIVERY_PLATFORM_NOTE.includes("nu întotdeauna")).toBe(true);
+    // and it repeats the guarantee that matters most
+    expect(DELIVERY_PLATFORM_NOTE).toContain("cel mai mic preț");
   });
 });
 

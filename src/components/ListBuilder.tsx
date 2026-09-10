@@ -69,6 +69,13 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
   // exact list — always carrying their age, so the banner cannot fail to say how old they are.
   const [staleAge, setStaleAge] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // ── PLATFORM PRICES IN THE BASKET: OPT-IN, OFF BY DEFAULT.
+  //
+  // A Bucharest shopper can genuinely order Kaufland through Glovo, so this is a real option and
+  // not a trick — but a basket total is a recommendation to spend money at one shop, and the
+  // markup is invisible once it is summed. Measured medians: +11.8% glovo-kaufland, +23.8%
+  // glovo-profi, −1.0% glovo-penny. Off unless asked for, and the label says what it changes.
+  const [withGlovo, setWithGlovo] = useState(false);
   const [q, setQ] = useState("");
   const [sug, setSug] = useState<Suggestion[]>([]);
   const [pref, setPref] = useState<string[]>([]);
@@ -115,7 +122,10 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
     fetch("/api/basket", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+      body: JSON.stringify({
+        items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
+        includeDeliveryPlatform: withGlovo,
+      }),
     })
       .then((r) => r.json())
       .then((d: Result) => {
@@ -124,14 +134,14 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
           setStaleAge(null);
           setLoading(false);
           snapshotBasket(d.splitTotal);
-          saveBasket(itemsKey, d);
+          saveBasket(`${itemsKey}${withGlovo ? "|glovo" : ""}`, d);
         }
       })
       .catch(() => {
         if (cancelled) return;
         setLoading(false);
         // Offline, or the server is down. Show what we last computed for this same list.
-        const cached = loadBasket<Result>(itemsKey);
+        const cached = loadBasket<Result>(`${itemsKey}${withGlovo ? "|glovo" : ""}`);
         if (cached) {
           setResult(cached.result);
           setStaleAge(cached.freshness.label);
@@ -141,7 +151,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemsKey]);
+  }, [itemsKey, withGlovo]);
 
   // Suggestions for the add box.
   useEffect(() => {
@@ -370,6 +380,27 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
               📴 <b>Ești offline.</b> Prețurile de mai jos au fost calculate {staleAge} și pot fi
               diferite acum. Se actualizează singure când revine semnalul.
             </div>
+          )}
+          {/* THE TOGGLE. Off by default, and the label says what turning it on DOES — not just
+              that it exists. "Include" alone would leave a shopper to discover the markup in the
+              total, which is the thing the default is protecting them from. */}
+          {items.length > 0 && (
+            <label className="pill-note" style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={withGlovo}
+                onChange={(e) => setWithGlovo(e.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <b>Include și prețurile prin Glovo</b> (Kaufland, Penny, Profi).
+                <br />
+                <span className="muted" style={{ fontSize: 12.5 }}>
+                  Sunt prețuri de livrare, nu prețuri de raft — de obicei mai mari, uneori egale
+                  sau mai mici. Implicit sunt excluse din coș.
+                </span>
+              </span>
+            </label>
           )}
           {result && items.length > 0 && (() => {
             // ── WHICHEVER IS CHEAPER IS THE ONE WE HIGHLIGHT, and only when the two describe

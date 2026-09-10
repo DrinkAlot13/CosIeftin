@@ -25,6 +25,18 @@ export async function POST(req: NextRequest) {
   const limited = guard("write", req);
   if (limited) return limited;
   const body = await req.json().catch(() => ({}));
+  // ── DELIVERY-PLATFORM PRICES ARE OUT OF THE BASKET BY DEFAULT, AND THEY WERE NOT.
+  //
+  // Nothing on this path excluded them: the offer query never selected `priceSource`, the
+  // resolver never checked it, and the merchant list is "every active merchant" — which includes
+  // the three Glovo storefronts. /lista has been recommending "Completează coșul la Profi
+  // (Glovo)" with a marked-up total and no label, which is the thing CLAUDE.md says must not
+  // happen and describes as already prevented.
+  //
+  // Phase 3's rule: visible on a product page, OUT of the optimizer unless the shopper asks.
+  // A basket is a recommendation to spend money at one shop, and a median +11.8% markup silently
+  // inside that total is a worse error than showing it on a row the shopper can read.
+  const includePlatform = Boolean(body.includeDeliveryPlatform);
   const raw = Array.isArray(body.items) ? body.items : [];
   const wanted = raw
     .map((r: { slug?: unknown; qty?: unknown; mode?: unknown; requestedQuantity?: unknown }) => ({
@@ -53,6 +65,9 @@ export async function POST(req: NextRequest) {
     },
     select: {
       id: true, productId: true, merchantId: true, priceBani: true, price: true,
+      // Selected so the platform exclusion below is possible at all — it was absent, which is
+      // why the exclusion was absent.
+      priceSource: true,
       availability: true, isStale: true, isExpired: true, promoValidTo: true,
       requiresLoyaltyCard: true, bulkTiers: true,
       product: { select: { id: true, name: true, brand: true, equivalenceClassId: true, unit: true, unitSize: true } },
@@ -61,7 +76,11 @@ export async function POST(req: NextRequest) {
     take: 5000,
   });
 
-  const offerLikes: OfferLike[] = offers.map((o) => {
+  const usableOffers = includePlatform
+    ? offers
+    : offers.filter((o) => (o.priceSource ?? "") !== "DELIVERY_PLATFORM");
+
+  const offerLikes: OfferLike[] = usableOffers.map((o) => {
     // canonical pack quantity: G / ML / BUC
     const q = parseQuantity(o.product.name);
     const packQuantity = q ? q.value : o.product.unit === "buc" ? o.product.unitSize : o.product.unitSize * 1000;
@@ -108,7 +127,9 @@ export async function POST(req: NextRequest) {
   });
 
   const merchantRows = await prisma.merchant.findMany({
-    where: { active: true },
+    // A shop with no usable offer must not appear as a basket option at all: an empty
+    // "Completează coșul la Kaufland (Glovo)" is worse than its absence.
+    where: { active: true, ...(includePlatform ? {} : { NOT: { slug: { startsWith: "glovo-" } } }) },
     select: { id: true, slug: true, name: true, storeType: true, deliveryFee: true, freeDeliveryOver: true, minOrder: true },
   });
   const merchants: MerchantInfo[] = merchantRows.map((m) => ({

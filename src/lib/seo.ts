@@ -27,6 +27,8 @@ type OfferLike = {
   priceBani?: number | null;
   availability: string | null;
   url: string | null;
+  /** Needed so a DELIVERY_PLATFORM price cannot reach Google as this product's low. */
+  priceSource?: string | null;
   merchant: { name: string };
 };
 
@@ -47,7 +49,17 @@ type ProductLike = {
  * would show a shopper.
  */
 export function productJsonLd(product: ProductLike, offers: OfferLike[]): Record<string, unknown> | null {
-  const usable = offers.filter((o) => o.price > 0);
+  // ── PLATFORM PRICES ARE EXCLUDED FROM STRUCTURED DATA, DELIBERATELY.
+  //
+  // The item page now LISTS delivery-platform offers (Phase 3), because a shopper who can order
+  // Kaufland through Glovo is looking at a real option. Google is not that shopper: it renders a
+  // price range in a search result with no room for "nu este prețul de la raft", and a Glovo
+  // price surfacing there as this product's low would be the exact claim `isCurrent` exists to
+  // prevent, made somewhere we cannot label it.
+  //
+  // So the page shows them and the structured data does not. The two are answering different
+  // questions and this is the one place they are allowed to differ.
+  const usable = offers.filter((o) => o.price > 0 && (o.priceSource ?? "") !== "DELIVERY_PLATFORM");
   if (usable.length === 0) return null; // a product with no price makes no honest Offer
 
   // Compared in bani so the range Google renders cannot disagree with the page by a rounding

@@ -15,7 +15,7 @@ import { TrackPrice } from "@/components/TrackPrice";
 import { formatPerUnit, formatRON } from "@/lib/format";
 import { isCurrent } from "@/lib/pricing";
 import { getAlternatives, getClassEquivalents, getItemPage } from "@/lib/queries";
-import { showDeliveryPlatform } from "@/lib/platform/visibility";
+import { DELIVERY_PLATFORM_NOTE, isDeliveryPlatform, showDeliveryPlatform } from "@/lib/platform/visibility";
 import { abs, breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
 
 // Prices refresh once a night, so serve these from cache and regenerate hourly —
@@ -72,6 +72,12 @@ export default async function ItemPage({
     return { name: o.merchant.name, colorIndex: ((o.merchant.id - 1) % 8) + 1, prices: chartDates.map((d) => byDate.get(d) ?? null) };
   });
 
+  // Shelf offers and platform offers are counted apart, everywhere. `summary` already ignores
+  // platform rows (isCurrent excludes them), so this only affects what is DISPLAYED.
+  const platformOffers = offers.filter((o) => isDeliveryPlatform(o as never));
+  const platformInStock = platformOffers.filter((o) => o.availability === "in stock").length;
+  const shelfOfferCount = offers.length - platformOffers.length;
+
   // The retailer's OWN Omnibus 30-day figure, taken from the offer whose price we are showing.
   // Carried through so the panel can label it as THEIRS. No discount is computed from it.
   const refOffer = offers.find((o) => isCurrent(o as never) && o.referencePriceBani && o.referencePriceBani > 0);
@@ -120,9 +126,26 @@ export default async function ItemPage({
             A range is now stated as a range, and a strike only appears when the cheapest
             shown offer carries its own genuine former price.
           */}
+          {/* "cel mai mic preț 0,00 RON" IS NOT A PRICE. `summary.lowest` is 0 when nothing we
+              can stand behind is in stock, and rendering that as money reads as "free". It only
+              became visible once platform rows started rendering on products whose ONLY in-stock
+              price is a Glovo one — 3,142 products are in that state (audit:platform). Those
+              pages now say what is true: we have no shelf price today, and the Glovo prices are
+              listed below under their own label. */}
           <div className="price-block">
-            <span className="from">cel mai mic preț</span>
-            <span className="big">{formatRON(summary.lowest)}</span>
+            {summary.hasCurrentPrice ? (
+              <>
+                <span className="from">cel mai mic preț</span>
+                <span className="big">{formatRON(summary.lowest)}</span>
+              </>
+            ) : (
+              <>
+                <span className="from">niciun preț de raft azi</span>
+                <span className="big" style={{ fontSize: 22 }}>
+                  {platformInStock > 0 ? "doar prin Glovo" : "—"}
+                </span>
+              </>
+            )}
             {bestOffer && (() => {
               const d = priceDisplayFor(bestOffer);
               if (d.kind === "strike") {
@@ -178,11 +201,20 @@ export default async function ItemPage({
             worse than a page with a wrong number, because the reader cannot tell which half
             to trust.
           */}
+          {/* THE MERCHANT COUNT COUNTS SHELF SHOPS, AND NAMES PLATFORM ONES SEPARATELY.
+              Folding "2 magazine + 1 prin Glovo" into "3 magazine" would let a marked-up
+              delivery price pad the number a shopper reads as cross-shop coverage. They are
+              different kinds of availability and the sentence says so. */}
           <div className="muted" style={{ marginBottom: 10 }}>
             {bestOffer && bestOffer.pricePerUnit > 0 ? `${formatPerUnit(bestOffer.pricePerUnit, product.unit)} · ` : ""}
-            {summary.inStockCount === offers.length
-              ? `${offers.length} magazine`
-              : `${summary.inStockCount} din ${offers.length} magazine au stoc azi`}
+            {shelfOfferCount === 0
+              ? "niciun magazin nu are preț de raft azi"
+              : summary.inStockCount === shelfOfferCount
+                ? `${shelfOfferCount} ${shelfOfferCount === 1 ? "magazin" : "magazine"}`
+                : `${summary.inStockCount} din ${shelfOfferCount} magazine au stoc azi`}
+            {platformInStock > 0 && (
+              <> · <span title={DELIVERY_PLATFORM_NOTE}>🛵 {platformInStock} prin Glovo</span></>
+            )}
           </div>
           {/* "Moment bun de cumpărat — preț la minimul ISTORIC" used to render here off four
               observations, with no check on how long we had actually been watching. The history
@@ -230,10 +262,17 @@ export default async function ItemPage({
           right now.
         */}
         <div className="section-head">
+          {/* SHELF SHOPS AND PLATFORM SHOPS ARE COUNTED APART HERE TOO.
+              `offers.length` became "every row in the table" once platform rows started
+              rendering, so a product at ONE shop plus two Glovo storefronts read as
+              "1 din 3 magazine" — which invites the reader to count three shops. */}
           <h2>
-            {summary.inStockCount === offers.length
-              ? `Prețuri în ${offers.length} magazine`
-              : `Disponibil azi în ${summary.inStockCount} din ${offers.length} magazine`}
+            {shelfOfferCount === 0
+              ? `Preț doar prin Glovo (${platformInStock})`
+              : summary.inStockCount === shelfOfferCount
+                ? `Prețuri în ${shelfOfferCount} ${shelfOfferCount === 1 ? "magazin" : "magazine"}`
+                : `Disponibil azi în ${summary.inStockCount} din ${shelfOfferCount} magazine`}
+            {shelfOfferCount > 0 && platformInStock > 0 ? ` · ${platformInStock} prin Glovo` : ""}
           </h2>
         </div>
         <div className="card" style={{ padding: 4 }}><OfferTable offers={offers} unit={product.unit} /></div>

@@ -270,6 +270,26 @@ minimul istoric"* off four observations with no check on the observed span. Hist
 2026-08-06, so "istoric" described 35 days. `lib/price-story` now states the span it measured and
 refuses to speak under 14 days.
 
+**2026-09-10 — PHASE 3: delivery-platform prices are now VISIBLE. USER-FACING CHANGE.**
+Platform (Glovo) offers render on product pages, labelled, from this date. They remain
+**ineligible** to be "cel mai mic preț", the recommended shop, the `✓ Cel mai mic preț` badge, or
+part of the shelf merchant count — `isCurrent` already excluded them and `summarize`/`bestOffer`
+are built on it. Structured data (JSON-LD) still excludes them, because Google renders a price
+with no room for a label.
+
+**Three live defects were found by making them visible, and all three predate this change:**
+`bestOffer`'s `?? offers[0]` fallback reached a platform row; `OfferTable` badged the cheapest
+row of any kind as "Cel mai mic preț" and landed it on a Glovo price; and the **optimizer had no
+platform exclusion at all** — neither basket route selected `priceSource` and the merchant list
+is "every active merchant", so /lista has been recommending "Completează coșul la Profi (Glovo)"
+with a marked-up total and no label, which CLAUDE.md describes as already prevented. The basket
+now excludes platform prices by default with an explicit opt-in toggle.
+
+**No matcher rule, threshold, coverage figure or merchant-list entry changed.** Strict
+comparability is unaffected and still reported on its own (`audit:comparability`: grocery 2,878);
+`audit:platform` reports the platform-shown figure separately (3,462). New read-only scripts:
+`audit:platform`, `shots`.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
