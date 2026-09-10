@@ -211,6 +211,11 @@ and read-only apart from the reverted write. Findings in `docs/BRAND-GAP.md` —
 Carrefour's brand field is wrong ~46% of the time, which is a live defect left unfixed because
 fixing a scraper mid-soak is out of scope.
 
+**2026-09-10 — `probe:brand` (Sezamo and Carrefour detail pages).** Read-only, network. 65
+outbound page loads across two merchant sites; writes nothing. **No scraper, matcher rule,
+threshold or merchant-list change** — the Carrefour brand defect it documents is deliberately left
+unfixed until after the soak. Findings in `docs/SEZAMO-BRAND.md` and `docs/CARREFOUR-BRAND.md`.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
