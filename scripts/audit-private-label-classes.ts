@@ -51,7 +51,14 @@ async function main(): Promise<void> {
   const all = process.argv.includes("--all");
   const cutoff = new Date(Date.now() - MAX_DISPLAY_AGE_DAYS * 86_400_000);
 
-  const classes = await prisma.equivalenceClass.findMany({ orderBy: { slug: "asc" } });
+  // `--slugs=a,b,c` restricts the report to named classes. Added so a Phase 1b BATCH can be read
+  // on its own: the brief reviews classes batch by batch, and a 131-class dump makes "what did
+  // this batch do" unanswerable. It only narrows what is PRINTED; nothing else changes.
+  const slugArg = process.argv.find((a) => a.startsWith("--slugs="));
+  const onlySlugs = slugArg ? new Set(slugArg.split("=")[1].split(",").filter(Boolean)) : null;
+
+  const classes = (await prisma.equivalenceClass.findMany({ orderBy: { slug: "asc" } }))
+    .filter((c) => !onlySlugs || onlySlugs.has(c.slug));
   const products = await prisma.product.findMany({
     where: { equivalenceClassId: { not: null } },
     select: {

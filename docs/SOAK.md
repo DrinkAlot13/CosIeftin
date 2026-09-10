@@ -245,6 +245,18 @@ the soak in `docs/BRAND-BACKFILL-QUEUE.md`. The brand reader moved to
 a probe measuring coverage with a different reader than the backfill uses would be measuring a
 rule nobody runs. No scraper, matcher rule, threshold or merchant-list change.
 
+**2026-09-10 — PHASE 1b BATCH 1: 8 new equivalence classes + 2 window corrections. CATALOG
+CHANGE.** `seed:batch1 --write` then `propose:equivalence --apply`. 8 new grocery classes
+(cidru-mere-033, cidru-pere-033, tofu-natur-300g, busuioc-uscat-30g, bors-acru-1l,
+cartofiori-800g, lipie-alba-500g, lipie-graham-500g); `afine-kg` and `zmeura-kg` had
+`minUnitSize` corrected 0.15 → 0.10 because the standard fresh punnet is 125 g and the floor
+excluded it. One pre-existing false member removed (`Mcvities … PINK Digestives` in `zmeura-kg`).
+**No matcher rule, threshold, coverage figure or merchant-list entry touched** — equivalence
+classes are a display/substitution layer and do not affect matching. Strict comparability is
+UNCHANGED at 3,526; comparable-or-equivalent 4,585 → 4,690. Reversible with
+`seed:batch1 --remove --write`. Every class printed in full by
+`audit:private-label-classes --slugs=…`.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
