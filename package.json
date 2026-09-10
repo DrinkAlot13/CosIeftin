@@ -163,6 +163,7 @@
     "audit:brands": "tsx scripts/audit-brands.ts",
     "probe:brand": "tsx scripts/probe-brand-detail.ts",
     "null:carrefour-brands": "tsx scripts/null-carrefour-brands.ts",
+    "backfill:detail-brands": "tsx scripts/backfill-detail-brands.ts",
     "audit:candidate-reach": "tsx scripts/audit-candidate-reach.ts",
     "audit:brand-substring": "tsx scripts/audit-brand-substring.ts",
     "verify:push": "tsx scripts/verify-push.ts",
@@ -202,7 +203,8 @@
     "backfill:brands": "tsx scripts/backfill-brands.ts",
     "audit:brands": "tsx scripts/audit-brands.ts",
     "probe:brand": "tsx scripts/probe-brand-detail.ts",
-    "null:carrefour-brands": "tsx scripts/null-carrefour-brands.ts"
+    "null:carrefour-brands": "tsx scripts/null-carrefour-brands.ts",
+    "backfill:detail-brands": "tsx scripts/backfill-detail-brands.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

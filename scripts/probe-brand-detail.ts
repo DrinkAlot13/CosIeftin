@@ -29,16 +29,9 @@ import { emitJson } from "../src/lib/audit-json";
 
 const prisma = new PrismaClient();
 
-const PLACEHOLDER = new Set([
-  "", "-", "--", "n/a", "na", "null", "undefined", "none", "no brand",
-  "fara marca", "generic", "altele", "diverse",
-]);
-const bad = (v: string) => {
-  const t = v.trim().toLowerCase();
-  return PLACEHOLDER.has(t) || /^\(.*\)$/.test(t) || t.length < 2 || t.length > 60;
-};
+import { brandFromDetailPage, type BrandHit } from "../src/lib/brand/from-detail-page";
 
-type Found = { where: string; value: string } | null;
+type Found = BrandHit;
 
 async function inspect(page: Page, url: string): Promise<{ found: Found; ms: number; note: string }> {
   const t0 = Date.now();
@@ -49,79 +42,10 @@ async function inspect(page: Page, url: string): Promise<{ found: Found; ms: num
   if (resp.status() >= 400) return done(null, `HTTP ${resp.status()}`);
   await page.waitForTimeout(3000);
 
-  // 1. JSON-LD Product.brand — string, or { name }. Written for Google, so it is the most stable.
-  const ld = await page.evaluate(() =>
-    [...document.querySelectorAll('script[type="application/ld+json"]')].map((s) => s.textContent ?? ""),
-  );
-  for (const block of ld) {
-    if (!/"@type"\s*:\s*"?Product"?/i.test(block)) continue;
-    const obj = block.match(/"brand"\s*:\s*\{[^}]*?"name"\s*:\s*"([^"]{2,60})"/i)?.[1];
-    if (obj && !bad(obj)) return done({ where: "json-ld brand.name", value: obj.trim() });
-    const str = block.match(/"brand"\s*:\s*"([^"]{2,60})"/i)?.[1];
-    if (str && !bad(str)) return done({ where: "json-ld brand", value: str.trim() });
-  }
-
-  // 2. A meta tag.
-  const meta = await page.evaluate(() => {
-    for (const m of document.querySelectorAll("meta")) {
-      const p = (m.getAttribute("property") ?? m.getAttribute("name") ?? "").toLowerCase();
-      if (/brand|marca|manufacturer/.test(p)) {
-        const c = m.getAttribute("content") ?? "";
-        if (c.trim()) return `${p}|${c.trim()}`;
-      }
-    }
-    return null;
-  });
-  if (meta) {
-    const [k, v] = meta.split("|");
-    if (!bad(v)) return done({ where: `meta ${k}`, value: v });
-  }
-
-  // 3. A LINK to the brand's own listing page — /brand/x, /marca/x, ?brand=x.
-  //
-  // Checked BEFORE the spec row on purpose. The spec-row heuristic is the loose one, and when it
-  // ran first it matched Sezamo's basket widget and returned "local0 bucati in cos" for 12 of 40
-  // pages — short-circuiting the clean answer that was on the same page. A loose rule placed
-  // ahead of a precise one does not merely add noise, it HIDES the precise one.
-  const brandLink = await page.evaluate(() => {
-    for (const a of document.querySelectorAll("a[href]")) {
-      const h = a.getAttribute("href") ?? "";
-      if (/\/(brand|brands|marca|marci)\//i.test(h) || /[?&]brand=/i.test(h)) {
-        const t = (a.textContent ?? "").trim();
-        if (t.length >= 2 && t.length <= 40) return t;
-      }
-    }
-    return null;
-  });
-  if (brandLink && !bad(brandLink)) return done({ where: "brand link", value: brandLink });
-
-  // 4. A spec row whose LABEL says brand / marca / producator, and whose VALUE looks like one.
-  const spec = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll("tr, dl > div, [class*='spec'], [class*='attribute'], [class*='param']")];
-    for (const r of rows) {
-      const t = (r.textContent ?? "").replace(/\s+/g, " ").trim();
-      if (t.length > 80) continue;
-      if (/^(brand|marca|marcă|producator|producător|manufacturer)\b/i.test(t)) return t;
-    }
-    return null;
-  });
-  if (spec) {
-    const v = spec.replace(/^(brand|marca|marcă|producator|producător|manufacturer)\s*:?\s*/i, "").trim();
-    // a basket widget is not a brand
-    if (v && !bad(v) && !/coş|bucat|cantitate|pret|lei/i.test(v)) {
-      return done({ where: "spec row", value: v }, spec.slice(0, 60));
-    }
-  }
-
-  // 5. Any embedded JSON payload carrying a brand key.
-  const payload = await page.evaluate(() => {
-    const html = document.documentElement.innerHTML;
-    const m = html.match(/["'](?:brand|brandName|manufacturerName|marca)["']\s*:\s*["']([^"']{2,50})["']/i);
-    return m ? m[1] : null;
-  });
-  if (payload && !bad(payload)) return done({ where: "embedded json", value: payload.trim() });
-
-  return done(null, "no brand published anywhere we looked");
+  // ONE implementation, shared with `backfill:detail-brands`. A probe that measured coverage with
+  // a different reader than the backfill uses would be measuring a rule nobody runs.
+  const hit = await brandFromDetailPage(page);
+  return done(hit, hit ? "" : "no brand published anywhere we looked");
 }
 
 async function main(): Promise<void> {
@@ -129,8 +53,12 @@ async function main(): Promise<void> {
   // `--json <path>` takes a VALUE, and treating it as a merchant name made the probe report
   // "unknown merchant: reports/brand-sezamo.json". A run that mis-parses its own arguments is
   // exactly what `probe:links` once did before it was made to fail loudly.
+  // `--json <path>` takes a VALUE that must not be read as a merchant name. Guard the -1 case:
+  // with no --json present, `jsonIdx + 1` is 0 and this silently ate the FIRST merchant argument.
+  // The "checked nothing is a FAILURE" rule is what surfaced it instead of a quiet empty run.
   const jsonIdx = argv.indexOf("--json");
-  const want = argv.filter((a, i) => !a.startsWith("--") && i !== jsonIdx + 1);
+  const skip = jsonIdx >= 0 ? jsonIdx + 1 : -1;
+  const want = argv.filter((a, i) => !a.startsWith("--") && i !== skip);
   const N = Number((argv.find((a) => a.startsWith("--n=")) ?? "--n=30").split("=")[1]);
   if (want.length === 0) {
     console.error("Name at least one merchant. Checked nothing — a FAILURE, not a pass.");

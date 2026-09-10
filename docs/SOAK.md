@@ -238,6 +238,13 @@ had a plausible partner in the catalog, **0 would match a second merchant with t
 18 without**, so roughly 114 of the 1,266 become newly matchable at the next re-match. Details in
 `docs/CARREFOUR-BRAND.md`.
 
+**2026-09-10 — `backfill:detail-brands` committed UNRUN.** Harvests brands from Sezamo and
+Carrefour detail pages. **It has not been run and writes nothing until it is**; queued for after
+the soak in `docs/BRAND-BACKFILL-QUEUE.md`. The brand reader moved to
+`src/lib/brand/from-detail-page.ts` so `probe:brand` and the backfill share ONE implementation —
+a probe measuring coverage with a different reader than the backfill uses would be measuring a
+rule nobody runs. No scraper, matcher rule, threshold or merchant-list change.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
