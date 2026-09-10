@@ -60,3 +60,6 @@ logs/*.txt
 logs/*.xml
 logs/flow/
 logs/cmp/
+
+# scratch files from interactive sessions
+tmp-*.ts
