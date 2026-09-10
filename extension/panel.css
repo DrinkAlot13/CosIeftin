@@ -1,0 +1,72 @@
+/* ── The panel, and nothing else. Every selector is namespaced under #cosmic-panel so no rule
+   here can reach a single element of the merchant's own page — rule 1. */
+
+#cosmic-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483000;          /* below a browser's own UI, above a shop's sticky footer */
+  width: 268px;
+  max-width: calc(100vw - 32px);
+  max-height: 60vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+  /* Its own stack, so nothing of ours inherits a shop's font metrics or line-height. */
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+#cosmic-panel * { box-sizing: border-box; }
+
+/* RULE 2 — never cover the price or the buy button. On a phone the panel becomes a short bar at
+   the bottom rather than a card that grows over the page, because on a narrow layout the buy
+   button is usually exactly where a floating card would land. */
+@media (max-width: 520px) {
+  #cosmic-panel {
+    right: 8px; left: 8px; bottom: 8px;
+    width: auto; max-height: 42vh; padding: 10px 12px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #cosmic-panel { animation: cosmic-in .18s ease-out; }
+  @keyframes cosmic-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+
+#cosmic-panel .cosmic-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+#cosmic-panel .cosmic-brand { font-weight: 800; font-size: 12.5px; letter-spacing: .02em; color: #16a34a; }
+#cosmic-panel .cosmic-x {
+  border: 0; background: none; cursor: pointer; font-size: 20px; line-height: 1;
+  color: #6b7280; padding: 4px 6px; margin: -4px -6px -4px 0; border-radius: 6px;
+}
+#cosmic-panel .cosmic-x:hover { background: #f3f4f6; color: #111827; }
+
+#cosmic-panel .cosmic-name { margin: 0 0 8px; font-size: 12.5px; color: #6b7280; }
+#cosmic-panel .cosmic-list { list-style: none; margin: 0; padding: 0; }
+#cosmic-panel .cosmic-list li + li { margin-top: 8px; }
+
+#cosmic-panel .cosmic-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  text-decoration: none; color: inherit; min-height: 32px;
+}
+#cosmic-panel .cosmic-row:hover .cosmic-shop { text-decoration: underline; }
+#cosmic-panel .cosmic-shop { font-weight: 600; min-width: 0; }
+#cosmic-panel .cosmic-price { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The age is never optional and never small enough to miss — an unlabelled price from six days
+   ago is the failure this whole panel exists to avoid. */
+#cosmic-panel .cosmic-when { font-size: 11.5px; color: #6b7280; margin-top: 1px; }
+
+#cosmic-panel .cosmic-none { margin: 4px 0 2px; font-weight: 600; }
+#cosmic-panel .cosmic-sub { margin: 8px 0 0; font-size: 11.5px; color: #6b7280; }
+
+@media (prefers-color-scheme: dark) {
+  #cosmic-panel { background: #111827; color: #f3f4f6; border-color: #374151; }
+  #cosmic-panel .cosmic-x:hover { background: #1f2937; color: #f9fafb; }
+  #cosmic-panel .cosmic-name,
+  #cosmic-panel .cosmic-when,
+  #cosmic-panel .cosmic-sub { color: #9ca3af; }
+}

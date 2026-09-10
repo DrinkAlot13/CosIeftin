@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "CoșMic — compară prețul",
+  "version": "0.1.0",
+  "default_locale": "ro",
+  "description": "Vezi cât costă același produs la alte magazine, direct pe pagina magazinului.",
+  "icons": { "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+
+  "permissions": ["storage"],
+
+  "host_permissions": [
+    "https://www.auchan.ro/*",
+    "https://carrefour.ro/*",
+    "https://www.carrefour.ro/*",
+    "https://comenzi.dcneu.ro/*",
+    "https://www.farmaciatei.ro/*",
+    "https://finestore.ro/*",
+    "https://www.freshful.ro/*",
+    "https://lemanoir.ro/*",
+    "https://www.mega-image.ro/*",
+    "https://www.metro.ro/*",
+    "https://www.penny.ro/*",
+    "https://www.selgros.ro/*",
+    "https://www.sezamo.ro/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.auchan.ro/*",
+        "https://carrefour.ro/*",
+        "https://www.carrefour.ro/*",
+        "https://comenzi.dcneu.ro/*",
+        "https://www.farmaciatei.ro/*",
+        "https://finestore.ro/*",
+        "https://www.freshful.ro/*",
+        "https://lemanoir.ro/*",
+        "https://www.mega-image.ro/*",
+        "https://www.metro.ro/*",
+        "https://www.penny.ro/*",
+        "https://www.selgros.ro/*",
+        "https://www.sezamo.ro/*"
+      ],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "browser_specific_settings": {
+    "gecko": { "id": "cosmic@cosmic.ro", "strict_min_version": "115.0" }
+  }
+}

@@ -189,7 +189,8 @@
     "gen:openapi": "tsx scripts/gen-openapi.ts",
     "probe:api": "tsx scripts/probe-api.ts",
     "probe:pwa": "tsx scripts/probe-pwa.ts",
-    "gen:icons": "tsx scripts/gen-icons.ts"
+    "gen:icons": "tsx scripts/gen-icons.ts",
+    "probe:extension-ids": "tsx scripts/probe-extension-ids.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
