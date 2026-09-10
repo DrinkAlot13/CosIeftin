@@ -216,6 +216,28 @@ outbound page loads across two merchant sites; writes nothing. **No scraper, mat
 threshold or merchant-list change** — the Carrefour brand defect it documents is deliberately left
 unfixed until after the soak. Findings in `docs/SEZAMO-BRAND.md` and `docs/CARREFOUR-BRAND.md`.
 
+**2026-09-10 — CARREFOUR BRAND VOIDED. This CHANGES WHAT THE NIGHTLY WRITES, and is the only
+lasting data change this session.** Two parts:
+
+1. `scrape-carrefour.ts` now passes `brand: ""` instead of `data-brand`. **Not a behaviour change
+   to how the page is read** — `data-brand` is still captured in `rawSourceBlob` — it is declining
+   to WRITE a field measured at 53.8% agreement against merchants at 98.8% and 97.7%. From this
+   date Carrefour contributes no brands. A reader comparing Carrefour brand coverage before and
+   after this date should expect it to fall, and that is the intent.
+2. `null:carrefour-brands --write` voided **1,266** existing brands: those equal to Carrefour's
+   listing value AND absent from Carrefour's own product name AND uncorroborated by another
+   merchant's payload. 625 were SPARED by those guards. Previous values are stored in
+   `ProductAttribute("brand:pre-carrefour-void")` and `--restore --write` reverses it exactly.
+
+Nothing else touched: no matcher rule, no threshold, no coverage figure, no merchant-list entry,
+no price, offer or match row. `audit:fanout` (worst group 7, grocery p95 2) and the golden set
+(95.0%, 1 false match) are UNCHANGED — and neither could move, since the golden set carries
+literal names and fan-out reads existing offer→product assignments rather than recomputing them.
+The measurable effect is latent and estimated by simulation: of 200 sampled voided products, 114
+had a plausible partner in the catalog, **0 would match a second merchant with the old brand and
+18 without**, so roughly 114 of the 1,266 become newly matchable at the next re-match. Details in
+`docs/CARREFOUR-BRAND.md`.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any

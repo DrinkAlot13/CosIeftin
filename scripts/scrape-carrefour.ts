@@ -123,7 +123,24 @@ async function main() {
           const key = String(r.id ?? r.name);
           if (!r.name || seen.has(key)) continue;
           seen.add(key);
-          pool.push({ name: r.name, brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : null, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: pickImageUrl(r.imgAttrs, BASE), rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: cat });
+          // ── `brand: ""` AND NOT `r.brand`. DELIBERATE. See docs/CARREFOUR-BRAND.md.
+          //
+          // `data-brand` is not this product's brand. Measured against brands supplied
+          // independently by other merchants it agrees 53.8% of the time, where Mega Image is at
+          // 98.8% and Freshful at 97.7%. The tell is that one value lands on several DIFFERENT
+          // products of the same category while Carrefour's own product name carries the right
+          // one: "Dorna" on Aqua Carpatica, Borsec AND Perla Harghitei; "San Bernardo" on Zizin
+          // and Aquatique; "Carrefour Bio" on Prodlacta. That is a promoted-brand slot inside the
+          // card, not a per-product attribute — the `querySelector` scoping is correct.
+          //
+          // A wrong brand is worse than none: `Product.brand` feeds `decide()`'s brand gate, and
+          // a wrong one does not lose a comparison, it manufactures one (CLAUDE.md, Zarea).
+          //
+          // The real brand IS published, in the DETAIL page's JSON-LD `brand.name`, at 100% of 25
+          // sampled pages. `backfill-carrefour-brands.ts` harvests it; this line stays "" until
+          // that has run, because a listing scrape must not overwrite a detail-page truth with a
+          // measured falsehood. `r.brand` is still kept in `rawSourceBlob` for analysis.
+          pool.push({ name: r.name, brand: "", price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : null, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: pickImageUrl(r.imgAttrs, BASE), rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: cat });
           pageAdded++;
           catAdded++;
         }

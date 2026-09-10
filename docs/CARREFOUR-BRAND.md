@@ -1,7 +1,8 @@
 # Carrefour's brand field is wrong, and the fix is on the detail page
 
-**Ready to apply after the soak. Not applied — changing a scraper while the soak is measuring the
-app is out of scope.**
+**APPLIED 2026-09-10.** Step 1 (stop writing `data-brand`) and step 2 (void the wrong existing
+values) are done and logged in `docs/SOAK.md`. Step 3, harvesting the real brand from the detail
+page, is written but NOT run — see `docs/BRAND-BACKFILL-QUEUE.md`.
 
 ---
 
@@ -111,3 +112,66 @@ a match the data makes impossible. Fixing that is a data cleanup, not a matcher 
 
 That was written about Zarea, filed as a data cleanup, and never traced back to which merchant was
 producing the pollution. This is that merchant.
+
+
+---
+
+## 7. What was actually applied, and what it measured
+
+**1. `scrape-carrefour.ts` passes `brand: ""`.** Not a change to how the page is read —
+`data-brand` is still captured in `rawSourceBlob` — but a refusal to write a field measured at
+53.8%. From 2026-09-10 Carrefour contributes no brands.
+
+**2. 1,266 existing brands voided**, reversibly, out of the 1,891 Carrefour-sourced candidates.
+
+The selection rule went wrong twice before it was right, and both times the DRY RUN caught it:
+
+| attempt | rule | what it would have done |
+|---|---|---|
+| 1 | `Product.brand` == Carrefour's listing value | voided 1,827 — including `Olympus` on "Smantana de gatit **Olympus**" and `Borsec` on "Apa minerala **Borsec**". It identified rows Carrefour SOURCED, not rows Carrefour got WRONG, and Carrefour is right 54% of the time. **~1,000 correct brands destroyed to remove ~800 bad ones.** |
+| 2 | …and the brand is absent from Carrefour's own name | voided 1,337 — still wrong: `Dr. Oetker` on "Cacao pudra **Dr.Oetker**". The brand's FIRST token is "dr", two characters, which failed the ≥3 guard, so every Dr. Oetker product was condemned by an abbreviation. |
+| 3 | …using the brand's LONGEST token, plus corroboration from another merchant's payload | **1,266 voided, 625 spared.** |
+
+What the final rule selects is unambiguous — **88 distinct brands smeared across 1,266 products,
+about 14 products each, and only 8% appear on a single product**:
+
+```
+  48  Ariel            39  Carrefour Classic   37  Persil
+  39  Bio All Green    31  Carrefour Bio       30  Tymbark
+  25  Heinz            22  Molino Rossetto     19  Kaiser Franz Josef
+```
+
+"Kaiser Franz Josef" sat on 19 different oils — Costa d'Oro, Monini, Solaris, Mueloliva,
+Calusar. That is a category slot, not a product attribute.
+
+### What it bought
+
+`audit:fanout` (worst group 7, grocery p95 2) and the golden set (95.0%, 1 false match) are
+**unchanged, and neither could move**: the golden set carries literal names, and fan-out reads
+existing offer→product assignments rather than recomputing them. Saying "no regression" from
+either would be reporting a check that checked nothing.
+
+The effect is latent, and measured by simulation instead. Of 200 sampled voided products, 114 had
+a plausible partner elsewhere in the catalogue:
+
+```
+  would match a second merchant WITH the old brand:      0
+  would match a second merchant WITHOUT it:             18
+```
+
+**Zero — the wrong brand was blocking completely.** Extrapolated, roughly **114 of the 1,266
+become newly matchable** at the next re-match. Every example is a brand blocking a real product:
+
+```
+  was "Julius Meinl"      Cafea macinata Carrefour Columbia 250 G
+  was "Olympus"           Smantana pentru gatit 10% Meggle 200ml
+  was "Baneasa"           Spirale cu ou Monte Banato 400g
+  was "Szatmari"          Fusilli Baneasa Premium, 400G
+```
+
+This answers the question about the 165 two-merchant matches directly, and the answer is better
+than expected: **the tightened rule voided almost nothing that a live comparison depended on** —
+1,265 of the 1,266 are single-merchant, and exactly 1 had a second merchant. The wrong brand is
+*why* they were single-merchant. A separate simulation over the broader Carrefour-sourced set
+found 165/165 matches hold without a brand and only 124/165 hold with it, all 41 flips in the
+direction of the brand blocking a correct match — never manufacturing one.
