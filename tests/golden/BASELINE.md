@@ -194,3 +194,61 @@ that CLAUDE.md had stated for several sessions and that kept being broken anyway
 this on its first run, in a file nobody was looking at.
 
 The remaining false match is `ECO Avocado 1 buc` against `ECO Avocado  90 Gr+ 1 buc`.
+
+---
+
+## 2026-09-10 — 97.8% → 95.0%, and the number had gone stale unnoticed
+
+**The matcher did not regress. The set got harder, and nothing recorded it.**
+
+```
+PASS RATE: 95.0%  (228/240)     was 97.8% (218/223)
+false MATCHES: 1                was 1      ← unchanged, and it is the SAME pair
+false misses:  11               was 4
+```
+
+17 pairs were added across two commits, both of which added them *before* the fix they were
+meant to grade, which is the right way to do it:
+
+| commit | branded-grocery-variant | cross-store | pack-size |
+|---|---|---|---|
+| `609225c` descriptor exemption | +2 | +7 | +1 |
+| `c149ac7` head noun / flavour folding | +4 | +3 | — |
+
+All 6 new `branded-grocery-variant` pairs pass. The 10 new `cross-store` pairs are where the
+7 extra misses come from — `cross-store` moved 85.7% → 71.1% purely by absorbing them. Every
+one is a private-label-vs-branded or abbreviation case (`Salam de Sibiu Agricola` ~ `Salam de
+Sibiu, feliat`; `Nurofen 200 mg, 24 comprimate` ~ `Nurofen 200mg 24 comprimate filmate`), and
+they are targets rather than defects.
+
+**The one false match is unchanged**: `ECO Avocado 1 buc` ~ `ECO Avocado  90 Gr+ 1 buc`, the
+size-grade-as-free-text case named in the Phase 3 entry above. The dangerous direction has not
+moved at all.
+
+### The actual finding: the floor was enforced by nothing
+
+CLAUDE.md said *"must not lower the pass rate recorded in `tests/golden/BASELINE.md` (currently
+97.8%, 1 false match)"*. `matching.test.ts` opened with *"This file does NOT assert a fixed pass
+rate"*, and asserted only the three named regressions and the size guard. So the rate moved by
+2.8 points, this file went stale, CLAUDE.md went stale, and **every run stayed green**. That is
+the same shape as `record-refusal` — a rule stated in this repo from session one that held for
+one merchant of twelve, because a rule enforced by documentation is enforced by nothing.
+
+### What now enforces it
+
+`tests/golden/baseline.json`, written only by `npm run golden:baseline -- --write`, and three
+assertions in `matching.test.ts`:
+
+1. **false matches may never rise above the recorded number** — asserted separately, because a
+   fall in misses may not pay for a rise in matches;
+2. **no pair that passed at the baseline may start failing** — recorded as a SET of pair keys,
+   not as a rate. A rate cannot tell "the matcher got worse" from "the set got harder"; the set
+   can, and adding a hard pair can no longer mask an old one breaking;
+3. **a baseline naming a pair that no longer exists is a failure**, so the record cannot decay
+   into the thing it guards against — the same rule `check:concepts` applies to its register.
+
+All three were proved red with decoys before being committed: removing a known failure from the
+baseline, adding an orphan key, and lowering the false-match ceiling each produce exactly one
+failing test.
+
+New pairs are still free to fail. That is the point of writing them before the fix.

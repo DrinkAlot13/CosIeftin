@@ -178,6 +178,13 @@ the database and does not touch the matcher, thresholds, coverage or the merchan
 imports `AUTO_MATCH_THRESHOLD` rather than restating it, per the oracle rule. A soak reader
 seeing outbound traffic to `openfoodfacts.org` on this date should attribute it here.
 
+**2026-09-10 — the golden-set baseline lock.** Test-only. `tests/golden/baseline.json` plus
+three assertions in `matching.test.ts`, and a shared `tests/golden/evaluate.ts` so the test and
+the new `golden:baseline` generator cannot compute different verdicts. **The matcher, the
+thresholds, the coverage and the merchant list are untouched** — no scorer, no constant and no
+pair label was changed, and the golden set's numbers are identical before and after (95.0%,
+228/240, 1 false match). It adds a check that was missing; it changes nothing the soak measures.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any

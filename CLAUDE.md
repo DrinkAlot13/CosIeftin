@@ -104,10 +104,21 @@ So `lib/price/parsePrice.ts` in these rules means `src/lib/price/parsePrice.ts`.
   `paprica`/`paprika`. Treating those as distinct rejected identical products.
 - Human decisions in `MatchOverride` (CONFIRMED / REJECTED) always win and must
   survive a full catalog rebuild.
-- Any change to the matcher must pass `tests/golden/matching.test.ts` before merge, and
-  must not lower the pass rate recorded in `tests/golden/BASELINE.md` (currently **97.8%**,
-  1 false match). A false MATCH publishes one product's price on another; a false miss
-  only costs a comparison. They are not equally bad.
+- Any change to the matcher must pass `tests/golden/matching.test.ts` before merge. A false
+  MATCH publishes one product's price on another; a false miss only costs a comparison. They
+  are not equally bad, so they are asserted separately.
+
+  **This sentence used to end "must not lower the pass rate recorded in BASELINE.md (currently
+  97.8%, 1 false match)", and nothing enforced it.** The test file's own header said "This file
+  does NOT assert a fixed pass rate". 17 harder pairs were then added across two commits, the
+  rate moved to 95.0%, both this file and BASELINE.md went stale, and every run stayed green.
+  Do not restate the number here again — that is what went wrong.
+
+  The floor now lives in `tests/golden/baseline.json` and is asserted by the test: false
+  matches may not rise, and **no pair that passed at the baseline may start failing**. It
+  records WHICH pairs fail rather than how many, because a rate cannot distinguish "the matcher
+  got worse" from "the set got harder". Move it deliberately with
+  `npm run golden:baseline -- --write`, and say why in `BASELINE.md` in the same commit.
 
 ## Units
 - Canonical units: `G`, `ML`, `BUC`. Everything normalizes to these.

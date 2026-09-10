@@ -1,47 +1,31 @@
 // GOLDEN SET RUNNER — the number that decides whether a matcher change is safe.
 //
-// This file does NOT assert a fixed pass rate. It asserts the two known production
-// regressions never come back, and it PRINTS the full breakdown by section and category
-// so a before/after comparison is possible across a matcher change.
+// It asserts THREE things:
+//   1. the two known production regressions never come back (hard, named, unconditional);
+//   2. FALSE MATCHES never rise above the recorded baseline — the direction that publishes
+//      one product's price on another;
+//   3. NO PAIR THAT PASSED AT THE BASELINE STARTS FAILING.
 //
-// Baseline is recorded in tests/golden/BASELINE.md. Update it deliberately, with the
-// commit that moved the number.
+// (3) is recorded as a SET of pair keys rather than an aggregate rate, and that is deliberate.
+// CLAUDE.md said "must not lower the pass rate recorded in BASELINE.md (currently 97.8%)" and
+// nothing enforced it, so when 17 harder pairs were added across two commits the rate moved to
+// 95.0% and the record went stale in silence — exactly the failure this project has catalogued
+// three times over. A rate cannot distinguish "the matcher got worse" from "the set got
+// harder"; a set of pair keys can, and it cannot go stale without the build going red.
+//
+// New pairs are ALLOWED to fail. They are targets, and several were deliberately written
+// before the fix they grade. What is not allowed is an old pair quietly joining them.
+//
+// To move the baseline: `npm run golden:baseline -- --write`, and say why in BASELINE.md.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "../run";
-import { PAIRS, type Pair } from "./pairs";
-import { matchDecision } from "../../src/lib/scrape-util";
+import { PAIRS } from "./pairs";
+import { RESULTS, tally, groupBy, pairKey, type Row, type GoldenBaseline } from "./evaluate";
 
-type Row = { pair: Pair; expected: boolean; actual: boolean; pass: boolean; score: number; reason: string };
-
-const RESULTS: Row[] = PAIRS.map((p) => {
-  const d = matchDecision(
-    { name: p.a.name, brand: p.a.brand, unit: p.a.unit, unitSize: p.a.unitSize, ean: p.a.ean },
-    { name: p.b.name, brand: p.b.brand, unit: p.b.unit, unitSize: p.b.unitSize, ean: p.b.ean },
-    p.section,
-  );
-  const expected = p.label === "SHOULD_MATCH";
-  return { pair: p, expected, actual: d.ok, pass: d.ok === expected, score: d.score, reason: d.reason };
-});
-
-function tally(rows: Row[]) {
-  const total = rows.length;
-  const passed = rows.filter((r) => r.pass).length;
-  // a FALSE MATCH (matched when it shouldn't) is the dangerous direction — it publishes
-  // one product's price on another. A missed match only costs a comparison.
-  const falseMatch = rows.filter((r) => !r.expected && r.actual).length;
-  const falseMiss = rows.filter((r) => r.expected && !r.actual).length;
-  return { total, passed, rate: total ? passed / total : 0, falseMatch, falseMiss };
-}
-
-function groupBy<K extends string>(rows: Row[], key: (r: Row) => K): Map<K, Row[]> {
-  const m = new Map<K, Row[]>();
-  for (const r of rows) {
-    const k = key(r);
-    const a = m.get(k) ?? [];
-    a.push(r);
-    m.set(k, a);
-  }
-  return m;
-}
+const BASELINE = JSON.parse(
+  readFileSync(join(process.cwd(), "tests", "golden", "baseline.json"), "utf8"),
+) as GoldenBaseline;
 
 // ── print the report once, at import time, so it shows up in the test output ──────
 const overall = tally(RESULTS);
@@ -136,6 +120,57 @@ describe("golden set — the two known production regressions", () => {
       Math.abs(r.pair.a.unitSize - r.pair.b.unitSize) > r.pair.a.unitSize * 0.06 + 1e-9));
     if (bad.length) throw new Error(`size guard leaked on: ${bad.map((b) => `${b.pair.a.name} ~ ${b.pair.b.name}`).join(" | ")}`);
     expect(bad.length).toBe(0);
+  });
+});
+
+// ── THE LOCK. Until now this was a sentence in CLAUDE.md, and a sentence enforces nothing.
+describe("golden set — the baseline lock", () => {
+  // The dangerous direction, asserted on its own. A false match publishes one product's price
+  // on another; a false miss only costs a comparison. They are not interchangeable, so a fall
+  // in one may never pay for a rise in the other.
+  it("false matches never rise above the baseline", () => {
+    if (overall.falseMatch > BASELINE.falseMatch) {
+      const names = RESULTS.filter((r) => !r.pass && !r.expected)
+        .map((r) => `${r.pair.a.name} ~ ${r.pair.b.name}`)
+        .join("\n    ");
+      throw new Error(
+        `false matches ${BASELINE.falseMatch} → ${overall.falseMatch} (recorded ${BASELINE.recordedAt}):\n    ${names}`,
+      );
+    }
+    expect(overall.falseMatch <= BASELINE.falseMatch).toBeTruthy();
+  });
+
+  // The regression test proper. Immune to the denominator: adding a hard pair cannot mask an
+  // old pair starting to fail, because the baseline names the failures instead of counting them.
+  it("no pair that passed at the baseline now fails", () => {
+    const known = new Set(BASELINE.knownFailures);
+    const regressed = RESULTS.filter((r) => !r.pass && !known.has(pairKey(r.pair)));
+    if (regressed.length) {
+      const detail = regressed
+        .map((r) => `[${r.pair.category}] ${r.expected ? "MISSED" : "FALSE MATCH"} score=${r.score.toFixed(2)} ${r.reason}\n      ${r.pair.a.name}\n      ${r.pair.b.name}`)
+        .join("\n    ");
+      throw new Error(
+        `${regressed.length} pair(s) passed at the ${BASELINE.recordedAt} baseline and fail now.\n` +
+          `    If these are NEW pairs, record them: npm run golden:baseline -- --write\n` +
+          `    If they are not, this is a matcher regression.\n    ${detail}`,
+      );
+    }
+    expect(regressed.length).toBe(0);
+  });
+
+  // A baseline listing a pair that no longer exists is a baseline nobody has re-recorded, and
+  // it would silently excuse a real regression on a renamed pair. Same rule as the concepts
+  // register: a stale record is a failure, not a pass.
+  it("the baseline names no pair that has since been removed or renamed", () => {
+    const live = new Set(PAIRS.map(pairKey));
+    const orphans = BASELINE.knownFailures.filter((k) => !live.has(k));
+    if (orphans.length) {
+      throw new Error(
+        `baseline.json lists ${orphans.length} pair(s) that no longer exist. Re-record it:\n    ` +
+          orphans.join("\n    "),
+      );
+    }
+    expect(orphans.length).toBe(0);
   });
 });
 

@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-09-10",
+  "total": 240,
+  "passed": 228,
+  "rate": 0.95,
+  "falseMatch": 1,
+  "falseMiss": 11,
+  "knownFailures": [
+    "alcohol|cross-store|Vin Explicit Merlot Doc Sec 14%, 0.75L|Vin rosu Explicit Merlot DOC sec 0,75 l",
+    "alcohol|cross-store|Vin rose Zarea, Sange De Taur, Dulce, 0.75L|Vin rose Zarea Sange de Taur dulce 0,75 l",
+    "alcohol|cross-store|Zarea Ice Alb Vin Spumant, Demisec 0.75L|Vin spumant Zarea Ice Alb demisec 0,75 l",
+    "farmacie|cross-store|Nurofen 200 mg, 24 comprimate|Nurofen 200mg 24 comprimate filmate",
+    "grocery|cross-store|BUCEGI Carne Porc 300 g|Conserva carne de porc 300g",
+    "grocery|cross-store|Chio Hula Hoops Inele Cascaval 70 g|Pufuleti crocanti Hula Hoops cu aroma de cascaval 70 g",
+    "grocery|cross-store|Iaurt cremos Covalact, 900 g|Iaurt cremos 5% grăsime, 900g",
+    "grocery|cross-store|Lapte de consum integral Napolact, 3.5% grasime, 1 l|Lapte UHT Napolact 3.5% grasime 1L",
+    "grocery|cross-store|Lapte de vaca integral Laptaria cu caimac, 3.8 - 4.1% grasime, 1 l|Lapte de vaca 3.8-4.1% grasime 1L",
+    "grocery|cross-store|Salam de Sibiu Agricola, 120 g|Salam de Sibiu, feliat 120g",
+    "grocery|cross-store|Sunca de Carpati Reinert, 100 g|Suncă de Carpați feliată 100g",
+    "grocery|produce-prefix|ECO Avocado 1 buc|ECO Avocado  90 Gr+ 1 buc"
+  ]
+}
