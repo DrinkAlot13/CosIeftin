@@ -185,6 +185,13 @@ thresholds, the coverage and the merchant list are untouched** — no scorer, no
 pair label was changed, and the golden set's numbers are identical before and after (95.0%,
 228/240, 1 false match). It adds a check that was missing; it changes nothing the soak measures.
 
+**2026-09-10 — `probe:ean` rewritten (EAN ceiling measurement).** Read-only. It fetches product
+detail pages with Playwright and writes nothing; the rewrite adds checksum validation via
+`parseEan`, samples only products with no EAN, honours robots.txt and reports cost. **No matcher
+rule, threshold or merchant-list change.** It issued 45 outbound page loads across 12 merchant
+sites on this date — a soak reader seeing that traffic should attribute it here. Findings in
+`docs/EAN-COVERAGE.md`.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
