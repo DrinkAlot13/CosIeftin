@@ -192,6 +192,13 @@ rule, threshold or merchant-list change.** It issued 45 outbound page loads acro
 sites on this date — a soak reader seeing that traffic should attribute it here. Findings in
 `docs/EAN-COVERAGE.md`.
 
+**2026-09-10 — `propose:class-opportunities` (Phase 1a of the comparability plan).** Read-only
+and additive: one new script, one `package.json` entry. It runs Prisma reads only — **no write,
+no assignment, no class created** — and touches no matcher rule, threshold, coverage figure or
+merchant-list entry. It imports `headNoun` and `normalizeRo` rather than restating either. Output
+is a reading aid in `reports/` (gitignored); findings in `docs/PHASE-1A-OPPORTUNITIES.md`. The
+soak's measured inputs are unaffected.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
