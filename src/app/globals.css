@@ -763,3 +763,41 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
 .idx-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2px 24px; }
 .idx-list li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .idx-list li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── HOMEPAGE BASKET (Phase 4). Two columns on desktop, stacked on a phone.
+   `min-width: 0` on both tracks: CLAUDE.md records this exact bug twice, in flex and in grid,
+   and the right-hand column holds a table whose content is wider than its track. */
+.home-basket {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  max-width: 900px;
+  margin: 22px auto 0;
+  text-align: left;
+}
+@media (max-width: 760px) { .home-basket { grid-template-columns: minmax(0, 1fr); } }
+.home-basket > * { min-width: 0; }
+
+.hb-items, .hb-answer {
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.hb-items-head { font-weight: 600; margin-bottom: 8px; }
+.hb-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.hb-list li { padding: 3px 0; }
+.hb-list label { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; font-size: 14.5px; }
+.hb-list input { margin-top: 3px; flex: none; }
+
+.hb-head { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.hb-big { font-size: 30px; font-weight: 800; line-height: 1.15; margin: 2px 0 2px; }
+.hb-at { font-size: 18px; font-weight: 600; }
+.hb-second { font-size: 15px; margin-bottom: 6px; }
+.hb-note { font-size: 12.5px; }
+.hb-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+.hb-table td { padding: 4px 0; border-top: 1px solid var(--border, #eee); }
+.hb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.hb-table tr.best td { font-weight: 700; }
+.hb-incomplete { margin-top: 10px; font-size: 13px; }
+.hb-incomplete ul { margin: 6px 0 0; padding-left: 18px; }

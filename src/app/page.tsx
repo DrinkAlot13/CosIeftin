@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/ProductCard";
+import { HomeBasket, type Staple } from "@/components/HomeBasket";
 import { countStats, getHomeSections, getBiggestSpreads, getBasketStaples } from "@/lib/queries";
 import { getCategoryNav } from "@/lib/category-nav";
 import { UNPLACED_DEPARTMENT_SLUG } from "@/lib/category/tree";
@@ -20,6 +21,16 @@ export default async function HomePage() {
   // The staples worth showing first: priced, and comparable. The rest of the forty stay on
   // /index-cosmic, where the whole basket including its gaps is the point.
   const shownStaples = staples.filter((s) => s.lowestBani !== null && s.shopCount >= 2).slice(0, 12);
+  // ── THE PRE-FILLED BASKET, DERIVED RATHER THAN HARDCODED.
+  //
+  // Eight lines from the same forty-item index basket, chosen by how many shops actually stock
+  // them today. A hardcoded slug list would rot the first time one of those products went out of
+  // stock everywhere — and a homepage whose basket cannot be priced is worse than no basket.
+  const basketStaples: Staple[] = staples
+    .filter((s) => s.lowestBani !== null && s.shopCount >= 2)
+    .sort((a, b) => b.shopCount - a.shopCount)
+    .slice(0, 8)
+    .map((s) => ({ key: s.key, label: s.label, slug: s.slug, shopCount: s.shopCount }));
   // EIGHT TILES, CHOSEN BY LIVE PRODUCT COUNT — not sixty in alphabetical-by-id order.
   //
   // This rendered every grocery category, which became 93 the moment the two-level tree was
@@ -41,16 +52,30 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* ── THE HOMEPAGE LEADS WITH AN ANSWER, NOT A CATALOG.
+          Nobody wants to browse 29,000 products, and at basket level comparability barely
+          matters — the optimizer handles missing lines, so a real total is a real answer even
+          when half the items sit at one shop. The basket is pre-filled and editable; the
+          headline is what it costs and where. Search stays directly above it, because someone
+          who has a product in mind should not have to scroll past a basket to type it. */}
       <section className="hero">
         <div className="container">
-          <h1>Cumpără mai ieftin. Compară prețurile la alimente.</h1>
-          <p>Vezi unde e cel mai ieftin fiecare produs și fă-ți lista de cumpărături inteligentă.</p>
+          <h1>Cât costă coșul tău? Vezi unde e cel mai ieftin.</h1>
           <div className="hero-search">
             <form action="/search" method="get" role="search">
               <input type="search" name="q" placeholder="Caută: lapte, pâine, ouă, ulei…" aria-label="Caută produse" autoComplete="off" />
               <button type="submit">Caută</button>
             </form>
           </div>
+
+          <HomeBasket staples={basketStaples} />
+
+          {/* ── COMPARABILITY IS NO LONGER THE NUMBER ON THIS PAGE.
+              "3.462 de comparat între magazine" was the headline claim and it is the site's
+              weakest number — it says what we cannot do more loudly than what we can. The basket
+              above answers a question; these are context, moved below it and shrunk. The strict
+              count still exists on /metodologie and /admin/stats, where it is the only figure
+              that can tell us whether the catalog improved or the definition loosened. */}
           <div className="hero-stats">
             <span><b>{stats.products.toLocaleString("ro-RO")}</b> produse</span>
             <span><b>{stats.offers.toLocaleString("ro-RO")}</b> prețuri</span>

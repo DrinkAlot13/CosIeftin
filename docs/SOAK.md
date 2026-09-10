@@ -290,6 +290,15 @@ comparability is unaffected and still reported on its own (`audit:comparability`
 `audit:platform` reports the platform-shown figure separately (3,462). New read-only scripts:
 `audit:platform`, `shots`.
 
+**2026-09-10 — PHASE 4: basket-first homepage. USER-FACING CHANGE, no data change.**
+The hero now renders `<HomeBasket>` — eight staples pre-filled (derived from `INDEX_BASKET` by
+live shop coverage, not a hardcoded slug list), editable, calling `/api/basket` and answering
+"coșul tău costă X la Y". Search stays directly above it; the category grid and the stats strip
+move below. Comparability is no longer the page's headline claim; the strict count is untouched
+and still on /metodologie and /admin/stats. **No query, scraper, matcher rule, threshold or
+merchant-list change** — the basket calls the same endpoint /lista already used. `probe:overflow`
+at 390px: no element past the viewport.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any
