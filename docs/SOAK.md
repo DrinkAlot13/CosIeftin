@@ -199,6 +199,18 @@ merchant-list entry. It imports `headNoun` and `normalizeRo` rather than restati
 is a reading aid in `reports/` (gitignored); findings in `docs/PHASE-1A-OPPORTUNITIES.md`. The
 soak's measured inputs are unaffected.
 
+**2026-09-10 — the brand backfill: WRITTEN, THEN ROLLED BACK. The only data write this session.**
+`backfill:brands --write` set `Product.brand` on 414 grocery products and marked each with
+`ProductAttribute(key="brand", source="merchant-feed")`. `audit:brands` — which imports only
+PrismaClient — found 75.8% of them named a brand appearing in no name we hold, so
+`backfill:brands --clear --write` removed exactly those 414 and their marks. **Verified back at
+baseline: 21,262 branded products (66.4%), 0 marks remaining, and `audit:fanout` reports the same
+worst group 7 / grocery p95 2 as before.** No matcher rule, threshold or merchant-list change; no
+offer, price or match row touched. `audit:brand-gap`, `backfill:brands` and `audit:brands` are new
+and read-only apart from the reverted write. Findings in `docs/BRAND-GAP.md` — including that
+Carrefour's brand field is wrong ~46% of the time, which is a live defect left unfixed because
+fixing a scraper mid-soak is out of scope.
+
 ### Bug fixes made during the soak
 
 Logged here per the rule above. Neither touched the matcher, thresholds, coverage or any

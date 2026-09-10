@@ -76,7 +76,15 @@ export function catalogVocabulary(catalog: Searchable[]): Map<string, number> {
   return freq;
 }
 
-function headNounFrequency(catalog: Searchable[]): Map<string, number> {
+/**
+ * How often each leading token heads a product name.
+ *
+ * Exported so `audit:brand-gap` can build `catalogBrands` the same way search does — the brand
+ * vocabulary depends on this frequency map, and a second copy of it would be a restatement of
+ * exactly the kind CLAUDE.md catalogues. Returns a Map OF lead tokens; it is not an
+ * implementation of "the head noun" and `check:concepts` distinguishes the two by return type.
+ */
+export function headNounFrequency(catalog: Searchable[]): Map<string, number> {
   const freq = new Map<string, number>();
   for (const p of catalog) {
     const h = leadTokenRo(p.name);

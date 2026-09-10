@@ -159,6 +159,8 @@
     "audit:brand-in-name": "tsx scripts/audit-brand-in-name.ts",
     "audit:descriptor-gap": "tsx scripts/audit-descriptor-gap.ts",
     "audit:brand-gap": "tsx scripts/audit-brand-gap.ts",
+    "backfill:brands": "tsx scripts/backfill-brands.ts",
+    "audit:brands": "tsx scripts/audit-brands.ts",
     "audit:candidate-reach": "tsx scripts/audit-candidate-reach.ts",
     "audit:brand-substring": "tsx scripts/audit-brand-substring.ts",
     "verify:push": "tsx scripts/verify-push.ts",
@@ -193,7 +195,10 @@
     "probe:extension-ids": "tsx scripts/probe-extension-ids.ts",
     "audit:off-hitrate": "tsx scripts/audit-off-hitrate.ts",
     "golden:baseline": "tsx scripts/golden-baseline.ts",
-    "propose:class-opportunities": "tsx scripts/propose-class-opportunities.ts"
+    "propose:class-opportunities": "tsx scripts/propose-class-opportunities.ts",
+    "audit:brand-gap": "tsx scripts/audit-brand-gap.ts",
+    "backfill:brands": "tsx scripts/backfill-brands.ts",
+    "audit:brands": "tsx scripts/audit-brands.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
