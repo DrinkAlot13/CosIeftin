@@ -396,6 +396,30 @@ measurement destroys it. Anything found goes to `docs/BACKLOG.md`, not into the 
   leaves. Data edits, not rules — watch for the `purcel de lapte` shape, where a word means
   something else in context, as `crema` and `matura` did.
 
+## The soak is closed — 2026-09-15, 14 of 14 nights, no gaps
+
+`npm run soak:report`: 14 nights recorded 2026-09-02 -> 2026-09-15, no gaps in that range, every
+withheld row accounted for on every night, no invariant silently disappeared without the report
+naming it GONE. Comparability rose from ~2,000 (week one) to a stable ~3,100-3,234 (week two);
+the 09-11 Carrefour-brand-void jump held rather than reverting. Full numbers in the session
+report, not restated here — this file logs what changed, not the daily reads.
+
+**One live finding from the final night, addressed the same day.** `audit:fanout` went red
+(worst group 12, target <= 8) because Kaufland's flyer week doubled its offers and three flyer
+lines carry no variant name: "Nivea Gel de duş 500 ml" matched 12 different Nivea gels, "Lay's
+Chipsuri 170 g" matched 7 flavours, "Dove Deodorant spray 150 ml" matched 6 scents. All three
+were currently live and winning "cel mai mic preț" on every page they touched. Withheld via
+`withhold-flyer-fanout.ts` (the reject mechanism — MatchOverride, not a matcher change): 25
+offers flagged, 25 reject rows written, one per (merchant, productId) since all offers in a
+group share one storeName and therefore one storeKey base — each row's key is suffixed with its
+productId to avoid the upserts collapsing onto each other. Verified: `audit:fanout` now reports
+Kaufland max=4, worst-anywhere=8 (target met), and the Nivea Power Refresh page now shows
+Metro's 16,52 rather than the withheld 14,99.
+
+The soak's own rule — do not touch the matcher, thresholds, coverage or merchant list — held
+throughout it. Everything below this line is dated after 2026-09-15 and is deliberately no
+longer bound by it; each entry says which invariant that section's own rule now answers to.
+
 ## Day seven, day fourteen
 
 Day seven: `npm run soak:report`, to confirm the reader works on seven nights rather than on
