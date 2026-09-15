@@ -416,6 +416,33 @@ productId to avoid the upserts collapsing onto each other. Verified: `audit:fano
 Kaufland max=4, worst-anywhere=8 (target met), and the Nivea Power Refresh page now shows
 Metro's 16,52 rather than the withheld 14,99.
 
+## 2026-09-16 — the flyer fan-out rule, properly. MATCHER CHANGE.
+
+Generalizes the manual 25-offer withhold from the soak's last night into a real rule in
+`matchPoolToCatalog` (scrape-util.ts, PASS 2): when one physical store item clears `decide()`
+for 2+ different catalog products, none are confirmed — all are recorded refused (PendingMatch,
+reason "flyer-fanout") rather than one being picked arbitrarily. Golden-set-graded first
+(`tests/flyer-fanout.test.ts`, real Nivea/Lay's/Dove names, written before the fix landed);
+existing 240-pair golden set is UNCHANGED (95.0%, false matches 1) because the veto lives in the
+multi-candidate arbitration layer, not in `decide()` itself, which the pairwise golden set grades.
+
+**Scoped to `storeType === "physical"` (today: Kaufland, Penny), not catalog-wide — measured,
+not assumed.** `audit:flyer-fanout` found that applying the veto to every merchant hits 3,298
+groups / 7,155 offers and would take grocery comparability from 11.4% to 5.8% (-1,852 products).
+A large share of that is not the flyer defect at all but PRE-EXISTING CATALOG DUPLICATE ROWS
+(same product, two ids — e.g. "Suc de mere Ana Are, 3 l" as both #1906 and #38584), which this
+rule cannot distinguish from genuine ambiguity: both look identical to `decide()`. Scoped to
+physical-only merchants (the two with no online catalog to check against, i.e. literally "a
+flyer offer" — a property of the merchant, not a hand-picked slug list), the real numbers are
+25 groups / 61 offers / comparability -32 (3,789 -> 3,757) — the "falls slightly" originally
+expected. The catalog-wide number is reported as a separate, real finding requiring its own
+decision, not folded into this one.
+
+One genuine root cause found along the way: pure numeric variant codes (L'Oreal hair-dye shade
+"613", Metro shrimp count "30/40") are swallowed by the SIZE_TOKEN regex as size noise, so
+`decide()` cannot see them as distinguishing content — a pre-existing defect this rule catches
+defensively (refuses rather than smears) but does not fix at the root. Flagged, not touched.
+
 The soak's own rule — do not touch the matcher, thresholds, coverage or merchant list — held
 throughout it. Everything below this line is dated after 2026-09-15 and is deliberately no
 longer bound by it; each entry says which invariant that section's own rule now answers to.

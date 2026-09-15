@@ -692,6 +692,31 @@ export function matchDecision(cat: CatalogLite, store: StoreLite, section = "gro
   );
 }
 
+export type FanoutCandidate = CatalogLite & { productId: number };
+export type FanoutResult = { confirmed: number[]; refusedFanout: boolean };
+
+/**
+ * THE FLYER FAN-OUT RULE, as a test-friendly, real-pipeline entry point — the same shape as
+ * `matchDecision` above, but arbitrating one store item against every candidate at once instead
+ * of grading one pairing in isolation. This is what `matchPoolToCatalog`'s PHASE 1/2 loop calls
+ * internally (there, working from already-computed `decide()` results rather than recomputing
+ * them, for a single pool pass); this wrapper recomputes them from raw names so a real name can
+ * be graded end to end, the same way `matchDecision` lets a single pairing be graded end to end.
+ *
+ * See PHASE 1 in `matchPoolToCatalog` (below) for the full reasoning on why "2+ candidates
+ * cleared" is sufficient evidence of "no variant token" on its own, without a second heuristic.
+ */
+export function resolveFlyerFanout(store: StoreLite, candidates: FanoutCandidate[], section = "grocery"): FanoutResult {
+  const st = prep(store.name, store.brand, store.ean);
+  const stSize = { unit: store.unit, unitSize: store.unitSize };
+  const cleared = candidates.filter((c) => {
+    const d = decide(prep(c.name, c.brand, c.ean), { unit: c.unit, unitSize: c.unitSize }, st, stSize, section);
+    return d.ok;
+  });
+  if (cleared.length <= 1) return { confirmed: cleared.map((c) => c.productId), refusedFanout: false };
+  return { confirmed: [], refusedFanout: true };
+}
+
 // A store pool product with its parse results cached.
 type Prepared = { sp: StoreProduct; item: PrepItem; size: { unit: string; unitSize: number } | null; storeKey: string };
 
@@ -805,7 +830,7 @@ export async function matchPoolToCatalog(
   }
   pool = kept;
 
-  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { slug: true, lastOfferCount: true, priceChannel: true } });
+  const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { slug: true, lastOfferCount: true, priceChannel: true, storeType: true } });
   const merchantSlugForDeposit = merchant?.slug ?? "";
   const rows = await prisma.product.findMany({ where: { section }, select: { id: true, name: true, brand: true, ean: true, unit: true, unitSize: true, image: true } });
   const catMap = new Map((await prisma.category.findMany({ select: { slug: true, id: true } })).map((c) => [c.slug, c.id]));
@@ -948,6 +973,10 @@ export async function matchPoolToCatalog(
     if (!prev || d.score > prev.score) review.set(key, { productId, c, score: d.score, reason: d.reason });
   };
 
+  // Store items refused by the flyer fan-out rule below (PASS 2). Kept separate from `explained`
+  // — see there for why PHASE 2 must not treat these as "matched".
+  const fanoutRefusedItems = new Set<Prepared>();
+
   // PHASE 0 — human overrides + EAN joins take priority over any heuristic.
   for (const c of prepared) {
     const ov = overrides.get(c.storeKey);
@@ -974,6 +1003,14 @@ export async function matchPoolToCatalog(
   // them at all — and only the last is a pipeline bug. Guessing between those cost a session.
   const consideredPool = new Set<Prepared>();
   const coverage = new DecisionCoverage();
+  // ── PASS 1: gather every CLEARING decision, grouped by STORE ITEM rather than committed
+  // immediately. Committing inline (the old shape) meant that if the SAME physical store item
+  // cleared decide() for a SECOND catalog product later in this loop, it had already won the
+  // first one — the exact Nivea/Lay's/Dove shape (docs/SOAK.md, 2026-09-15): one Kaufland
+  // flyer line, "Nivea Gel de duş 500 ml", cleared decide() for 12 different shower gels and
+  // every one of them got confirmed, because nothing was watching for the second, third, ...
+  // twelfth clearance against the same physical item.
+  const okByStoreItem = new Map<Prepared, { cp: (typeof rows)[number]; d: Decision }[]>();
   for (const cp of rows) {
     const cItem = prep(cp.name, cp.brand, cp.ean);
     // ── CANDIDATE SELECTION LOOKS UP BOTH HEAD NOUNS, AND THE UNION IS THE POINT.
@@ -1003,19 +1040,114 @@ export async function matchPoolToCatalog(
       if (rejects.has(cp.id)) continue;
       consideredPool.add(c);
       const d = decide(cItem, cSize, c.item, c.size, section);
-      coverage.record(d);
-      if (!d.ok) { noteReview(cp.id, c, d); continue; }
+      if (!d.ok) { coverage.record(d); noteReview(cp.id, c, d); continue; }
+      const list = okByStoreItem.get(c) ?? [];
+      list.push({ cp, d });
+      okByStoreItem.set(c, list);
+    }
+  }
+
+  // ── PASS 2 — THE FLYER FAN-OUT RULE.
+  //
+  // A store item whose own name carries no variant token cannot be told apart from its
+  // siblings, so `decide()` clears every one of them independently and correctly — each
+  // pairwise decision IS a reasonable "could be this" call in isolation. The defect only
+  // exists in aggregate, so the fix lives here, not inside `decide()`.
+  //
+  // WHY "2+ CLEARED" IS SUFFICIENT EVIDENCE ON ITS OWN, WITHOUT A SEPARATE GENERICITY CHECK.
+  // `decide()`'s own mutual-distinction rule already rejects a pairing when BOTH sides carry a
+  // token the other lacks. So if the store name genuinely named a variant ("Nivea Men Deep
+  // Clean"), that content would collide with every OTHER candidate's own variant token
+  // ("Energy", "Sensitive", …) and those pairings would already have been rejected before this
+  // runs — leaving at most one survivor. The only way two or more can clear AT THE SAME TIME is
+  // that the store name contributes nothing beyond what the whole family already shares (head
+  // noun + brand + size) — which is "carries no variant token", observed as a count rather than
+  // reimplemented as a second heuristic that would have to rediscover what mutual distinction
+  // already checks. `tests/flyer-fanout.test.ts` grades this against the real Nivea/Lay's/Dove
+  // names, plus a control case proving a genuine single match still goes through.
+  //
+  // Every decide() call's OWN reason is still recorded via coverage — that fact did not change,
+  // just because two of them cannot both become offers. The veto is a second, separate decision
+  // recorded under its own name, and it is recorded rather than silently discarded: each refused
+  // candidate is written to PendingMatch with reason "flyer-fanout", reusing the exact
+  // persistence path REVIEW-band candidates already use, so a human can see what was withheld
+  // and why at /admin/matches.
+  //
+  // ── SCOPED TO storeType === "physical" (today: only Kaufland and Penny). NOT CATALOG-WIDE.
+  //
+  // MEASURED, not assumed, per `audit:flyer-fanout` — applying this veto to every merchant hits
+  // 3,298 groups / 7,155 offers, not the ~25 the Kaufland/Penny incident suggested, and it would
+  // take grocery comparability from 11.4% to 5.8% (1,840 of 3,752 products). Read that as good
+  // or bad news depending which half you look at: a large share of the CURRENT catalog's claimed
+  // comparability is riding on ties this rule would break. Two different causes are mixed
+  // together in that number, and this rule can tell them apart no better than `decide()` can:
+  //
+  //   TRUE fan-out (fix this)         L'Oreal Casting Creme Gloss "500" vs 7 OTHER shades (613,
+  //                                   603, 400, …) — a pure numeric shade code is a SIZE_TOKEN,
+  //                                   stripped before comparison, so decide() cannot see that
+  //                                   "500" and "613" disagree. Metro's shrimp counts (30/40 vs
+  //                                   16-20 vs 6/8 per kg) are the same defect. This is real
+  //                                   price-smearing happening TODAY, just distributed across
+  //                                   shades rather than refused, which is worse.
+  //   CATALOG DUPLICATES (do not fix this here)
+  //                                   "Suc de mere Ana Are, 3 l" exists as BOTH #1906 and
+  //                                   #38584 — byte-identical names, two different Product rows.
+  //                                   A store item legitimately matching both isn't ambiguous
+  //                                   about WHICH PRODUCT — there is only one — it is ambiguous
+  //                                   about which of two IDENTICAL rows to pick, and this rule
+  //                                   would refuse a match that was fine, over a de-duplication
+  //                                   problem it was never meant to solve.
+  //
+  // `storeType === "physical"` means no online catalog exists to check quantities/variants
+  // against — literally "a flyer offer" in the sense the rule was written for — and it is a
+  // property of the MERCHANT (2 of 16 today), not a hand-picked slug list. Widening this past
+  // physical-only merchants is a separate decision, needing a way to tell the two causes above
+  // apart first; it is not made here.
+  const isPhysicalOnlyMerchant = merchant?.storeType === "physical";
+  let fanoutGroups = 0;
+  let fanoutOffersWithheld = 0;
+  for (const [c, oks] of okByStoreItem) {
+    for (const { d } of oks) coverage.record(d);
+    if (oks.length > 1 && isPhysicalOnlyMerchant) {
+      fanoutGroups++;
+      fanoutOffersWithheld += oks.length;
+      fanoutRefusedItems.add(c);
+      for (const { cp, d } of oks) {
+        review.set(`${c.storeKey}:${cp.id}`, { productId: cp.id, c, score: d.score, reason: "flyer-fanout" });
+      }
+      continue;
+    }
+    // NOT scoped in, or only one candidate: UNCHANGED from before this rule existed — every
+    // catalog product this store item cleared for gets confirmed independently. This is still
+    // the pre-existing "smearing" shape for non-physical merchants (see the comment above), but
+    // it is the SAME shape as before, not a new one. The one thing that must never happen here
+    // is confirming only `oks[0]` and silently dropping the rest: that would be a NEW, unrecorded
+    // arbitrary tie-break (whichever catalog row iterates first) invented by this refactor,
+    // worse than the defect it was scoped away from — a gate must never discard silently.
+    for (const { cp, d } of oks) {
       explained.add(c);
       consider(cp.id, cp.unitSize, cp.image, c, d.score, d.reason);
     }
   }
+  if (fanoutGroups > 0) {
+    console.log(
+      `  ⚠ flyer fan-out: ${fanoutGroups} store item(s) each cleared 2+ products and were ` +
+      `refused (${fanoutOffersWithheld} would-be match(es) withheld) — see /admin/matches`,
+    );
+  }
 
   // PHASE 2 — addNew: store products that match no catalog product become new products.
+  //
+  // A fan-out-refused item is explicitly excluded here too, not only from PHASE 1's `consider`.
+  // Without this, a Kaufland flyer line refused for matching 12 Nivea gels would itself become a
+  // 13th, brand-new, permanently-orphaned "Nivea Gel de duş 500 ml" product — never chosen (it
+  // would fan out against its own 12 siblings on every future run too), just sitting in the
+  // catalog with zero offers.
   const existingIds = new Set(rows.map((r) => r.id));
   const createdIds = new Set<number>();
   if (addNew) {
     for (const c of prepared) {
-      if (explained.has(c)) continue;
+      if (explained.has(c) || fanoutRefusedItems.has(c)) continue;
       const unit = c.size?.unit ?? "buc";
       const unitSize = c.size?.unitSize ?? 1;
       const base = slugify(c.sp.name) || "produs";
