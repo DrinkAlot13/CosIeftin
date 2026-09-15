@@ -20,8 +20,15 @@ async function main(): Promise<void> {
   const arg = process.argv.find((a) => a.startsWith("--sample="));
   const SAMPLE = arg ? Number(arg.split("=")[1]) : 100;
 
+  // Two backfills write brand attributes today: `backfill-brands.ts` (source "merchant-feed")
+  // and `backfill-detail-brands.ts` (source "merchant-detail", one merchant's OWN detail page
+  // per product, added later). This checked only the first — silently verifying nothing for the
+  // second, exactly the audit:sitemap shape (CLAUDE.md): the predicate went stale the moment a
+  // second writer of the same concept showed up. If a THIRD backfill mechanism is added, name it
+  // here too, on purpose, rather than letting this list quietly stop covering it.
+  const BRAND_BACKFILL_SOURCES = ["merchant-feed", "merchant-detail"];
   const marks = await prisma.productAttribute.findMany({
-    where: { key: "brand", source: "merchant-feed" },
+    where: { key: "brand", source: { in: BRAND_BACKFILL_SOURCES } },
     select: { productId: true, value: true, confidence: true },
   });
   if (marks.length === 0) {
