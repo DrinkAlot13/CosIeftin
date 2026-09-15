@@ -443,6 +443,23 @@ One genuine root cause found along the way: pure numeric variant codes (L'Oreal 
 `decide()` cannot see them as distinguishing content — a pre-existing defect this rule catches
 defensively (refuses rather than smears) but does not fix at the root. Flagged, not touched.
 
+## 2026-09-16 — compute:home widened past grocery. NIGHTLY SCOPE CHANGE.
+
+`compute:home` computed the price story (`observedLowBani`/`atObservedLow`) and the shelf signals
+(`dropPct`/`spreadPct`/`dealScore`/`liveOfferCount`) for `section: "grocery"` only, so dcneu's
+products with 14+ days of price history got no price story — not because their history was too
+short, but because nothing asked the question for them. Widened to all 5 sections. Verified safe
+before widening: `getDeals()` and `getHomeSections()`'s drop query both filter `section:
+"grocery"` independently in their OWN queries, so no page changes what it shows — grep found no
+reader of these four columns that does not also filter by section itself.
+
+Measured result, same run: grocery 32,893 products / 10,467 with a story; **dcneu 10,828 / 5,537
+with a story** (matches the ~5,530 estimate); alcohol 1,530 / 442 with a story. Alcohol was
+measured at 0-with-14-days on 2026-09-10-11; six days later the history table has grown from ~35
+to 40 days, so some alcohol products have now crossed the 14-day threshold on their own — nothing
+was special-cased for it, the same gate just now has more calendar to work with. `audit:db`'s
+existing precomputed-signal invariants (already section-agnostic) pass unchanged.
+
 The soak's own rule — do not touch the matcher, thresholds, coverage or merchant list — held
 throughout it. Everything below this line is dated after 2026-09-15 and is deliberately no
 longer bound by it; each entry says which invariant that section's own rule now answers to.

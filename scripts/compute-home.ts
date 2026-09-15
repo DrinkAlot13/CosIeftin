@@ -1,5 +1,22 @@
-// Precompute the shelf signals: the price drop, the between-store spread, and how many shops
-// show a live price.
+// Precompute the shelf signals: the price drop, the between-store spread, how many shops show a
+// live price, and the price story (observed low / "un moment bun").
+//
+// ── WIDENED PAST GROCERY, 2026-09-16.
+//
+// This ran on `section: "grocery"` alone since it was written, so dcneu's 5,530 products with
+// 14+ days of price history got no price story — not because their history was too short, but
+// because nothing ever asked the question for them. Widened to every section, because nothing
+// downstream requires grocery-only: `getDeals()` and `getHomeSections()`'s drop query both filter
+// `section: "grocery"` in their OWN queries (verified — grep found no reader of dropPct,
+// spreadPct, dealScore or liveOfferCount that does not also filter by section itself), so writing
+// these columns for dcneu, cosmetice or farmacie changes nothing any page currently shows.
+//
+// Alcohol stays empty for a real reason, not a special case: 0 of its products have 14 days of
+// observed span (`docs/PHASE-2` measurement), so `priceStory()`'s own `MIN_DAYS_FOR_A_CLAIM` gate
+// returns "too-new" for every one of them and `observedLowBani`/`atObservedLow` stay null/false —
+// exactly as before, just now because the data says so rather than because the query excluded the
+// section. Do not add a section-specific carve-out to make alcohol non-empty; that would be
+// presenting a default as an observation.
 //
 // WHY ANY OF THIS IS PRECOMPUTED. getHomeSections() used to load EVERY grocery product with
 // EVERY offer and EVERY price-history row — 97,630 rows and 4.4 seconds — to render eight
@@ -33,6 +50,10 @@ import { priceStory } from "../src/lib/price-story";
 
 const prisma = new PrismaClient();
 
+// The 5 sections this project has (CLAUDE.md). Named explicitly rather than an unfiltered
+// query, so a section added later is not silently swept in without a decision.
+const ALL_SECTIONS = ["grocery", "alcohol", "dcneu", "cosmetice", "farmacie"] as const;
+
 /** A drop is only interesting against a recent peak; a price that fell a year ago is not news. */
 const WINDOW_DAYS = 30;
 
@@ -45,9 +66,10 @@ async function main(): Promise<void> {
   // Only products a shopper can act on, and only the history inside the window. Bounded on both
   // axes, and it runs once a night instead of once a request.
   const products = await prisma.product.findMany({
-    where: { section: "grocery", offers: { some: { isStale: false, merchant: { active: true } } } },
+    where: { section: { in: [...ALL_SECTIONS] }, offers: { some: { isStale: false, merchant: { active: true } } } },
     select: {
       id: true,
+      section: true,
       offers: {
         where: { isStale: false, merchant: { active: true } },
         select: {
@@ -81,7 +103,7 @@ async function main(): Promise<void> {
   console.log(`  ${allHistory.length} history rows loaded for the price story`);
 
   const now = new Date();
-  type Row = { id: number; dropPct: number; spreadPct: number; dealScore: number; liveOfferCount: number;
+  type Row = { id: number; section: string; dropPct: number; spreadPct: number; dealScore: number; liveOfferCount: number;
     observedLowBani: number | null; atObservedLow: boolean };
   const rows: Row[] = [];
 
@@ -108,6 +130,7 @@ async function main(): Promise<void> {
 
     rows.push({
       id: p.id,
+      section: p.section,
       dropPct: drop,
       spreadPct: spread,
       dealScore: Math.max(spread, drop),
@@ -148,7 +171,10 @@ async function main(): Promise<void> {
   const computed = new Set(rows.map((r) => r.id));
   const stale = await prisma.product.findMany({
     where: {
-      section: "grocery",
+      // MUST match the compute query's section scope, or a product whose section this run
+      // covers but whose last live offer just disappeared would never be swept — a stale
+      // "-40%" surviving on exactly the population the widening just added.
+      section: { in: [...ALL_SECTIONS] },
       id: { notIn: [] },
       OR: [{ dropPct: { not: null } }, { spreadPct: { not: null } }, { dealScore: { not: null } }, { liveOfferCount: { not: null } }, { observedLowBani: { not: null } }, { atObservedLow: { not: null } }],
     },
@@ -168,6 +194,21 @@ async function main(): Promise<void> {
   const comparable = rows.filter((r) => r.liveOfferCount >= 2).length;
   console.log(`\n  ${withDrop} with a drop over 2%, ${withSpread} with a spread of 8%+, ${comparable} priced at 2+ shops`);
 
+  // ── THE WIDENING, MEASURED — how many products PER SECTION actually got a price story.
+  // Printed every run, not just once, so a section quietly losing its story again (e.g. a
+  // history gap) is visible in the ordinary log rather than only in a one-off audit.
+  console.log(`\n  price story reach, per section (this run):`);
+  for (const sec of ALL_SECTIONS) {
+    const secRows = rows.filter((r) => r.section === sec);
+    if (secRows.length === 0) continue;
+    const withStory = secRows.filter((r) => r.observedLowBani != null).length;
+    const atLow = secRows.filter((r) => r.atObservedLow).length;
+    console.log(`    ${sec.padEnd(10)} products=${String(secRows.length).padStart(6)}  observedLow set=${String(withStory).padStart(6)}  atObservedLow=${String(atLow).padStart(5)}`);
+  }
+
+  // Deliberately still grocery-only: this previews what /oferte actually shows, and /oferte's
+  // OWN query (getDeals) filters section: "grocery" independently — widening this preview would
+  // make the printed log stop matching the page it is meant to sanity-check.
   const top = await prisma.product.findMany({
     where: { section: "grocery", dealScore: { gt: 2 }, liveOfferCount: { gte: 2 } },
     select: { name: true, dealScore: true, spreadPct: true, dropPct: true },
