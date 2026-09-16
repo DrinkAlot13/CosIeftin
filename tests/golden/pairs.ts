@@ -493,3 +493,32 @@ add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
 add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
   bf("Apa plata minerala San Benedetto, 0.5 l", "San Benedetto", "l", 0.5),
   bf("Apa plata 500ml", null, "l", 0.5));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUMERIC VARIANT CODES — a bare number is the discriminator and overlapTokens()
+// drops it as size noise (docs/SOAK.md, 2026-09-16). Real names, real catalog IDs.
+// ─────────────────────────────────────────────────────────────────────────────
+add("cosmetice", "cosmetics-variant", "SHOULD_NOT_MATCH",
+  L("Vopsea de par fara amoniac L'Oreal Paris Casting Creme Gloss 500, 180 ml", "L'Oreal", "l", 0.18),
+  L("Vopsea de par fara amoniac L'Oreal Paris Casting Creme Gloss 613, 180 ml", "L'Oreal", "l", 0.18),
+  "product #7646 vs #7663 — Auchan's own storeName ('...Gloss 500...') was live-matched onto both");
+
+add("alcohol", "alcohol-variant", "SHOULD_NOT_MATCH",
+  L("Chivas Regal 12 Ani 0.7L", "Chivas Regal", "l", 0.7),
+  L("Chivas Regal 18 Ani 0.7L", "Chivas Regal", "l", 0.7),
+  "age statement is the whole product; 12/18/25 Ani all sat live behind one FineStore/Carrefour listing");
+
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  L("aro Creveti Whiteleg, Cruzi, Decorticati, Curatati, 16/20, 800 g", "aro", "kg", 0.8),
+  L("aro Creveti Whiteleg, Cruzi, Decorticati, Curatati, 26/30, 800 g", "aro", "kg", 0.8),
+  "count-per-kilo grade — same brand, head-noun and size, different grade");
+
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  L("Faina alba de grau tip 000 pentru cozonac 1kg", null, "kg", 1),
+  L("Faina de grau alba 650 1kg", null, "kg", 1),
+  "milling grade, not a size — 000 vs 650 differ by protein/gluten content, not weight");
+
+add("grocery", "branded-grocery-variant", "SHOULD_NOT_MATCH",
+  L("Pampers Active baby scutec chilotel nr. 5, 11-17 kg, 32 bucati", "Pampers", "buc", 32),
+  L("Pampers Act.Baby Scutece Nr.6, 13-18 kg ,32 bucati", "Pampers", "buc", 32),
+  "diaper size 5 vs 6 — the most consequential live pair found: a wrong nappy size, not a wrong price");

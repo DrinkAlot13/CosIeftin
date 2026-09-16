@@ -428,7 +428,96 @@ export function doseTokens(nname: string): string {
   for (const m of nname.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)) {
     out.push(`${parseFloat(m[1].replace(",", "."))}%`);
   }
+  // sun protection factor — a labelled strength like the others, so it is anchored on its
+  // own label rather than left to fall through to the generic bare-number path
+  // (variantCodeTokens below), which would have to infer it from context instead of reading it.
+  for (const m of nname.matchAll(/\bspf\s*(\d+)/gi)) {
+    out.push(`spf${m[1]}`);
+  }
   return out.sort().join("|");
+}
+
+/**
+ * A bare numeric token — a shade, a shrimp-count grade, a whisky age statement, a pasta shape
+ * number, a flour grade — that `overlapTokens()` strips as size noise (`SIZE_TOKEN` matches a
+ * number with OR without a unit suffix). Mirrors `doseTokens()`'s pattern: read the RAW name,
+ * independent of the size path, so the size regex is never touched.
+ *
+ * Measured before shipping (docs/SOAK.md, 2026-09-16): 0 of 56 golden SHOULD_MATCH pairs
+ * newly blocked; 62 of 45,162 live matched pairs would show a contradiction, all 62 read (not
+ * sampled) and found to be real defects (Chivas/Aberlour/Glenfiddich age statements, De Cecco
+ * pasta shape numbers, Pampers diaper size 5 vs 6, flour grade 000 vs 650, shrimp counts,
+ * L'Oreal shades) except two ambiguous `unit="buc"` cases, both excluded below.
+ *
+ * THREE THINGS A BARE NUMBER OFTEN IS, EACH EXCLUDED SEPARATELY:
+ *
+ *  1. A restatement of the item's OWN size, in a common scaling (kg->g, l->ml, l->cl). Checked
+ *     with floor AND ceil, not just round: `Math.round(62.5)` is 63 in JS, which would miss
+ *     "62" restating a 0.0625 kg product.
+ *  2. Half of a decimal split by normalization. `normalizeText` turns "cca 1,98 kg" into tokens
+ *     "1" and "98" — the fragment after the point was invisible to check (1) entirely.
+ *     Reconstructed from the RAW name and excluded together when the reconstructed value
+ *     restates the item's own size. This alone explained the large majority of the initial
+ *     "contradictions" found in measurement, nearly all "cca N,NN kg" weight variance between
+ *     scrapes of the same approximately-weighed item, not a different product.
+ *  3. A multipack per-item quantity: "4 x 62.5 g" tokenizes to ...,"4","x","62","5","g" — a
+ *     number touching a standalone "x" is a pack count or per-item size, never a variant.
+ *
+ * A FOURTH CASE IS EXCLUDED ENTIRELY RATHER THAN DISAMBIGUATED: a `unit="buc"` item (sold as a
+ * single approximately-weighed or approximately-sized piece — a melon, a chicken, a pan) whose
+ * number is qualified by "cca", "aprox", "minim", "max", "peste" or "±". "ECO Pepene Galia
+ * romanesc minim 800 gr" vs "minim 600 gr", and "Tigaie cca. 26 cm" vs "cca. 25 cm", are both
+ * this shape: the number describes a variable physical object, not a variant, and the
+ * restatement check (case 1) cannot rule them out because the size lives in prose rather than
+ * the parsed field. Requiring an EXPLICIT qualifier word (not a bare numeric range) is
+ * deliberate: "Pampers ... nr. 5, 11-17 kg" vs "Nr.6, 13-18 kg" is also a bare dash-joined
+ * range with no qualifier word, and it is the most consequential live defect this rule catches
+ * (diaper size 5 sold as size 6) — a range-shaped exclusion would have silently swallowed it.
+ */
+export function variantCodeTokens(name: string, unit: string, unitSize: number): Set<string> {
+  const norm = normalizeText(name);
+  const tokens = norm.split(/\s+/).filter(Boolean);
+  const kept = new Set(overlapTokens(norm));
+
+  const scalings = [unitSize, unitSize * 100, unitSize * 1000];
+  const plausibleWhole = new Set<string>();
+  for (const s of scalings) { plausibleWhole.add(String(Math.floor(s))); plausibleWhole.add(String(Math.ceil(s))); plausibleWhole.add(String(Math.round(s))); }
+
+  // Case 2: reconstruct comma/period decimals from the RAW name before they get split.
+  const decimalFragments = new Set<string>();
+  for (const m of name.matchAll(/(\d+)[.,](\d+)/g)) {
+    const whole = parseFloat(`${m[1]}.${m[2]}`);
+    if (scalings.some((s) => Math.abs(whole - s) < 0.01)) { decimalFragments.add(m[1]); decimalFragments.add(m[2]); }
+  }
+
+  // Case 4: an approximate unit="buc" figure — excluded by value, not by position, so both the
+  // qualifier's own number and the fragments already reconstructed above stay consistent.
+  const approxCovered = new Set<string>();
+  if (unit === "buc") {
+    for (const m of name.matchAll(/(?:cca\.?|aprox\.?|minim|max\.?|peste|±)\s*(\d+(?:[.,]\d+)?)/gi)) {
+      approxCovered.add(String(Math.round(parseFloat(m[1].replace(",", ".")))));
+    }
+  }
+
+  // Already compared explicitly by doseTokens (N% / N mg|ui|iu|mcg / SPF N) off the RAW name.
+  const doseCovered = new Set<string>();
+  for (const m of name.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)) doseCovered.add(String(Math.round(parseFloat(m[1].replace(",", ".")))));
+  for (const m of name.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:mg|ui|iu|mcg)\b/gi)) doseCovered.add(String(Math.round(parseFloat(m[1].replace(",", ".")))));
+  for (const m of name.matchAll(/\bspf\s*(\d+)/gi)) doseCovered.add(m[1]);
+
+  const codes = new Set<string>();
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (kept.has(t)) continue;
+    if (!/^\d{2,4}$/.test(t)) continue; // 1-digit is almost always a count word; 5+ is EAN-shaped
+    if (tokens[i - 1] === "x" || tokens[i + 1] === "x") continue; // Case 3
+    if (decimalFragments.has(t)) continue; // Case 2
+    if (plausibleWhole.has(t)) continue; // Case 1
+    if (approxCovered.has(t)) continue; // Case 4
+    if (doseCovered.has(t)) continue;
+    codes.add(t);
+  }
+  return codes;
 }
 
 /** Strict Jaccard overlap of two token sets (0..1). */
@@ -507,7 +596,7 @@ export const DECISION_REASONS = [
   "size-unit", "size", "head-noun", "brand",
   // hard blocks: a disagreement inside a variant class, or a different pack shape
   "variant-flavour", "variant-qualifier", "variant-fat", "variant-format", "pack-shape",
-  "mutually-distinct", "variant-mismatch", "dose-mismatch", "low-overlap",
+  "mutually-distinct", "variant-mismatch", "dose-mismatch", "variant-code-mismatch", "low-overlap",
   // A descriptor on one side CONTRADICTING one on the other — uht against proaspat.
   // Distinct from `mutually-distinct` on purpose: that rule is about any two unique
   // tokens, this one is about two values of the SAME attribute, and the difference
@@ -663,6 +752,18 @@ export function decide(cat: PrepItem, catSize: { unit: string; unitSize: number 
   // Only a CONTRADICTION disqualifies. One side omitting the strength ("Unt Covalact 200g"
   // vs "Unt de masa Covalact 82% 200 g") is silence, not disagreement.
   if (catDose && stDose && catDose !== stDose) return { ok: false, band: "REJECT", score: jac, reason: "dose-mismatch" };
+
+  // A shade, a shrimp-count grade, an age statement — a bare number the overlap scorer drops
+  // as size noise but which is the ONE thing distinguishing two products (see
+  // variantCodeTokens' own header). Only a CONTRADICTION disqualifies: either side carrying no
+  // code at all is silence, not disagreement, and any code the two sides SHARE means no
+  // contradiction even if each also carries codes the other lacks (a store name can carry the
+  // multipack's own extra number alongside the real discriminator).
+  const catCode = variantCodeTokens(cat.raw, catSize.unit, catSize.unitSize);
+  const stCode = variantCodeTokens(st.raw, stSize.unit, stSize.unitSize);
+  if (catCode.size > 0 && stCode.size > 0 && [...catCode].every((c) => !stCode.has(c))) {
+    return { ok: false, band: "REJECT", score: jac, reason: "variant-code-mismatch" };
+  }
 
   // Beyond variants, require genuine name overlap. Grocery is tuned looser than
   // wine (0.55 vs 0.6): grocery names carry more boilerplate ("de consum", "grasime")

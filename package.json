@@ -56,6 +56,7 @@
     "audit:flyer-fanout": "tsx scripts/audit-flyer-fanout.ts",
     "audit:numeric-variant-codes": "tsx scripts/audit-numeric-variant-codes.ts",
     "withhold:numeric-variant-codes": "tsx scripts/withhold-numeric-variant-codes.ts",
+    "audit:variant-code-diff": "tsx scripts/audit-variant-code-diff.ts",
     "seed:equivalence": "tsx scripts/seed-equivalence.ts",
     "migrate:money": "tsx scripts/migrate-money-bani.ts",
     "propose:equivalence": "tsx scripts/propose-equivalence.ts",
