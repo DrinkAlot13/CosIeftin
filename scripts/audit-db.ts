@@ -192,6 +192,50 @@ async function auditPrices() {
       [...seen.entries()].map(([v, n]) => `${n} offers carry priceSource="${v}", which is not one of ${[...ALLOWED].join("|")}`));
   }
 
+  // ── A "source"/"kind"/"type" COLUMN'S VOCABULARY CAN GO STALE THE SAME WAY A COPIED
+  //    PREDICATE DOES — a second WRITER shows up, and nothing that reads the column knew to
+  //    expect it. `audit:brands` checked ProductAttribute.source="merchant-feed" only, and when
+  //    `backfill-detail-brands.ts` started writing source="merchant-detail" it silently verified
+  //    nothing for the new backfill while still printing green (fixed 2026-09-16). Same failure
+  //    shape as `audit:sitemap`'s copied predicate and `audit:rate-limit`'s recomputed budget
+  //    (CLAUDE.md, ONE NAMED CONCEPT ONE IMPLEMENTATION) — a THIRD instance of a verifier not
+  //    knowing about a second writer of the same concept, and it happened after the first two
+  //    were already documented here.
+  //
+  //    This is why priceSource's ALLOWED set above exists and it generalises the same check to
+  //    every other column this project has decided is load-bearing enough to watch. Deliberately
+  //    NOT a general rule over every String column — CLAUDE.md's own `check:concepts` measured
+  //    that the general version fires on almost everything and catches nothing. A column joins
+  //    this list when someone decides its vocabulary matters, exactly like a concept joins the
+  //    register in `check-concepts.ts`. This needs the live database, which is why it lives here
+  //    and not in `check-concepts.ts` — that one runs on every commit and imports no data.
+  {
+    const REGISTER: { column: string; known: string[]; distinct: () => Promise<string[]> }[] = [
+      {
+        column: `ProductAttribute.source (key="brand")`,
+        known: ["merchant-feed", "merchant-detail"],
+        distinct: async () => {
+          const rows = await prisma.productAttribute.findMany({ where: { key: "brand" }, select: { source: true }, distinct: ["source"] });
+          return rows.map((r) => r.source);
+        },
+      },
+      {
+        column: "UserFavorite.source",
+        known: ["EXPLICIT", "INFERRED"],
+        distinct: async () => {
+          const rows = await prisma.userFavorite.findMany({ select: { source: true }, distinct: ["source"] });
+          return rows.map((r) => r.source);
+        },
+      },
+    ];
+    for (const { column, known, distinct } of REGISTER) {
+      const seenValues = await distinct();
+      const unlisted = seenValues.filter((v) => !known.includes(v));
+      record("Data model", `${column} holds only the values a check knows about`,
+        unlisted.map((v) => `"${v}" is a distinct value in the database, but no listed check names it — a check reading only ${known.join("|")} verifies nothing for these rows`));
+    }
+  }
+
   // ── A PRICE MUST REPRODUCE FROM ITS OWN SOURCE STRING.
   //
   //    `rawPriceText` exists so a stored price can be checked against what the page said, and
