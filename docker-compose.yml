@@ -1,15 +1,29 @@
-# Local build:      docker compose up -d --build
-# Real deployment:   set real values in .env (copy .env.example), then docker compose up -d --build
-#                    (or drop `build: .` and use the CI-built `image:` once it's pushed to GHCR).
+# Local build (no GitHub involved):
+#   uncomment `build: .` below, comment out `image:`, then: docker compose up -d --build
+#
+# Real deployment (this is the default below): GitHub Actions builds the image on every push
+# to `main` and publishes it to ghcr.io/drinkalot13/cosmic:latest. This machine just pulls it —
+# no source checkout, no build step, no friend needed after the one-time setup:
+#   docker compose up -d
+# Watchtower (below) then checks for a new image every 5 minutes and redeploys automatically
+# when one appears — that is the whole "update without asking anyone" pipeline. To update the
+# site from here on, all you personally do is `git push`.
+#
+# ONE-TIME SETUP if the ghcr.io package is private (it is, by default, the first time Actions
+# publishes it): either make it public (github.com/DrinkAlot13/CosIeftin -> Packages -> cosmic
+# -> Package settings -> Change visibility), or run `docker login ghcr.io` on this server once
+# with a GitHub Personal Access Token that has `read:packages` scope.
 #
 # PORT: "3000:3000" is fine for local testing. Behind Cloudflare (proxying to your origin on
 # port 80), change the left side to "80:3000" — see docs/DEPLOYMENT.md.
 services:
   cosmic:
-    build: .
-    image: ghcr.io/YOUR_GITHUB_USERNAME/cosmic:latest
+    # build: .
+    image: ghcr.io/drinkalot13/cosmic:latest
     container_name: cosmic
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "3000:3000"
     env_file:
@@ -23,3 +37,14 @@ services:
       - ./logs:/app/logs                              # nightly run logs (see /admin/logs) —
                                                         # without this volume, logs vanish on
                                                         # every rebuild/redeploy
+
+  # Auto-deploy: polls ghcr.io every 5 minutes for a newer `cosmic` image and, when one exists,
+  # pulls it and recreates the container. `--label-enable` + the label above scope it to THIS
+  # container only — a shared server may run other containers that must not be touched.
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --label-enable --cleanup
