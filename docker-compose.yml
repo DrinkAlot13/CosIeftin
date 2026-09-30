@@ -1,5 +1,9 @@
-# Local: `docker compose up -d --build`
-# Unraid: use the CI-built image (comment out `build:`), map the two volumes.
+# Local build:      docker compose up -d --build
+# Real deployment:   set real values in .env (copy .env.example), then docker compose up -d --build
+#                    (or drop `build: .` and use the CI-built `image:` once it's pushed to GHCR).
+#
+# PORT: "3000:3000" is fine for local testing. Behind Cloudflare (proxying to your origin on
+# port 80), change the left side to "80:3000" — see docs/DEPLOYMENT.md.
 services:
   cosmic:
     build: .
@@ -8,12 +12,14 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       DATABASE_URL: "file:/data/cosmic.db"
-      # Set a long random string in production (used to sign the login session cookie):
-      AUTH_SECRET: "change-me-to-a-long-random-string"
-      SITE_URL: "http://localhost:3000"
     volumes:
       - ./data:/data                                  # SQLite DB (persists across updates)
       - ./product-images:/app/public/product-images   # downloaded product photos
+      - ./logs:/app/logs                              # nightly run logs (see /admin/logs) —
+                                                        # without this volume, logs vanish on
+                                                        # every rebuild/redeploy

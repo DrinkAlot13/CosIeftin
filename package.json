@@ -40,6 +40,7 @@
     "setup": "prisma db push --force-reset --skip-generate && tsx scripts/seed-catalog.ts && tsx scripts/seed-admin.ts",
     "refresh": "npm run setup && npm run scrape:all",
     "nightly": "tsx scripts/nightly.ts",
+    "nightly:logged": "sh scripts/nightly.sh",
     "nightly:steps": "npm run backup && npm run scrape:all && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run compute:home && npm run revalidate && npm run notify:alerts",
     "soak:log": "tsx scripts/soak-log.ts",
     "soak:report": "tsx scripts/soak-report.ts",

@@ -61,6 +61,7 @@ export default async function AdminPage() {
             { href: "/admin/anomalies", label: "Prețuri refuzate", hint: `${openAnomalies} nerezolvate`, badge: openAnomalies },
             { href: "/admin/review", label: "Revizuire", hint: "produse semnalate" },
             { href: "/admin/stats", label: "Statistici", hint: "adâncimea prețurilor, per magazin, unde lipsesc potrivirile" },
+            { href: "/admin/logs", label: "Jurnale nightly", hint: "ce a scris fiecare rulare — descărcabile" },
           ].map((t) => (
             <Link
               key={t.href}
