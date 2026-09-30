@@ -288,7 +288,7 @@ export default async function MetodologiePage() {
         <h2 style={{ fontSize: 20 }}>Raportează o greșeală</h2>
         <p style={{ lineHeight: 1.65 }}>
           Scrie-ne la{" "}
-          <a href="mailto:contact@cosmic.ro?subject=Pret%20gresit">contact@cosmic.ro</a> cu
+          <a href="mailto:contact@cosieftin.ro?subject=Pret%20gresit">contact@cosieftin.ro</a> cu
           linkul paginii. Dacă e o potrivire greșită între produse, spune care două produse
           sunt amestecate — corectăm potrivirea, nu doar prețul.
         </p>

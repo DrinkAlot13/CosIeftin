@@ -25,7 +25,7 @@
   // MV3; aliasing is all the cross-browser handling this needs.
   const ext = typeof browser !== "undefined" ? browser : chrome;
 
-  const API = "https://cosmic.ro"; // replaced at packaging time for staging builds
+  const API = "https://cosieftin.ro"; // replaced at packaging time for staging builds
   const TIMEOUT_MS = 4000;         // a shopper does not wait for us
   const DISMISS_KEY = "cosmic_panel_dismissed_until";
   const SNOOZE_MS = 24 * 60 * 60 * 1000;

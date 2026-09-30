@@ -17,7 +17,7 @@ export const metadata = {
   description: "Condițiile în care poate fi folosit CoșMic.",
 };
 
-const CONTACT = "contact@cosmic.ro";
+const CONTACT = "contact@cosieftin.ro";
 
 export default function TermeniPage() {
   return (

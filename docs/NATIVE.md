@@ -128,7 +128,7 @@ Reported now because it is cheap to know and expensive to discover late.
 | Google Play Data Safety form | same, plus a declaration for the camera permission scanning would need |
 | Camera permission justification | **not applicable while scanning is not shipped** — and asking for a camera an app does not use is a rejection |
 | Account deletion **in-app** | **A HARD BLOCKER.** Apple requires apps with account creation to offer account deletion *inside the app*. We have `erase:user` (an operator script) and an e-mail route. That satisfies GDPR; it does not satisfy App Store Review Guideline 5.1.1(v). |
-| Support URL and marketing contact | `contact@cosmic.ro` — the mailbox is unconfirmed |
+| Support URL and marketing contact | `contact@cosieftin.ro` — the mailbox is unconfirmed |
 | Screenshots per device class | none exist |
 | Age rating questionnaire | the alcohol section will need a deliberate answer |
 

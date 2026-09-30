@@ -46,7 +46,7 @@ const MIN_FOR_VERDICT = 10;
 const DELAY_MS = 250;
 const TIMEOUT_MS = 20_000;
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CosMicLinkCheck/1.0 (+https://cosmic.ro)";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CosMicLinkCheck/1.0 (+https://cosieftin.ro)";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Outcome = "ok" | "redirected-ok" | "not-found" | "soft-404" | "server-error" | "network";

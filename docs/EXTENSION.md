@@ -71,7 +71,7 @@ and may ask the user per site. The extension already handles being absent — it
 run — so a declined permission degrades to "no panel", never to an error.
 
 Firefox also requires `browser_specific_settings.gecko.id` for signing; it is
-`cosmic@cosmic.ro` and it is in the manifest.
+`cosmic@cosieftin.ro` and it is in the manifest.
 
 ---
 
@@ -133,8 +133,9 @@ does not emit withheld rows under any parameter, and a `review`-grade match retu
 - **Not loaded into a real browser.** The code is written and reviewed; it has not been
   installed in Chrome or Firefox, because that needs a human at a browser. Everything above
   about placement and behaviour is design intent, not observed behaviour.
-- **`API` points at `https://cosmic.ro`**, which does not exist yet. It is one constant at the
-  top of `content.js` and must be set at packaging time.
+- **`API` points at `https://cosieftin.ro`**, which does not exist yet (the domain is bought,
+  the site is not deployed there). It is one constant at the top of `content.js` and must be
+  set at packaging time.
 - **CORS**: `/api/v1/lookup` returns `access-control-allow-origin: *` for public GETs, so the
   extension needs no allow-list entry. Verified by `probe:api`.
 - **No store submission.** Both stores want screenshots, a description and a privacy

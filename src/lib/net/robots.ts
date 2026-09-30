@@ -16,7 +16,7 @@
 //
 // An UNREACHABLE robots.txt is not permission. It is treated as `Disallow: /`.
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CosMicPriceCheck/1.0 (+https://cosmic.ro)";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CosMicPriceCheck/1.0 (+https://cosieftin.ro)";
 
 const cache = new Map<string, string[]>();
 

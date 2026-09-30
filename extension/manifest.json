@@ -48,6 +48,6 @@
   ],
 
   "browser_specific_settings": {
-    "gecko": { "id": "cosmic@cosmic.ro", "strict_min_version": "115.0" }
+    "gecko": { "id": "cosmic@cosieftin.ro", "strict_min_version": "115.0" }
   }
 }

@@ -51,7 +51,7 @@ const MIN_FOR_VERDICT = 5;
 const DELAY_MS = 40;
 const TIMEOUT_MS = 20_000;
 
-const UA = "CosMicSiteCheck/1.0 (+https://cosmic.ro)";
+const UA = "CosMicSiteCheck/1.0 (+https://cosieftin.ro)";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Outcome = "ok" | "redirected-ok" | "not-found" | "server-error" | "empty" | "network";

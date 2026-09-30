@@ -36,7 +36,7 @@ export const metadata = {
   description: "Ce date colectăm, ce nu colectăm, și cu cine comunică browserul tău pe acest site.",
 };
 
-const CONTACT = "contact@cosmic.ro";
+const CONTACT = "contact@cosieftin.ro";
 
 export default async function ConfidentialitatePage() {
   const rows = await prisma.product.findMany({

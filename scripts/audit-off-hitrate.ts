@@ -39,7 +39,7 @@ import { emitJson } from "../src/lib/audit-json";
 const prisma = new PrismaClient();
 
 // OFF's documented expectation: identify yourself and say how to reach you.
-const UA = "CosMic/1.0 (Romanian grocery price comparison; contact@cosmic.ro)";
+const UA = "CosMic/1.0 (Romanian grocery price comparison; contact@cosieftin.ro)";
 const DELAY_MS = 1100;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

@@ -30,7 +30,7 @@ import { LIMITS, effectiveMax } from "../src/lib/rate-limit";
 import { emitJson } from "../src/lib/audit-json";
 
 const PATH = "/api/alternatives";
-const UA = "CosMicRateLimitCheck/1.0 (+https://cosmic.ro)";
+const UA = "CosMicRateLimitCheck/1.0 (+https://cosieftin.ro)";
 
 type Burst = { sent: number; ok: number; limited: number; other: number; firstLimitedAt: number | null };
 
