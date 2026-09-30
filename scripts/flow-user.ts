@@ -264,7 +264,7 @@ async function flowRecipe(page: Page): Promise<void> {
 // ── FLOW 4: ACCOUNT, ALERT, LOYALTY CARD ──────────────────────────────────────────────────
 async function flowAccount(page: Page): Promise<void> {
   console.log("\n── FLOW 4: register, log out, log back in, alert, loyalty card ──");
-  const email = `flow-${Date.now()}@example.com`;
+  const username = `flow-${Date.now()}`;
   const password = "flow-test-password-1";
 
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 60_000 });
@@ -281,7 +281,7 @@ async function flowAccount(page: Page): Promise<void> {
     const f = forms.nth(i);
     const btn = ((await f.locator('button[type="submit"]').first().textContent().catch(() => "")) ?? "").toLowerCase();
     if (!/cont|înregistr|inregistr|creaz/i.test(btn)) continue;
-    await f.locator('input[type="email"], input[name="email"]').first().fill(email).catch(() => {});
+    await f.locator('input[name="username"]').first().fill(username).catch(() => {});
     await f.locator('input[type="password"], input[name="password"]').first().fill(password).catch(() => {});
     await f.locator('button[type="submit"]').first().click().catch(() => {});
     registered = true;
@@ -364,7 +364,7 @@ async function flowAccount(page: Page): Promise<void> {
     const f = lforms.nth(i);
     const btn = ((await f.locator('button[type="submit"]').first().textContent().catch(() => "")) ?? "").trim();
     if (!/autentificare/i.test(btn)) continue;
-    await f.locator('input[type="email"], input[name="email"]').first().fill(email).catch(() => {});
+    await f.locator('input[name="username"]').first().fill(username).catch(() => {});
     await f.locator('input[type="password"], input[name="password"]').first().fill(password).catch(() => {});
     await f.locator('button[type="submit"]').first().click().catch(() => {});
     loggedIn = true;

@@ -18,7 +18,7 @@
 //
 // ── WHAT IS DELETED, and what deliberately is not.
 //
-//   User               the account: email and password hash
+//   User               the account: username and password hash
 //   GroceryList(Item)  saved lists tied to that user
 //   UserFavorite       hearted and inferred favourites
 //   UserBlocklist      things they never want suggested
@@ -34,18 +34,18 @@
 // is `--telegram <chatId>`, run separately, because the identifier comes from a different
 // system and the operator has to supply it.
 //
-//   npm run erase:user -- --email someone@example.com          report only
-//   npm run erase:user -- --email someone@example.com --write
+//   npm run erase:user -- --username someone          report only
+//   npm run erase:user -- --username someone --write
 //   npm run erase:user -- --telegram 123456789 --write
 
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-async function eraseAccount(email: string, write: boolean): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { email }, select: { id: true, email: true, createdAt: true, isAdmin: true } });
+async function eraseAccount(username: string, write: boolean): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { username }, select: { id: true, username: true, createdAt: true, isAdmin: true } });
   if (!user) {
-    console.log(`  No account for ${JSON.stringify(email)}. Nothing to erase.`);
+    console.log(`  No account for ${JSON.stringify(username)}. Nothing to erase.`);
     return;
   }
 
@@ -59,7 +59,7 @@ async function eraseAccount(email: string, write: boolean): Promise<void> {
     productAdds: await prisma.userProductAdd.count({ where: { userId: user.id } }),
   };
 
-  console.log(`  account   #${user.id}  ${user.email}  created ${user.createdAt.toISOString().slice(0, 10)}${user.isAdmin ? "  [ADMIN]" : ""}`);
+  console.log(`  account   #${user.id}  ${user.username}  created ${user.createdAt.toISOString().slice(0, 10)}${user.isAdmin ? "  [ADMIN]" : ""}`);
   for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(12)} ${v}`);
 
   if (!write) {
@@ -80,7 +80,7 @@ async function eraseAccount(email: string, write: boolean): Promise<void> {
   });
 
   // Verify from OUTSIDE the transaction: the account is gone only if a fresh read says so.
-  const left = await prisma.user.count({ where: { email } });
+  const left = await prisma.user.count({ where: { username } });
   const orphans =
     (await prisma.userFavorite.count({ where: { userId: user.id } })) +
     (await prisma.userBlocklist.count({ where: { userId: user.id } })) +
@@ -106,11 +106,11 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const write = argv.includes("--write");
   const at = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : null; };
-  const email = at("--email");
+  const username = at("--username");
   const telegram = at("--telegram");
 
-  if (!email && !telegram) {
-    console.error("Usage: npm run erase:user -- --email <address> [--write]");
+  if (!username && !telegram) {
+    console.error("Usage: npm run erase:user -- --username <name> [--write]");
     console.error("       npm run erase:user -- --telegram <chatId> [--write]");
     process.exit(2);
   }
@@ -118,7 +118,7 @@ async function main(): Promise<void> {
   console.log("═".repeat(88));
   console.log(`RIGHT TO ERASURE — ${write ? "WRITING" : "dry run"}`);
   console.log("═".repeat(88));
-  if (email) await eraseAccount(email.trim().toLowerCase(), write);
+  if (username) await eraseAccount(username.trim().toLowerCase(), write);
   if (telegram) await eraseAlerts(telegram.trim(), write);
   await prisma.$disconnect();
 }

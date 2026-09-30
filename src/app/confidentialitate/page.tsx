@@ -10,11 +10,13 @@
 //   · No analytics, no ad tracking, no third-party scripts. Grepped for the fifteen usual
 //     suspects; the only hits were the English word "plausible" in comments.
 //   · Exactly ONE cookie exists: `pm_session`.
-//   · There is NO e-mail verification and NO password reset. That is why the rights section
-//     explains how identity is checked instead of saying "reply from the address on file":
-//     anyone can register with someone else's address, so the address proves nothing, and
-//     answering an access request from it alone could hand person A's data to whoever asked.
-//     GDPR Article 12(6) explicitly allows asking for more information — and refusing.
+//   · Accounts do not collect an e-mail address at all (renamed `email` -> `username`,
+//     2026-09-30) — there is NO e-mail verification and NO password reset to begin with. That
+//     is why the rights section explains how identity is checked instead of saying "reply from
+//     the address on file": anyone can register with any username, so the name alone proves
+//     nothing, and answering an access request from it alone could hand person A's data to
+//     whoever asked. GDPR Article 12(6) explicitly allows asking for more information — and
+//     refusing.
 //   · 89.9% of product images are hotlinked from 18 third-party hosts. The proxy was never
 //     built, so that section is generated FROM THE DATABASE and is true on the day it renders.
 //   · `UserBlocklist` and `GroceryList` are declared in the schema and written by NOTHING.
@@ -64,14 +66,15 @@ export default async function ConfidentialitatePage() {
 
       <p>
         Pe scurt: poți folosi tot comparatorul fără cont și fără să ne spui cine ești. Dacă îți
-        faci cont, păstrăm adresa de e-mail și ce ai salvat. Nu vindem date, nu avem reclame și
-        nu urmărim vizitatorii între site-uri.
+        faci cont, nu îți cerem un e-mail — alegi un nume de utilizator, iar noi păstrăm acel
+        nume și ce ai salvat. Nu vindem date, nu avem reclame și nu urmărim vizitatorii între
+        site-uri.
       </p>
 
       <h2>Ce păstrăm pe serverul nostru</h2>
       <p>Numai dacă îți faci cont:</p>
       <ul className="legal-list">
-        <li><b>Adresa de e-mail</b> și o formă criptată a parolei (scrypt cu sare aleatoare — parola în clar nu este stocată și nu o putem citi).</li>
+        <li><b>Numele de utilizator</b> ales de tine și o formă criptată a parolei (scrypt cu sare aleatoare — parola în clar nu este stocată și nu o putem citi). Nu cerem și nu stocăm o adresă de e-mail.</li>
         <li><b>Produsele marcate ca favorite</b>, fie pentru că ai apăsat inima, fie pentru că le-ai adăugat de mai multe ori.</li>
         <li><b>De câte ori ai adăugat un produs în listă</b> și în câte zile diferite — de aici deducem „produsele tale obișnuite”.</li>
       </ul>
@@ -159,8 +162,8 @@ export default async function ConfidentialitatePage() {
       <h2>De ce avem voie să păstrăm aceste date</h2>
       <ul className="legal-list">
         <li>
-          <b>Contul și ce ai salvat în el</b> — pentru că ne-ai cerut serviciul. Fără e-mail nu
-          există cont, iar fără favorite nu putem arăta „produsele tale”.
+          <b>Contul și ce ai salvat în el</b> — pentru că ne-ai cerut serviciul. Fără nume de
+          utilizator nu există cont, iar fără favorite nu putem arăta „produsele tale”.
         </li>
         <li>
           <b>Alertele de preț</b> — pentru că le-ai pornit tu. Le poți opri oricând, iar atunci
@@ -195,9 +198,9 @@ export default async function ConfidentialitatePage() {
       </ul>
       <h3>Cum verificăm că ești tu</h3>
       <p>
-        Nu confirmăm adresa de e-mail la înregistrare, deci{" "}
-        <b>o cerere trimisă doar de la o adresă nu dovedește nimic</b> — oricine își poate face
-        cont cu adresa altcuiva. Ca să nu trimitem datele unei persoane către altcineva:
+        Nu avem o adresă de e-mail pe cont, deci <b>nu putem verifica cine ești după adresa de la
+        care ne scrii</b> — oricine își poate alege orice nume de utilizator, inclusiv al altcuiva.
+        Ca să nu trimitem datele unei persoane către altcineva:
       </p>
       <ul className="legal-list">
         <li>

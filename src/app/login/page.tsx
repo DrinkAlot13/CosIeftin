@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Cont" };
 
 const ERRORS: Record<string, string> = {
-  invalid: "Email invalid sau parolă prea scurtă (minim 6 caractere).",
-  exists: "Există deja un cont cu acest email — autentifică-te.",
-  bad: "Email sau parolă greșite.",
+  invalid: "Nume de utilizator invalid (3-32 caractere, fără spații) sau parolă prea scurtă (minim 6 caractere).",
+  exists: "Există deja un cont cu acest nume de utilizator — autentifică-te.",
+  bad: "Nume de utilizator sau parolă greșite.",
   // Rate limit reached. Deliberately vague about WHY: naming the limit tells someone probing
   // for accounts exactly how fast they may probe.
   slow: "Prea multe încercări. Așteaptă câteva minute și încearcă din nou.",
@@ -32,8 +32,8 @@ export default async function LoginPage({ searchParams }: { searchParams: { e?: 
           <h2 style={{ fontSize: 18 }}>Intră în cont</h2>
           <form action={login} className="auth-form">
             <input type="hidden" name="next" value={next} />
-            <input type="email" name="email" required placeholder="Email" aria-label="Email" />
-            <input type="password" name="password" required placeholder="Parolă" aria-label="Parolă" />
+            <input type="text" name="username" required minLength={3} maxLength={32} autoComplete="username" placeholder="Nume de utilizator" aria-label="Nume de utilizator" />
+            <input type="password" name="password" required autoComplete="current-password" placeholder="Parolă" aria-label="Parolă" />
             <button className="btn btn-primary" type="submit">Autentificare</button>
           </form>
         </div>
@@ -41,8 +41,8 @@ export default async function LoginPage({ searchParams }: { searchParams: { e?: 
           <h2 style={{ fontSize: 18 }}>Cont nou</h2>
           <form action={register} className="auth-form">
             <input type="hidden" name="next" value={next} />
-            <input type="email" name="email" required placeholder="Email" aria-label="Email nou" />
-            <input type="password" name="password" required minLength={6} placeholder="Parolă (min. 6 caractere)" aria-label="Parolă nouă" />
+            <input type="text" name="username" required minLength={3} maxLength={32} autoComplete="username" placeholder="Nume de utilizator" aria-label="Nume de utilizator nou" />
+            <input type="password" name="password" required minLength={6} autoComplete="new-password" placeholder="Parolă (min. 6 caractere)" aria-label="Parolă nouă" />
             <button className="btn btn-accent" type="submit">Creează cont</button>
             {/* Consent has to be reachable AT the moment it is given, not only from the
                 footer. Linked rather than pre-ticked: a checkbox nobody reads is not consent,
@@ -50,8 +50,9 @@ export default async function LoginPage({ searchParams }: { searchParams: { e?: 
             <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 4 }}>
               Prin crearea contului accepți{" "}
               <Link href="/termeni">termenii de utilizare</Link> și{" "}
-              <Link href="/confidentialitate">politica de confidențialitate</Link>. Păstrăm
-              adresa de e-mail și ce salvezi în cont; poți cere ștergerea oricând.
+              <Link href="/confidentialitate">politica de confidențialitate</Link>. Nu îți cerem
+              un e-mail — păstrăm doar numele de utilizator și ce salvezi în cont; poți cere
+              ștergerea oricând.
             </p>
           </form>
         </div>

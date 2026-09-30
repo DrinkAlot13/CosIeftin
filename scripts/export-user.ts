@@ -18,8 +18,8 @@
 // that does not exist looks like "we hold nothing about you", which is a claim; "no such
 // account" is a different one, and the requester deserves the right one.
 //
-//   npm run export:user -- --email someone@example.com
-//   npm run export:user -- --email someone@example.com --out C:/tmp/export.json
+//   npm run export:user -- --username someone
+//   npm run export:user -- --username someone --out C:/tmp/export.json
 
 import { writeFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
@@ -29,20 +29,20 @@ const prisma = new PrismaClient();
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const at = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : null; };
-  const email = at("--email")?.trim().toLowerCase();
+  const username = at("--username")?.trim().toLowerCase();
   const out = at("--out");
 
-  if (!email) {
-    console.error("Usage: npm run export:user -- --email <address> [--out <file.json>]");
+  if (!username) {
+    console.error("Usage: npm run export:user -- --username <name> [--out <file.json>]");
     process.exit(2);
   }
 
   const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, email: true, isAdmin: true, createdAt: true },
+    where: { username },
+    select: { id: true, username: true, isAdmin: true, createdAt: true },
   });
   if (!user) {
-    console.error(`No account for ${JSON.stringify(email)}. Nothing exported.`);
+    console.error(`No account for ${JSON.stringify(username)}. Nothing exported.`);
     console.error(`That is NOT the same as "we hold no data about you" — say the right one.`);
     process.exit(1);
   }
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     exportedAt: new Date().toISOString(),
     about: "Toate datele pe care CoșMic le păstrează despre acest cont.",
     account: {
-      email: user.email,
+      username: user.username,
       createdAt: user.createdAt,
       // The hash is deliberately absent: it is OUR credential material, not information about
       // the person, and handing it out would only help whoever obtained the file.

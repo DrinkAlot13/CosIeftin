@@ -36,7 +36,8 @@ npm run dev       # http://localhost:3000
 - `/p/[slug]` item — per-store price table with **unit price**, price-history chart, add-to-list
 - `/lista` — **the list builder**: cheapest single store vs cheapest split, savings, per-store totals
 - `/search?q=` typo-tolerant search · `/api/suggest`, `/api/basket`
-- `/login`, `/cont`, `/admin` (admin login: **admin@cosmic.ro / admin1234**)
+- `/login`, `/cont`, `/admin` (admin username **`admin`**; there is no default password —
+  `ADMIN_PASSWORD='…' npm run seed-admin` sets one, see `scripts/seed-admin.ts`)
 - Installable **PWA** (`/manifest.webmanifest`) so the list works on mobile in-store.
 
 ## Data sourcing — REAL data only (no sample data)

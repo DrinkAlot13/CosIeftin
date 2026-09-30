@@ -17,7 +17,7 @@ the website, so one route satisfies both.
 
 ## 2. What we have, and why it is not enough
 
-`npm run erase:user -- --email <addr> --write` — GDPR Article 17, proved on real probe accounts.
+`npm run erase:user -- --username <name> --write` — GDPR Article 17, proved on real probe accounts.
 It deletes `User`, `GroceryList(Item)`, `UserFavorite`, `UserBlocklist`, `UserProductAdd`, and
 separately `PriceAlert` by `--telegram <chatId>`.
 
@@ -32,7 +32,7 @@ erasure story itself is sound.** What is missing is a way for the person to trig
 ## 3. What the endpoint needs
 
 **Authentication.** Session-authenticated, acting only on `session.userId`. It must never accept
-a user id, an e-mail, or any identifier from the request body — an endpoint that deletes the
+a user id, a username, or any identifier from the request body — an endpoint that deletes the
 account named in its payload is an account-deletion oracle for anyone with a session.
 
 **Re-authentication.** Password required in the request even though the session is already valid.

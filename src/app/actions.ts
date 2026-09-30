@@ -6,7 +6,10 @@ import { clearSession, hashPassword, setSession, verifyPassword } from "@/lib/au
 import { prisma } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// No email is ever collected or sent — see docs/DEPLOYMENT.md and confidentialitate/page.tsx.
+// A username is free-form enough for a real name or handle, but excludes whitespace and "@" so
+// it never LOOKS like an email address someone might mistake for a real contact channel.
+const USERNAME_RE = /^[^\s@]{3,32}$/;
 
 /**
  * `login` and `register` are SERVER ACTIONS, not API routes, so nothing routes through
@@ -30,22 +33,22 @@ function limitAuth(name: "login" | "register"): void {
 
 export async function register(formData: FormData) {
   limitAuth("register");
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const username = String(formData.get("username") ?? "").trim().toLowerCase();
   const pw = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/cont");
-  if (!EMAIL_RE.test(email) || pw.length < 6) redirect("/login?e=invalid");
-  if (await prisma.user.findUnique({ where: { email } })) redirect("/login?e=exists");
-  const user = await prisma.user.create({ data: { email, passwordHash: hashPassword(pw) } });
+  if (!USERNAME_RE.test(username) || pw.length < 6) redirect("/login?e=invalid");
+  if (await prisma.user.findUnique({ where: { username } })) redirect("/login?e=exists");
+  const user = await prisma.user.create({ data: { username, passwordHash: hashPassword(pw) } });
   setSession(user.id);
   redirect(next);
 }
 
 export async function login(formData: FormData) {
   limitAuth("login");
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const username = String(formData.get("username") ?? "").trim().toLowerCase();
   const pw = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/cont");
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { username } });
   if (!user || !verifyPassword(pw, user.passwordHash)) redirect("/login?e=bad");
   setSession(user.id);
   redirect(next);

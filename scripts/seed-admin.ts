@@ -70,7 +70,7 @@ function hash(pw: string): string {
 }
 
 async function main(): Promise<void> {
-  const email = process.env.ADMIN_EMAIL?.trim() || "admin@cosmic.ro";
+  const username = process.env.ADMIN_USERNAME?.trim() || "admin";
   const resolved = resolveSeedPassword(process.env);
   if (!resolved.ok) {
     console.error(resolved.reason);
@@ -79,15 +79,15 @@ async function main(): Promise<void> {
   }
 
   const user = await prisma.user.upsert({
-    where: { email },
+    where: { username },
     // An existing account keeps its password. Re-running setup must not silently reset a
     // rotated credential back to whatever is in the environment today.
     update: { isAdmin: true },
-    create: { email, passwordHash: hash(resolved.password), isAdmin: true },
+    create: { username, passwordHash: hash(resolved.password), isAdmin: true },
   });
 
   // The password is never printed. That is the whole point.
-  console.log(`seeded admin ${email} (user#${user.id})`);
+  console.log(`seeded admin ${username} (user#${user.id})`);
   await prisma.$disconnect();
 }
 

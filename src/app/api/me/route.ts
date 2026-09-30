@@ -23,8 +23,8 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
   return NextResponse.json(
-    { email: user?.email ?? null, isAdmin: user?.isAdmin ?? false },
-    // Per-user and never shared. A cached response here would show one visitor another's email.
+    { username: user?.username ?? null, isAdmin: user?.isAdmin ?? false },
+    // Per-user and never shared. A cached response here would show one visitor another's name.
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

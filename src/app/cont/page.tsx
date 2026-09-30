@@ -15,7 +15,7 @@ export default async function ContPage() {
       <div className="section" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: 26 }}>Contul meu</h1>
-          <p className="muted" style={{ margin: 0 }}>{user.email}</p>
+          <p className="muted" style={{ margin: 0 }}>{user.username}</p>
         </div>
         <form action={logout}><button className="btn btn-outline" type="submit">Deconectare</button></form>
       </div>

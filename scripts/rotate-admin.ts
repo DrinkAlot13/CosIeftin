@@ -1,6 +1,6 @@
 // Rotate an admin account's password.
 //
-// Written because user #1 (admin@cosmic.ro) authenticated with "admin1234" — a password
+// Written because user #1 (admin) authenticated with "admin1234" — a password
 // committed to this repository in scripts/seed-admin.ts as a `?? ` fallback. That is the same
 // failure as the AUTH_SECRET default and worse in one respect: AUTH_SECRET let someone forge a
 // session, this handed them a working admin login.
@@ -22,7 +22,7 @@
 // This script never prints the password, never logs it, never writes it anywhere but the
 // scrypt hash, and refuses to echo it back even on success.
 //
-// Run: npm run rotate:admin              (rotates ADMIN_EMAIL, default admin@cosmic.ro)
+// Run: npm run rotate:admin              (rotates ADMIN_USERNAME, default "admin")
 //      npm run rotate:admin -- --list    (read-only: report admin accounts, rotate nothing)
 
 import crypto from "node:crypto";
@@ -54,26 +54,26 @@ const pad = (s: string, n: number): string => (s.length >= n ? s.slice(0, n) : s
 async function listAdmins(): Promise<void> {
   const admins = await prisma.user.findMany({
     where: { isAdmin: true },
-    select: { id: true, email: true, createdAt: true, passwordHash: true, _count: { select: { lists: true, favorites: true } } },
+    select: { id: true, username: true, createdAt: true, passwordHash: true, _count: { select: { lists: true, favorites: true } } },
     orderBy: { id: "asc" },
   });
   const all = await prisma.user.count();
 
   console.log(`\n  ${all} user(s) total, ${admins.length} with isAdmin=true\n`);
-  console.log(`  ${pad("id", 5)}${pad("email", 28)}${pad("created", 20)}${pad("lists", 7)}${pad("favs", 6)}committed default?`);
+  console.log(`  ${pad("id", 5)}${pad("username", 28)}${pad("created", 20)}${pad("lists", 7)}${pad("favs", 6)}committed default?`);
   console.log("  " + "─".repeat(88));
   for (const a of admins) {
     // Checked against the denylist, so a rotation can be confirmed rather than assumed.
     const weak = [...DENYLIST].find((p) => matches(p, a.passwordHash));
     console.log(
-      `  ${pad(String(a.id), 5)}${pad(a.email, 28)}${pad(a.createdAt.toISOString().slice(0, 16).replace("T", " "), 20)}` +
+      `  ${pad(String(a.id), 5)}${pad(a.username, 28)}${pad(a.createdAt.toISOString().slice(0, 16).replace("T", " "), 20)}` +
       `${pad(String(a._count.lists), 7)}${pad(String(a._count.favorites), 6)}` +
       (weak ? `YES — "${weak}"  <-- ROTATE THIS` : "no"),
     );
   }
   console.log(
     "\n  A seed account looks like: created at the same moment as the database, zero lists,\n" +
-    "  zero favourites, and an address from the seed script. A real one has activity.\n",
+    "  zero favourites, and the username from the seed script. A real one has activity.\n",
   );
 }
 
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const email = process.env.ADMIN_EMAIL?.trim() || "admin@cosmic.ro";
+  const username = process.env.ADMIN_USERNAME?.trim() || "admin";
   const next = process.env.NEW_ADMIN_PASSWORD;
 
   // Argv is visible in the process list and in shell history. Refuse it outright rather than
@@ -111,9 +111,9 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const user = await prisma.user.findUnique({ where: { email }, select: { id: true, isAdmin: true, passwordHash: true } });
+  const user = await prisma.user.findUnique({ where: { username }, select: { id: true, isAdmin: true, passwordHash: true } });
   if (!user) {
-    console.error(`No user with email ${email}. Set ADMIN_EMAIL to the account you mean.`);
+    console.error(`No user "${username}". Set ADMIN_USERNAME to the account you mean.`);
     process.exit(1);
   }
 
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   const newWorks = !!after && matches(next, after.passwordHash);
   const oldStillWorks = !!after && !!wasWeak && matches(wasWeak, after.passwordHash);
 
-  console.log(`\n  rotated: ${email} (user #${user.id}, isAdmin=${user.isAdmin})`);
+  console.log(`\n  rotated: ${username} (user #${user.id}, isAdmin=${user.isAdmin})`);
   console.log(`  new password authenticates:      ${newWorks ? "yes" : "NO"}`);
   console.log(`  previous committed default works: ${oldStillWorks ? "YES — ROTATION FAILED" : "no"}`);
   if (wasWeak) console.log(`  (this account previously used a password published in this repository)`);

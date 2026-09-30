@@ -100,5 +100,5 @@ export async function getCurrentUser() {
   if (!token) return null;
   const id = verify(token);
   if (id == null) return null;
-  return prisma.user.findUnique({ where: { id }, select: { id: true, email: true, isAdmin: true } });
+  return prisma.user.findUnique({ where: { id }, select: { id: true, username: true, isAdmin: true } });
 }
