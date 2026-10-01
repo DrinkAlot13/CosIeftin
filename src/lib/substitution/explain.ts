@@ -57,16 +57,20 @@ export function explainResolution(r: Resolution, shopName: string, unit: string)
       };
 
     case "SUBSTITUTED_EQUIVALENT":
+    case "SUBSTITUTED_STRUCTURAL":
     case "SUBSTITUTED_CHEAPEST":
     case "SUBSTITUTED_SAME_BRAND": {
       const head = `Nu am găsit ${reason.requestedProductName ?? "produsul cerut"} la ${shopName}. Am ales ${reason.chosenProductName ?? "altceva"}`;
+      // STRUCTURAL is a weaker claim than a curated class (see structural-equivalence.ts) —
+      // say so, rather than let it read as equally certain as a human-confirmed equivalence.
+      const caveat = reason.code === "SUBSTITUTED_STRUCTURAL" ? " ca produs similar" : "";
       if (saving != null && saving > 0) {
-        return { headline: `${head} — cu ${lei(saving)}/${u} mai ieftin.`, tone: "good" };
+        return { headline: `${head}${caveat} — cu ${lei(saving)}/${u} mai ieftin.`, tone: "good" };
       }
       if (saving != null && saving < 0) {
-        return { headline: `${head} — cu ${lei(-saving)}/${u} mai scump.`, tone: "warn" };
+        return { headline: `${head}${caveat} — cu ${lei(-saving)}/${u} mai scump.`, tone: "warn" };
       }
-      return { headline: `${head}.`, tone: "neutral" };
+      return { headline: `${head}${caveat}.`, tone: "neutral" };
     }
 
     case "EXACT_ONLY_NOT_STOCKED":

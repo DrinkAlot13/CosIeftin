@@ -47,6 +47,14 @@ export type ListLine = {
   /** what they want in canonical units; falls back to qty × the pinned pack */
   requestedQuantity?: number | null;
   requestedUnit?: string | null;
+  /**
+   * Products the caller has already determined are STRUCTURALLY similar to this line's
+   * product (same head noun + canonical unit + a size band — see
+   * `substitution/structural-equivalence.ts`), for use ONLY when the requested product has no
+   * curated `equivalenceClassId`. Computed upstream (the API route), not here: this module
+   * stays a pure function over its inputs and never touches the database.
+   */
+  structuralCandidateProductIds?: number[];
 };
 
 export type UserContext = {
@@ -66,6 +74,7 @@ export type ResolutionReason = {
     | "EXACT_MATCH"
     | "SUBSTITUTED_SAME_BRAND"
     | "SUBSTITUTED_EQUIVALENT"
+    | "SUBSTITUTED_STRUCTURAL"
     | "SUBSTITUTED_CHEAPEST"
     | "SPLIT_PACKS"
     | "NOT_STOCKED"
@@ -135,28 +144,39 @@ export function isBuyable(o: OfferLike, ctx: UserContext, now: Date): { ok: bool
   return { ok: true };
 }
 
+/** Which pool of candidates actually produced the match, so `resolveLine` can label the
+ *  curated-class case and the structural-fallback case differently — the second is weaker
+ *  evidence (see structural-equivalence.ts) and must not read as equally certain. */
+type CandidateTier = "DIRECT" | "CLASS" | "STRUCTURAL";
+
 /** Candidate set for a line, by mode. */
-function candidatesFor(line: ListLine, requested: OfferLike | undefined, all: OfferLike[]): OfferLike[] {
+function candidatesFor(line: ListLine, requested: OfferLike | undefined, all: OfferLike[]): { offers: OfferLike[]; tier: CandidateTier } {
   const pinned = line.pinnedProductId ?? line.productId;
   switch (line.substitutionMode) {
     case "EXACT":
-      return all.filter((o) => o.product.id === pinned);
+      return { offers: all.filter((o) => o.product.id === pinned), tier: "DIRECT" };
     case "SAME_BRAND": {
       const brand = requested?.product.brand?.toLowerCase();
-      if (!brand) return all.filter((o) => o.product.id === pinned);
-      return all.filter((o) => o.product.brand?.toLowerCase() === brand);
+      if (!brand) return { offers: all.filter((o) => o.product.id === pinned), tier: "DIRECT" };
+      return { offers: all.filter((o) => o.product.brand?.toLowerCase() === brand), tier: "DIRECT" };
     }
     case "EQUIVALENT": {
       const cls = requested?.product.equivalenceClassId;
-      // Without a class we cannot know what "equivalent" means, so fall back to the exact
-      // product rather than guessing — a wrong substitution is worse than none.
-      if (cls == null) return all.filter((o) => o.product.id === pinned);
-      return all.filter((o) => o.product.equivalenceClassId === cls);
+      if (cls != null) return { offers: all.filter((o) => o.product.equivalenceClassId === cls), tier: "CLASS" };
+      // No curated class. Fall back to the caller's precomputed structural candidates — same
+      // head noun, canonical unit, size band — rather than giving up, but this is weaker
+      // evidence than a human-curated class and `resolveLine` tags it as such.
+      if (line.structuralCandidateProductIds?.length) {
+        const set = new Set(line.structuralCandidateProductIds);
+        set.add(pinned);
+        return { offers: all.filter((o) => set.has(o.product.id)), tier: "STRUCTURAL" };
+      }
+      return { offers: all.filter((o) => o.product.id === pinned), tier: "DIRECT" };
     }
     case "CHEAPEST": {
       const cls = requested?.product.equivalenceClassId;
-      if (cls == null) return all.filter((o) => o.product.id === pinned);
-      return all.filter((o) => o.product.equivalenceClassId === cls);
+      if (cls == null) return { offers: all.filter((o) => o.product.id === pinned), tier: "DIRECT" };
+      return { offers: all.filter((o) => o.product.equivalenceClassId === cls), tier: "CLASS" };
     }
   }
 }
@@ -187,7 +207,7 @@ export function resolveLine(line: ListLine, merchantId: number, ctx: UserContext
     ? line.requestedQuantity
     : (requested?.packQuantity ?? 1) * line.qty;
 
-  const raw = candidatesFor(line, requested, mine);
+  const { offers: raw, tier } = candidatesFor(line, requested, mine);
   const excluded = { blocked: 0, stale: 0, expired: 0, anomaly: 0 };
   const buyable: OfferLike[] = [];
   for (const o of raw) {
@@ -225,6 +245,7 @@ export function resolveLine(line: ListLine, merchantId: number, ctx: UserContext
   if (isExact) code = packs > 1 ? "SPLIT_PACKS" : "EXACT_MATCH";
   else if (line.substitutionMode === "SAME_BRAND") code = "SUBSTITUTED_SAME_BRAND";
   else if (line.substitutionMode === "CHEAPEST") code = "SUBSTITUTED_CHEAPEST";
+  else if (tier === "STRUCTURAL") code = "SUBSTITUTED_STRUCTURAL";
   else code = "SUBSTITUTED_EQUIVALENT";
 
   return {

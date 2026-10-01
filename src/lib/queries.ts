@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { deliveryPlatformWhere } from "@/lib/platform/visibility";
 import { normalizeText } from "@/lib/matching";
-import { headNoun } from "@/lib/scrape-util";
+import { headNoun, overlapTokens } from "@/lib/scrape-util";
 
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
@@ -411,9 +411,39 @@ const headNounOf = (name: string, brand?: string | null): string =>
  *  "equivalent" — any product with the same head-noun and size (the default).      */
 export type Strictness = "same-brand" | "equivalent";
 
-export async function getAlternatives(productId: number, limit = 8, strictness: Strictness = "equivalent") {
-  const p = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true, brand: true, unit: true, unitSize: true, section: true } });
-  if (!p) return [];
+/**
+ * Default size band for "similar products" — the same question the substitution engine's
+ * structural fallback asks (`src/lib/substitution/resolve.ts`'s EQUIVALENT case, when no
+ * curated `EquivalenceClass` exists), at the tolerance this browse feature was tuned and
+ * audited at (`audit:alternatives`: 85.7% coverage, 2.99 suggestions/product). The basket
+ * resolver calls `structuralCandidateIds` with a LOOSER tolerance of its own — "close enough to
+ * buy instead of going without" is a weaker bar than "worth showing as a browse suggestion" —
+ * but through this SAME function, so there remains exactly one head-noun-based candidate rule
+ * rather than a second copy that can drift the way the old `headNounOf` duplicate did.
+ */
+export const ALTERNATIVES_SIZE_TOLERANCE = 0.06;
+
+/**
+ * The basket resolver's own tolerance for the SAME structural-candidate query, used only when
+ * a line's product has no curated `EquivalenceClass` (3.7% of grocery products have one,
+ * measured 2026-10-02). Looser than `ALTERNATIVES_SIZE_TOLERANCE` on purpose: "close enough to
+ * buy instead of going home without it" is a weaker bar than "worth surfacing as a browse
+ * suggestion". Tuned against `audit:substitution-coverage`'s 95%-per-merchant bar, not guessed
+ * — see that script's header for the measured history of what each value achieved.
+ */
+export const BASKET_STRUCTURAL_TOLERANCE = 0.35;
+
+/**
+ * Other products sharing this one's head noun, canonical unit, and a size band — the candidate
+ * SET for "would a shopper accept this instead", before any pricing/decoration/strictness is
+ * applied. Returns ids only: what to DO with the candidates (decorate for a browse card here,
+ * fold into a basket resolution elsewhere) is the caller's concern, not this query's.
+ */
+export async function structuralCandidateIds(
+  p: { id: number; name: string; brand: string | null; unit: string; unitSize: number; section: string },
+  sizeTolerance: number,
+  opts: { requireMutualDistinction?: boolean; take?: number } = {},
+): Promise<number[]> {
   const head = headNounOf(p.name, p.brand);
   if (!head) return [];
   const cands = await prisma.product.findMany({
@@ -422,12 +452,11 @@ export async function getAlternatives(productId: number, limit = 8, strictness: 
       unit: p.unit,
       id: { not: p.id },
       offers: { some: {} },
-      unitSize: { gte: p.unitSize * 0.94, lte: p.unitSize * 1.06 },
+      unitSize: { gte: p.unitSize * (1 - sizeTolerance), lte: p.unitSize * (1 + sizeTolerance) },
     },
-    include: { offers: activeInclude, category: true },
-    take: 500,
+    select: { id: true, name: true, brand: true },
+    take: opts.take ?? 500,
   });
-  const nbrand = normalizeText(p.brand ?? "");
   // ── BOTH SIDES MUST BE THE SAME KIND OF THING, not merely share a word.
   //
   // The old test was "the candidate's name CONTAINS the source's head noun anywhere", which is
@@ -439,6 +468,56 @@ export async function getAlternatives(productId: number, limit = 8, strictness: 
   // they are, rather than one side merely mentioning it. A cheese spread's head noun is
   // `creminos`, not `unt`.
   let matched = cands.filter((c) => headNounOf(c.name, c.brand) === head);
+
+  // ── A HEAD NOUN CAN BE TOO GENERIC TO CARRY THE WHOLE JUDGEMENT, AND SIZE STOPS GUARDING
+  //    AGAINST IT AS THE SIZE BAND WIDENS.
+  //
+  // At `ALTERNATIVES_SIZE_TOLERANCE` (6%), two products rarely share an almost-identical pack
+  // size unless they are genuinely the same kind of thing, so a generic head noun ("tablete",
+  // "bautura", "crema") was accidentally screened by size agreement. At the basket resolver's
+  // much looser tolerance that screen weakens, and it failed outright: measured on a random
+  // 50-item sample (`audit:substitution-coverage`), "Tablete de ciocolată amăruie cu 72% cacao
+  // 100g" — chocolate — was offered "Tablete odorizante pentru rezervorul toaletei" — TOILET
+  // BOWL CLEANER TABLETS — as a substitute, both head-nouned to "tablete", both 4-count packs.
+  // Soy milk ("alpro Bautura din Soia") was likewise offered a pineapple-coconut juice drink, and
+  // a depilatory cream was offered reparative hand cream — "bautura" and "crema" are category
+  // words, not product names. So callers using the wider tolerance ask for this extra check:
+  // mutual distinction, the same structural signal `decide()` uses for "is this the same
+  // catalog row" (CLAUDE.md's matching rules) — if EACH side carries significant tokens the
+  // other lacks, they are different things. It is intentionally skipped for
+  // `ALTERNATIVES_SIZE_TOLERANCE` callers (unaudited behaviour change otherwise) and intentionally
+  // LIGHTER than decide()'s version — one side being a fuller description of the same product
+  // (brand name, a flavour word) must not disqualify a substitute, only a product that is
+  // plainly a different kind of thing should.
+  if (opts.requireMutualDistinction) {
+    const pOver = new Set(overlapTokens(normalizeText(p.name)));
+    matched = matched.filter((c) => {
+      const cOver = new Set(overlapTokens(normalizeText(c.name)));
+      const pOnly = [...pOver].filter((t) => !cOver.has(t));
+      const cOnly = [...cOver].filter((t) => !pOver.has(t));
+      // EITHER side, not both: "Crema depilatoare Veet Aloe Vera si Vitamina E pentru piele
+      // sensibila" vs "NIVEA Crema" has nothing unshared on the SHORT side, so an AND-of-both
+      // check passed it — hand cream as a depilatory cream's substitute. The requested
+      // product carrying several tokens the candidate never mentions is itself the warning
+      // sign, independent of what the candidate adds back.
+      return pOnly.length < 2 && cOnly.length < 2;
+    });
+  }
+
+  return matched.map((c) => c.id);
+}
+
+export async function getAlternatives(productId: number, limit = 8, strictness: Strictness = "equivalent") {
+  const p = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true, brand: true, unit: true, unitSize: true, section: true } });
+  if (!p) return [];
+  const ids = await structuralCandidateIds(p, ALTERNATIVES_SIZE_TOLERANCE);
+  if (ids.length === 0) return [];
+  const cands = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    include: { offers: activeInclude, category: true },
+  });
+  const nbrand = normalizeText(p.brand ?? "");
+  let matched = cands;
   // "same brand only": the shopper wants a better price on THIS product, not a substitute.
   // With no brand on the source product there is nothing to hold constant, so the filter
   // would silently return nothing — fall back to equivalents rather than an empty list.

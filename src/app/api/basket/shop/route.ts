@@ -22,6 +22,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { explainResolution } from "@/lib/substitution/explain";
 import { loadMerchants, loadOfferExtras, loadOffers, loadUserContext } from "@/lib/substitution/load";
 import { resolveLine, type ListLine, type SubstitutionMode } from "@/lib/substitution/resolve";
+import { structuralCandidateIds, BASKET_STRUCTURAL_TOLERANCE } from "@/lib/queries";
 import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -59,17 +60,28 @@ export async function POST(req: NextRequest) {
   const slugs = [...new Set(items.map((i) => i.slug))];
   const products = await prisma.product.findMany({
     where: { slug: { in: slugs } },
-    select: { id: true, slug: true, name: true, unit: true, equivalenceClassId: true },
+    select: { id: true, slug: true, name: true, brand: true, unit: true, unitSize: true, section: true, equivalenceClassId: true },
   });
   const bySlug = new Map(products.map((p) => [p.slug, p]));
 
   const classIds = [...new Set(products.map((p) => p.equivalenceClassId).filter((x): x is number => x != null))];
+
+  // Products with no curated equivalence class still deserve a substitution attempt — same
+  // head-noun/unit/size-band rule "similar products" uses (`structuralCandidateIds` in
+  // queries.ts), just at this feature's own, looser tolerance. Computed per product (not per
+  // line) since several lines can share a product, and merged into one wider offer pool below.
+  const noClass = products.filter((p) => p.equivalenceClassId == null);
+  const structuralByProduct = new Map<number, number[]>(
+    await Promise.all(noClass.map(async (p) => [p.id, await structuralCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE, { requireMutualDistinction: true })] as [number, number[]])),
+  );
+  const allStructuralIds = [...new Set([...structuralByProduct.values()].flat())];
+
   const [ctx, offers] = await Promise.all([
     loadUserContext((await getCurrentUser())?.id ?? null, {
       preferPrivateLabel: body?.preferPrivateLabel === true,
       hasLoyaltyCards: body?.hasLoyaltyCards === true,
     }),
-    loadOffers({ productIds: products.map((p) => p.id), classIds }),
+    loadOffers({ productIds: products.map((p) => p.id), classIds, structuralProductIds: allStructuralIds }),
   ]);
 
   const lines = items.map((item) => {
@@ -88,6 +100,7 @@ export async function POST(req: NextRequest) {
       productId: p.id,
       qty: item.qty,
       substitutionMode: item.mode === "EXACT" ? "EXACT" : "EQUIVALENT",
+      structuralCandidateProductIds: structuralByProduct.get(p.id),
     };
     const r = resolveLine(line, merchant.id, ctx, offers);
     const explanation = explainResolution(r, merchant.name, p.unit);

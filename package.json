@@ -140,6 +140,7 @@
     "verify:search-identity": "tsx scripts/verify-search-identity.ts",
     "audit:two-kinds": "tsx scripts/audit-two-kinds-of-fact.ts",
     "audit:real-basket": "tsx scripts/audit-real-basket.ts",
+    "audit:substitution-coverage": "tsx scripts/audit-substitution-coverage.ts",
     "audit:assumptions": "tsx scripts/audit-assumptions.ts",
     "audit:never-used": "tsx scripts/audit-never-used.ts",
     "audit:discriminator": "tsx scripts/audit-class-discriminator.ts",

@@ -20,11 +20,16 @@ import { validateTiers, type RawTier } from "../price/bulkTiers";
 export async function loadOffers(opts: {
   productIds?: number[];
   classIds?: number[];
+  /** products pulled in only as structural-fallback candidates (see
+   *  substitution/structural-equivalence.ts) — kept separate from `productIds` so a caller that
+   *  only wants exact/class matches is unaffected. */
+  structuralProductIds?: number[];
   take?: number;
 }): Promise<OfferLike[]> {
   const or: object[] = [];
   if (opts.productIds?.length) or.push({ productId: { in: opts.productIds } });
   if (opts.classIds?.length) or.push({ product: { equivalenceClassId: { in: opts.classIds } } });
+  if (opts.structuralProductIds?.length) or.push({ productId: { in: opts.structuralProductIds } });
   if (or.length === 0) return [];
 
   const offers = await prisma.offer.findMany({
