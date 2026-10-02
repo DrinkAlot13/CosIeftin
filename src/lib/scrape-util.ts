@@ -314,9 +314,15 @@ export function overlapTokens(nname: string): string[] {
  */
 export function headNoun(nname: string, nbrand = ""): string {
   const toks = sigTokens(nname);
-  if (!nbrand) return toks[0] ?? "";
-  const brandParts = new Set(nbrand.split(/\s+/).filter(Boolean));
-  return toks.find((t) => !brandParts.has(t)) ?? toks[0] ?? "";
+  const brandParts = nbrand ? new Set(nbrand.split(/\s+/).filter(Boolean)) : null;
+  // A variant marker ("eco", "bio", "light", "congelat"…) describes the product, it is not the
+  // product — the same reasoning that already excludes the brand. Skipping it here, not just in
+  // `decide()`'s own check, matters because candidate indexing and the substitution engine's
+  // structural fallback both key off THIS function: "ECO Turmeric 70 g" has no brand, so without
+  // this, toks[0] is "eco" and the catalog's entire unrelated ECO-labelled aisle — turmeric,
+  // spinach, garlic, 750+ products — heads onto one meaningless cluster.
+  const usable = (t: string) => !(brandParts?.has(t)) && !VARIANT_MARKERS.has(t);
+  return toks.find(usable) ?? toks.find((t) => !(brandParts?.has(t))) ?? toks[0] ?? "";
 }
 
 /**
