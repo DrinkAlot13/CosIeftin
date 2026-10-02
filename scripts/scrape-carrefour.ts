@@ -18,6 +18,14 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // Leaf food/household categories. carrefour.ro sells shelf-stable groceries only
 // (fresh dairy/produce/meat live on Bringo), so this is the pantry + drinks + cleaning
 // catalog — paginated deeply via Magento's ?p=N.
+//
+// THE FULL LIST, NOT A GUESS. The original 21 leaves below were a curated subset; the ones
+// after them were read off carrefour.ro's own category pages (`bacanie-carrefour` and
+// `casa-gradina-si-petshop/produse-curatenie-pentru-casa`) with a live browse, 2026-10-02 —
+// every leaf and sub-leaf those two trees actually link, still inside the same scope this
+// file already covers (no alcohol, no tobacco, no pet/garden). `seen` (below) dedupes by
+// product id across categories, so a product reachable from two of these costs an extra
+// page fetch, never a duplicate row.
 const CATS = [
   "bacanie-carrefour/alimente/ulei",
   "bacanie-carrefour/alimente/paste-fainoase",
@@ -40,6 +48,34 @@ const CATS = [
   "bacanie-carrefour/bauturi-nealcoolice/sucuri-si-nectaruri",
   "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/detergent-pentru-rufe",
   "casa-gradina-si-petshop/produse-curatenie-pentru-casa/servetele-si-produse-din-hartie/hartie-igienica",
+  // newly discovered, same two trees:
+  "bacanie-carrefour/alimente/snacks",
+  "bacanie-carrefour/bauturi-nealcoolice/ceaiuri-si-energizante",
+  "bacanie-carrefour/bauturi-nealcoolice/siropuri",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/alte-articole-intretinere",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/cosuri-si-saci-gunoi",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-universali-si-specializati/detergenti-baie",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-universali-si-specializati/detergenti-bucatarie",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-universali-si-specializati/detergenti-geamuri",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-universali-si-specializati/detergenti-parchet-si-mobila",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-vase/bureti-si-lavete-bucatarie",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-vase/detergent-manual-vase",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/detergenti-vase/detergent-masina-spalat-vase",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/folii-si-pungi-bucatarie",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/insecticide-si-repelenti",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-incaltaminte",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/anticalcar-si-igienizant-masina-spalat-rufe",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/balsam-pentru-rufe",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/inalbitori-rufe",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/mese-de-calcat",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/solutii-pentru-pete-rufe",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/umerase",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/intretinere-rufe/uscatoare-rufe-si-accesorii",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/manusi-menaj",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/maturi-si-mopuri",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/odorizanti-camera",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/servetele-si-produse-din-hartie",
+  "casa-gradina-si-petshop/produse-curatenie-pentru-casa/stergatoare-geam",
 ];
 const MAX_PAGES = 13; // ?p=1..13 (24/page); stops early when a page adds nothing new.
 
