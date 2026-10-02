@@ -103,4 +103,42 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
     ["paste"],
     ["dinti", "tomate", "sos", "pizza", "instant", "noodles",
      "umplute", "branza", "cheese", "gluten", "cuscus", "proaspete", "trufe", "jalapeno", "carne", "ton", "pesto"]),
+
+  // ══ BATCH 2 ═════════════════════════════════════════════════════════════════════════════
+
+  // ══ RICE — basmati is a distinct, specifically-shopped-for variety (same reasoning as the
+  //    existing per-apple-variety classes), not a footnote of the generic `orez-bob-lung-1kg`
+  //    class. Jasmine and arborio/risotto rice are real too but too thin in this batch's
+  //    reading to be worth a class yet — left for a later pass rather than forced in.
+  pack("orez-basmati-1kg", "Orez basmati, 1 kg", "kg", 1,
+    ["orez", "basmati"],
+    ["jasmine", "arborio", "risotto", "lapte", "pilaf"]),
+  pack("orez-basmati-500g", "Orez basmati, 500 g", "kg", 0.5,
+    ["orez", "basmati"],
+    ["jasmine", "arborio", "risotto", "lapte", "pilaf"]),
+
+  // ══ TOAST BREAD — packaged, shelf-stable, branded (Vel Pitar / Auchan / KB / Schar), not the
+  //    fresh bakery counter — so this does not carry the UHT-vs-fresh ambiguity that kept milk
+  //    out of private-label-classes.ts. White and wholegrain are split, same reasoning as flour
+  //    000 vs 650: different bake, different price, and the catalog states which is which.
+  pack("paine-toast-alba-600g", "Pâine toast albă, 600 g", "kg", 0.6,
+    ["paine", "toast"],
+    ["integral", "graham", "secara", "gluten", "proteine", "hipoglucidic", "ultrafibre", "neagra"]),
+  pack("paine-toast-integral-600g", "Pâine toast integrală, 600 g", "kg", 0.6,
+    ["paine", "toast", "integral"],
+    ["gluten", "hipoglucidic", "ultrafibre"]),
+
+  // ══ CAȘCAVAL — sliced only, plain. "afumat" (smoked), "light" and "pane"/"congelat" (breaded,
+  //    frozen sticks — a completely different prepared food) are real, priced-differently
+  //    variants; "Pringles Cașcaval & Ceapă" is a crisps flavour, not cheese, and is named out
+  //    explicitly rather than trusted to the size window.
+  pack("cascaval-felii-250g", "Cașcaval felii, 250 g", "kg", 0.25,
+    ["cascaval", "felii|feliat"],
+    ["afumat", "light", "pane", "congelat", "pringles", "ceapa"]),
+
+  // ══ MĂLAI — sibling of the existing `malai-1kg` at the other common pack size. Whole-grain is
+  //    named out, same reasoning as flour and oats elsewhere in this file.
+  pack("malai-500g", "Mălai, 500 g", "kg", 0.5,
+    ["malai"],
+    ["integral"]),
 ];
