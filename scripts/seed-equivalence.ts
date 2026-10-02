@@ -82,12 +82,20 @@ const CLASSES: Klass[] = [
   { slug: "oua-m-10", label: "Ouă mărimea M, 10 buc", unit: "buc", unitSize: 10, attributes: { size: "M", type: "oua de gaina", require: ["m|marimea m|marime m"], exclude: ["m l|prepelita|ciocolata"] } },
   { slug: "lapte-integral-1l", label: "Lapte integral 3,5%, 1 L", unit: "l", unitSize: 1, attributes: { grasime: "3.5", tip: "vaca", uht: null, require: ["integral|3 5"], exclude: ["cafea|praf|condensat|cocos|migdale|ovaz|soia|corp|demachiant|bebe"] } },
   { slug: "lapte-semi-1l", label: "Lapte semidegresat 1,5%, 1 L", unit: "l", unitSize: 1, attributes: { grasime: "1.5", tip: "vaca", require: ["semidegresat|1 5"], exclude: ["cafea|praf|condensat|cocos|migdale|ovaz|soia|corp|demachiant|bebe"] } },
-  { slug: "unt-200g", label: "Unt 82%, 200 g", unit: "kg", unitSize: 0.2, attributes: { grasime: "82", tip: "unt de masa", require: ["unt"], exclude: ["biscuiti|arahide|cacao|shea|corp|fursec|aluat|crema"] } },
-  { slug: "iaurt-natural-400g", label: "Iaurt natural, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "natural", require: ["natural"], exclude: ["bautura|inghetata|chec|grecesc|fructe"] } },
-  { slug: "iaurt-grecesc-400g", label: "Iaurt grecesc, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "grecesc", require: ["grecesc"], exclude: ["bautura|inghetata|chec"] } },
+  // `tartinabil`/`portionat`/`clarifiat`/`capra` added 2026-10-03, found by the brand-aware
+  // lead-token fix: spreadable butter-oil blends, catering portion packs ("100 x 10 g"),
+  // clarified butter (ghee) and goat butter had been excluded only by their brand prefix
+  // breaking the old lead check, not by this rule.
+  { slug: "unt-200g", label: "Unt 82%, 200 g", unit: "kg", unitSize: 0.2, attributes: { grasime: "82", tip: "unt de masa", require: ["unt"], exclude: ["biscuiti|arahide|cacao|shea|corp|fursec|aluat|crema|tartinabil|portionat|clarifiat|capra"] } },
+  // `iaurt` added to `require` 2026-10-03: with "natural" alone, "Vilgain Humus natural 140 g"
+  // (chickpea dip) qualified once the brand-aware lead-token fix let it reach the membership
+  // check — "natural" is also registered as an alternate lead because it's in `require`, so the
+  // lead check alone could never have caught this; only requiring the actual noun can.
+  { slug: "iaurt-natural-400g", label: "Iaurt natural, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "natural", require: ["iaurt", "natural"], exclude: ["bautura|inghetata|chec|grecesc|fructe"] } },
+  { slug: "iaurt-grecesc-400g", label: "Iaurt grecesc, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "grecesc", require: ["iaurt", "grecesc"], exclude: ["bautura|inghetata|chec"] } },
   { slug: "smantana-200g", label: "Smântână 20%, 200 g", unit: "kg", unitSize: 0.2, attributes: { grasime: "20", require: ["smantana"], exclude: ["branza|crema|almette|gatit"] } },
   { slug: "branza-telemea-400g", label: "Brânză telemea, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "telemea", require: ["telemea"], exclude: ["burduf|topita|cheddar|mozzarella"] } },
-  { slug: "cascaval-400g", label: "Cașcaval, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "cascaval", require: ["cascaval"], exclude: ["felii pizza|snack|pane|chipsuri"] } },
+  { slug: "cascaval-400g", label: "Cașcaval, 400 g", unit: "kg", unitSize: 0.4, attributes: { tip: "cascaval", require: ["cascaval"], exclude: ["felii pizza|snack|pane|chipsuri|popcorn"] } },
 
   // ── bakery & staples ──
   { slug: "paine-alba-500g", label: "Pâine albă, 500 g", unit: "kg", unitSize: 0.5, attributes: { tip: "alba", feliata: null, require: ["alba"], exclude: ["pesmet|crutoane|faina|mix|toast|graham|secara|integrala"] } },
@@ -101,7 +109,11 @@ const CLASSES: Klass[] = [
   { slug: "paste-500g", label: "Paste făinoase, 500 g", unit: "kg", unitSize: 0.5, attributes: { tip: "grau dur", require: ["paste"], exclude: ["dinti|tomate|sos|pizza|instant|noodles"] } },
   { slug: "malai-1kg", label: "Mălai, 1 kg", unit: "kg", unitSize: 1, attributes: {  require: ["malai"], exclude: ["mamaliga instant|briose"] } },
   { slug: "ulei-floarea-soarelui-1l", label: "Ulei floarea-soarelui, 1 L", unit: "l", unitSize: 1, attributes: { tip: "floarea soarelui", require: ["floarea"], exclude: ["masline|motor|corp|par|masaj|esential|susan|cocos|spray"] } },
-  { slug: "sare-1kg", label: "Sare de bucătărie, 1 kg", unit: "kg", unitSize: 1, attributes: { iodata: null, require: ["sare"], exclude: ["baie|himalaya"] } },
+  // `dedurizant`/`masina de spalat`/`lamaie`/`condimentat` added 2026-10-03, found by the
+  // brand-aware lead-token fix: "Somat Sare Dedurizantă" and "finish Sare Dedurizantă" are
+  // dishwasher water-softener, not food, and would have passed — their brand prefix had been
+  // the only thing keeping them out.
+  { slug: "sare-1kg", label: "Sare de bucătărie, 1 kg", unit: "kg", unitSize: 1, attributes: { iodata: null, require: ["sare"], exclude: ["baie|himalaya|dedurizant|masina de spalat|lamaie|condimentat|anticalcar"] } },
 
   // ── meat ──
   // ── MEAT IS SOLD BY WEIGHT, and these three did not say so.
@@ -117,12 +129,32 @@ const CLASSES: Klass[] = [
   // making. Better to leave that unassigned than to let it set the basket line.
     // CHICKEN, not turkey: "PENES Piept Curcan Dezosat cca 2 Kg" was pricing the chicken line.
   // `curcan` is a different bird at a different price and the name says so plainly.
-  { slug: "piept-pui-1kg", label: "Piept de pui, la kg", unit: "kg", unitSize: 1, attributes: { specie: "pui", transa: "piept", refrigerat: null, require: ["piept", "pui"], exclude: ["curcan|pane|crispy|afumat|snitel|nuggets|pizza|crenvursti|salam|parizer|sunca|conserva|pate|pateu|mazare|pieptene|tocat"], anySize: true, maxUnitSize: 2.5, minUnitSize: 0.3 } },
-  { slug: "pulpe-pui-1kg", label: "Pulpe de pui, la kg", unit: "kg", unitSize: 1, attributes: { specie: "pui", transa: "pulpe", require: ["pulpe"], exclude: ["pane|crispy|afumat|snitel|nuggets|conserva|pateu"], anySize: true, maxUnitSize: 2.5 } },
+  // `congelat`/`prajit`/`hamburger`/`sos` added 2026-10-03, found by the brand-aware lead-token
+  // fix in propose-equivalence.ts: this class is hand-written, not built with produce-classes.ts's
+  // `fresh()` helper, so it never inherited that file's shared `NOT_FRESH` list — "METRO Chef
+  // Hamburger Piept Pui Congelat", "METRO Chef Piept Pui Prajit Cuburi Congelat" and "Piept de
+  // pui in sos curry" had been excluded only by accident (their brand prefix broke the OLD,
+  // brand-blind lead check), not by anything this rule actually named.
+  { slug: "piept-pui-1kg", label: "Piept de pui, la kg", unit: "kg", unitSize: 1, attributes: { specie: "pui", transa: "piept", refrigerat: null, require: ["piept", "pui"], exclude: ["curcan|pane|crispy|afumat|snitel|nuggets|pizza|crenv|salam|parizer|sunca|conserva|pate|pateu|mazare|pieptene|tocat|congelat|prajit|hamburger|sos|frigarui|pastrama"], anySize: true, maxUnitSize: 2.5, minUnitSize: 0.3 } },
+  // `pui` moved from a documentation-only attribute into `require`, and `congelat`/`prajit`
+  // added: without it, "METRO Chef Pulpe Rata" (DUCK) and "Pulpe de curcan" (TURKEY) satisfied
+  // this rule on "pulpe" alone and would have priced chicken legs from duck and turkey legs —
+  // only the brand prefix breaking the old lead check had kept them out so far.
+  { slug: "pulpe-pui-1kg", label: "Pulpe de pui, la kg", unit: "kg", unitSize: 1, attributes: { specie: "pui", transa: "pulpe", require: ["pulpe", "pui"], exclude: ["pane|crispy|afumat|snitel|nuggets|conserva|pateu|congelat|prajit|rata|curcan"], anySize: true, maxUnitSize: 2.5 } },
     // `pateu` was excluded and the catalog writes `pate` — so "Pate de porc Auchan 15% carne,
   // 100 g" priced the "carne de porc" basket line at 1,29 lei. A near-miss in an exclusion list
   // is not a near-miss in effect: it is the whole rule failing on the most common spelling.
-  { slug: "carne-porc-1kg", label: "Carne de porc, la kg", unit: "kg", unitSize: 1, attributes: { specie: "porc", require: ["porc"], exclude: ["slanina|sunca|salam|carnati|pate|pateu|afumat|parizer|mici|pizza|conserva|crenvursti|ciolan|jambon|kaiser|bacon|sos|supa|hrana"], anySize: true, maxUnitSize: 2.5, minUnitSize: 0.25 } },
+  // Same brand-aware-fix exposure as `piept-pui-1kg` above. "Scandia Sibiu Carne Porc in Suc
+  // Propriu" (CANNED pork), "Dacello Untura de porc" (lard — rendered fat, not a cut), and
+  // "Carmangeria Ozana Sezamici din carne de porc si vita" (a grilled kebab-style product) had
+  // all been excluded only by their brand prefix breaking the old lead check. `carnati` is
+  // shortened to `carnat` so it also catches `carnaciori` (little sausages), which it did not.
+  // `crenvursti` shortened to `crenv` (also catches "crenvuşti"/"crenwursti" misspellings seen
+  // in the live catalog); `pastrama`/`tocana` added — both real cured/cooked products, not raw
+  // cuts, that had been excluded only by brand-prefix accident before the lead-token fix.
+  // `cren` (not `crenv`) also catches "Crenwursti" (W-spelling, seen live). `sarmale`/`piftie`/
+  // `gyoza` added — all prepared/cooked dishes containing pork, not a raw cut.
+  { slug: "carne-porc-1kg", label: "Carne de porc, la kg", unit: "kg", unitSize: 1, attributes: { specie: "porc", require: ["porc"], exclude: ["slanina|sunca|salam|cren|pate|pateu|afumat|parizer|mici|pizza|conserva|ciolan|jambon|kaiser|bacon|sos|supa|hrana|congelat|prajit|suc propriu|untura|sezamici|preparata|pastrama|tocana|sarmale|piftie|gyoza"], anySize: true, maxUnitSize: 2.5, minUnitSize: 0.25 } },
 
   // ── produce ──
   // Potatoes are sold loose and in 2,5 kg and 5 kg nets; a 1 kg class with no `anySize` matched
@@ -130,7 +162,12 @@ const CLASSES: Klass[] = [
   // unlike onions — but a 10 kg catering sack still stays out.
     // "aro Cartofi Crinkle 2,5 Kg" is frozen chips. `congelat` did not catch it because the name
   // never says so — the freezer is marked with a snowflake glyph instead.
-  { slug: "cartofi-1kg", label: "Cartofi albi, la kg", unit: "kg", unitSize: 1, attributes: { tip: "albi", require: ["cartofi"], exclude: ["pai|chips|congelat|dulci|bio|piure|snack|prajit|preprajit|fulgi|amidon|paine|wedges|sos|condimente|stickletti|pombar|salata de|crinkle|steakhouse|rosii|rosu"], anySize: true, maxUnitSize: 5, minUnitSize: 1 } },
+  // `raclette|cuburi|triunghiuri|criss cross|sidewinders|bacon|mozzarella` added 2026-10-03: the
+  // METRO Chef catering line marks frozen with a UI snowflake glyph that `normalizeRo` strips
+  // before any exclude check ever runs (it keeps only [a-z0-9]), so these products carry NO
+  // excludable word for "frozen" at all — only for the specific prepared shape, which is why
+  // this list names shapes rather than relying on "congelat" to catch them.
+  { slug: "cartofi-1kg", label: "Cartofi albi, la kg", unit: "kg", unitSize: 1, attributes: { tip: "albi", require: ["cartofi"], exclude: ["pai|chips|congelat|dulci|bio|piure|snack|prajit|preprajit|fulgi|amidon|paine|wedges|sos|condimente|stickletti|pombar|salata de|crinkle|steakhouse|rosii|rosu|raclette|cuburi|triunghiuri|criss cross|sidewinders|bacon|mozzarella|demibagheta|galuste|la cuptor"], anySize: true, maxUnitSize: 5, minUnitSize: 1 } },
   { slug: "rosii-1kg", label: "Roșii, 1 kg", unit: "kg", unitSize: 1, attributes: {  require: ["rosii"], exclude: ["bulion|pasta|suc|conserva|uscate|sos|cherry uscate"] } },
   { slug: "mere-1kg", label: "Mere, 1 kg", unit: "kg", unitSize: 1, attributes: {  require: ["mere"], exclude: ["suc|compot|otet|uscate|chips|piure"] } },
   { slug: "ceapa-1kg", label: "Ceapă galbenă, 1 kg", unit: "kg", unitSize: 1, attributes: { tip: "galbena", require: ["ceapa"], exclude: ["praf|deshidratat|murat|verde|inele|congelat|legume"] } },

@@ -50,7 +50,7 @@ const HERB_MIN_KG = 0.02;
 /** Forms and preparations that are never the fresh item, whatever the head noun says. */
 const NOT_FRESH = [
   "congelat", "conserva", "borcan", "murat", "muraturi", "compot", "suc", "nectar", "sirop",
-  "piure", "pasta", "bulion", "sos", "ketchup", "chips", "snack", "uscat", "deshidratat",
+  "piure", "pasta", "bulion", "sos", "supa", "ketchup", "chips", "snack", "uscat", "deshidratat",
   "iaurt", "prajitura", "baton", "musli", "cereale", "ciocolata", "inghetata", "bautura",
   "aroma", "gust de", "tortilla", "pizza", "salata de", "otet", "ulei", "sampon", "crema",
   "gem", "dulceata", "magiun", "jeleu", "biscuiti", "napolitane", "fulgi", "faina", "pudra",
@@ -63,6 +63,13 @@ const NOT_FRESH = [
   // roșie rondele" is a cooked slice. Each was proposed into a fresh class on the dry run.
   "saramura", "rondele", "taiat", "feliat", "curatat", "decojit", "in ulei", "in otet",
   "depelat", "crispy", "prajit", "pane", "wedges", "cuburi", "intreg", "passata", "pasat",
+  // Added 2026-10-03, found by the brand-aware lead-token fix exposing real gaps: "Kimchi de
+  // morcovi" (fermented, not fresh — and the SAME brand does it to carrots, beets and radishes),
+  // "Dulcegarie de căpșuni" (candy), "METRO Chef Tartă Vișine" (a cake), "Danonino Brânzică
+  // Caise & Căpșuni" (a kids' dairy snack merely flavoured with the fruit), "RIOBA Briosă Afine"
+  // (a muffin), "Fine Life Miniprăjitura Căpșuni" / "METRO Chef Topping Căpșuni" (a cake, a
+  // dessert sauce). None of these is the fruit itself.
+  "kimchi", "dulcegarie", "tarta", "branzica", "briose", "topping", "miniprajitura", "ceai",
 ];
 
 /**
@@ -155,16 +162,36 @@ export const PRODUCE_CLASSES: ProduceClass[] = [
   // Origin is a discriminator here, not a description: "românești" commands a real premium.
   fresh("rosii-romanesti-kg", "Roșii românești, la kg", ["rosii", "romanesti"], ["cherry", "roze", "uscate"]),
   fresh("rosii-cherry-kg", "Roșii cherry, la kg", ["rosii", "cherry"], ["uscate"]),
-  fresh("rosii-kg", "Roșii, la kg", ["rosii"], ["romanesti", "cherry", "roze", "uscate", "mere", "banane", "coacaze", "fasole", "varza", "sfecla", "ridichi", "portocale", "struguri", "ceapa", "cartofi", "ardei", "vin", "ceai"]),
+  // `tortelloni` added 2026-10-03: "Antica Corte Tortelloni roșii și mozzarella" is stuffed
+  // pasta, not tomatoes, and newly qualified once the brand-aware lead-token fix stopped
+  // rejecting it on the brand prefix alone — "roșii" is genuinely its second significant token.
+  fresh("rosii-kg", "Roșii, la kg", ["rosii"], ["romanesti", "cherry", "roze", "uscate", "mere", "banane", "coacaze", "fasole", "varza", "sfecla", "ridichi", "portocale", "struguri", "ceapa", "cartofi", "ardei", "vin", "ceai", "tortelloni", "ravioli", "paste"]),
   freshBio("rosii-bio-kg", "Roșii BIO, la kg", ["rosii"], ["mere", "banane", "coacaze", "fasole", "varza"]),
 
-  fresh("cartofi-albi-kg", "Cartofi albi, la kg", ["cartofi"], ["dulci", "noi", "rosii", "pai", "sac", "punga", "plasa", "wedges", "prajit"]),
+  // `congelat`/`preprajit`/`crinkle`/`chips` added 2026-10-03: previously kept out only by
+  // accident — the lead-token check rejected every branded frozen-fries line ("aro Cartofi
+  // Crinkle", "METRO Chef Cartofi Congelati", "Edenia Cartofi preprajiti") because the brand
+  // sat before "cartofi" in the name. Making that check brand-aware (propose-equivalence.ts)
+  // removed the accident and exposed that the real exclude list never named this whole
+  // category: raw potatoes and frozen oven fries are not the same purchase, and `prajit` alone
+  // does not catch `preprajiti` (the exclude match is a word-PREFIX check; "pre" is a different
+  // prefix). Measured via a live catalog scan before writing this, not assumed.
+  // `raclette|cuburi|triunghiuri|criss cross|sidewinders|bacon|mozzarella|demibagheta|galuste|
+  // la cuptor` added for the same reason as `cartofi-1kg` in seed-equivalence.ts: METRO Chef's
+  // frozen catering line marks "frozen" with a UI snowflake glyph `normalizeRo` strips before
+  // any exclude check runs, leaving only the shape name to match on.
+  fresh("cartofi-albi-kg", "Cartofi albi, la kg", ["cartofi"],
+    ["dulci", "noi", "rosii", "pai", "sac", "punga", "plasa", "wedges", "prajit", "congelat", "preprajit", "crinkle", "chips", "gratinat", "duchess", "dipper", "spirala", "steakhouse", "scoops",
+     "raclette", "cuburi", "triunghiuri", "criss cross", "sidewinders", "bacon", "mozzarella", "demibagheta", "galuste", "la cuptor"]),
   fresh("cartofi-noi-kg", "Cartofi noi, la kg", ["cartofi", "noi"], ["dulci", "pai"]),
   fresh("cartofi-dulci-kg", "Cartofi dulci, la kg", ["cartofi", "dulci"]),
   freshBio("cartofi-bio-kg", "Cartofi BIO, la kg", ["cartofi"], ["pai", "prajit"]),
 
-  fresh("ceapa-galbena-kg", "Ceapă galbenă, la kg", ["ceapa"], ["rosie", "verde", "plasa", "punga", "praf", "inele"]),
-  fresh("ceapa-rosie-kg", "Ceapă roșie, la kg", ["ceapa", "rosie"], ["verde", "praf"]),
+  // `pringles` added 2026-10-03: "Pringles Cascaval & Ceapa" is cheese-and-onion flavoured
+  // crisps, not onions — the same brand-collision shape already fixed for `cascaval-400g`.
+  fresh("ceapa-galbena-kg", "Ceapă galbenă, la kg", ["ceapa"], ["rosie", "verde", "plasa", "punga", "praf", "inele", "pringles"]),
+  // `chutney` added: a preserved condiment, not fresh onion.
+  fresh("ceapa-rosie-kg", "Ceapă roșie, la kg", ["ceapa", "rosie"], ["verde", "praf", "chutney"]),
   freshBio("ceapa-bio-kg", "Ceapă BIO, la kg", ["ceapa"], ["praf", "inele"]),
 
   fresh("usturoi-kg", "Usturoi, la kg", ["usturoi"], ["granulat", "praf", "sos", "pasta", "solo"]),
@@ -179,10 +206,15 @@ export const PRODUCE_CLASSES: ProduceClass[] = [
   fresh("conopida-kg", "Conopidă, la kg", ["conopida"]),
   fresh("broccoli-kg", "Broccoli, la kg", ["broccoli"]),
   fresh("telina-kg", "Țelină, la kg", ["telina"]),
-  fresh("sfecla-kg", "Sfeclă roșie, la kg", ["sfecla"]),
+  // `salatuca` added: a prepared beet-and-horseradish relish, not the fresh root.
+  fresh("sfecla-kg", "Sfeclă roșie, la kg", ["sfecla"], ["salatuca"]),
   fresh("praz-kg", "Praz, la kg", ["praz"]),
   fresh("ridichi-kg", "Ridichi, la kg", ["ridichi"]),
-  fresh("ciuperci-kg", "Ciuperci champignon, la kg", ["ciuperci"], ["conserva", "pleurotus", "shiitake"]),
+  // `supa`/`felii`/`salata` added 2026-10-03: `NOT_FRESH` already has `sos` but not the separate
+  // word `supa` (soup), and `feliat` (adj.) does not word-prefix-match `felii` (noun) — both
+  // real gaps the brand-aware lead-token fix exposed ("FRUFRU Supa de ciuperci", "METRO Chef
+  // Ciuperci Felii 2500 g").
+  fresh("ciuperci-kg", "Ciuperci champignon, la kg", ["ciuperci"], ["conserva", "pleurotus", "shiitake", "supa", "felii", "salata"]),
   fresh("fasole-verde-kg", "Fasole verde, la kg", ["fasole", "verde"], ["boabe", "rosie", "alba"]),
   // NO FRESH PEA OR SWEETCORN CLASS. Both existed and both were entirely wrong.
   //
@@ -205,7 +237,20 @@ export const PRODUCE_CLASSES: ProduceClass[] = [
   // walked straight through it. A class that is mostly wrong is worse than no class, and
   // fresh herbs are sold by legătură rather than by weight anyway — so they stay unclassed,
   // which is the honest answer rather than a forced one.
-  fresh("salata-verde-kg", "Salată verde, la kg", ["salata"], ["mix", "de", "iceberg", "rucola", "baby"]),
+  // MEASURED DANGEROUS, 2026-10-03: this head-noun cluster is dominated by prepared deli salads
+  // sold in small jars — fish-roe salad (Bonito/Deltaica/Doripesco/Negro/Pescaria), tuna salad
+  // (Rio Mare/Home Garden), pickled beet salad, Russian salad ("boeuf"/"à la russe") — none of
+  // which a shopper substitutes for fresh lettuce, and the old exclude list (`mix`, `de`,
+  // `iceberg`, `rucola`, `baby`) named none of it. The brand-aware lead-token fix
+  // (propose-equivalence.ts) exposed this: those exact products had been kept out only because
+  // their brand prefix broke the OLD lead check by accident, not because this rule named them.
+  // Requiring `verde` would ALSO exclude genuine fresh-lettuce lines that never say the word
+  // ("Salata frunza de stejar", "Salata Mix Roman Eisberg"), so the fix is a long, specific
+  // exclude list against what is actually in the catalog, not a positive-word requirement.
+  fresh("salata-verde-kg", "Salată verde, la kg", ["salata"],
+    ["mix", "de", "iceberg", "rucola", "baby",
+     "icre", "ton", "hering", "stiuca", "sfecla", "boeuf", "russe", "orientala", "ganoush",
+     "saksuka", "maioneza", "otet", "cuscus", "linte", "mexican", "texana", "aperitiv", "quinoa"]),
   fresh("salata-iceberg-kg", "Salată iceberg, la kg", ["salata", "iceberg"]),
   herb("rucola-kg", "Rucola, la kg", ["rucola"]),
   herb("spanac-kg", "Spanac, la kg", ["spanac"], ["congelat", "tocat"]),

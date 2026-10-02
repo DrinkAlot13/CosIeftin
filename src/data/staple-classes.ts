@@ -148,16 +148,99 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   //    "grecesc" in a Romanian product name already implies plain, which is why the existing
   //    400 g classes don't additionally exclude every flavour by name and this doesn't either —
   //    consistency with a rule already proven, not a fresh one.
+  //
+  //    `iaurt` added to EVERY one of these `require` arrays (also backported to the 400 g
+  //    originals) after "Vilgain Humus natural 140 g" — chickpea dip — qualified for
+  //    `iaurt-natural-400g` on the word "natural" alone, once the brand-aware lead-token fix let
+  //    it reach the membership check. "natural"/"grecesc" being registered as alternate leads
+  //    (they're in `require`) means the lead check alone could never catch this.
   pack("iaurt-natural-150g", "Iaurt natural, 150 g", "kg", 0.15,
-    ["natural"],
+    ["iaurt", "natural"],
     ["bautura", "inghetata", "chec", "grecesc", "fructe"]),
   pack("iaurt-grecesc-150g", "Iaurt grecesc, 150 g", "kg", 0.15,
-    ["grecesc"],
+    ["iaurt", "grecesc"],
     ["bautura", "inghetata", "chec"]),
   pack("iaurt-natural-900g", "Iaurt natural, 900 g", "kg", 0.9,
-    ["natural"],
+    ["iaurt", "natural"],
     ["bautura", "inghetata", "chec", "grecesc", "fructe"]),
   pack("iaurt-grecesc-900g", "Iaurt grecesc, 900 g", "kg", 0.9,
-    ["grecesc"],
+    ["iaurt", "grecesc"],
     ["bautura", "inghetata", "chec"]),
+
+  // ══ BATCH 4 ═════════════════════════════════════════════════════════════════════════════
+
+  // ══ TEA — split by type, same reasoning as the existing `ceai-fructe-20` class. Sachet-box
+  //    weight varies a lot by brand (20×1g to 20×2g to 80×1.3g), so this uses an explicit wide
+  //    window rather than `pack()`'s tight default — the discriminator here is the TYPE word,
+  //    not the weight, and the window only needs to keep loose-leaf tins and huge catering
+  //    boxes out, not pin an exact sachet count.
+  { slug: "ceai-musetel-20", label: "Ceai de mușețel, cutie", unit: "kg", unitSize: 0.03,
+    attributes: { tip: "musetel", strictRules: true, minUnitSize: 0.015, maxUnitSize: 0.045, require: ["ceai", "musetel"], exclude: ["fructe", "menta", "verde", "negru", "tei"] } },
+  { slug: "ceai-menta-20", label: "Ceai de mentă, cutie", unit: "kg", unitSize: 0.03,
+    attributes: { tip: "menta", strictRules: true, minUnitSize: 0.015, maxUnitSize: 0.045, require: ["ceai", "menta"], exclude: ["fructe", "musetel", "verde", "negru", "tei"] } },
+
+  // ══ APPLE JUICE — sibling of the existing `suc-portocale-1l`, same exclude shape (keep out
+  //    mixed-fruit blends, nectar, carbonated, concentrate).
+  pack("suc-mere-1l", "Suc de mere, 1 L", "l", 1,
+    ["mere", "suc"],
+    ["nectar", "bautura", "carbogazoas", "concentrat", "sirop", "afine", "catina", "morcov", "piersic", "pere", "struguri", "rodie", "aronia", "mixt"]),
+
+  // ══ RYE FLOUR — a different grain, not a form of the same flour the way 000 and 650 wheat
+  //    grades are. `faina-alba-1kg` / `faina-alba-650-1kg` already own the wheat grades.
+  pack("faina-secara-1kg", "Făină de secară, 1 kg", "kg", 1,
+    ["faina", "secara"],
+    []),
+
+  // ══ OLIVES — black vs green is the real, price-driving split (the catalog prices them the
+  //    same within colour and differently across it), same reasoning as apple variety. Brine vs
+  //    oil is NOT split here — both are "black pitted olives" for a shopper's purposes, unlike
+  //    colour, and splitting every packing liquid would mostly produce single-shop classes.
+  // "umplute" (stuffed — jalapeño, almonds, salmon paste) added after the dry run showed several
+  // genuinely gourmet stuffed-olive jars qualifying: a real, differently-priced product, not
+  // plain pitted olives.
+  pack("masline-negre-350g", "Măsline negre, 350 g", "kg", 0.35,
+    ["masline", "negre"],
+    ["verzi", "umplute"], 0.15),
+  pack("masline-verzi-350g", "Măsline verzi, 350 g", "kg", 0.35,
+    ["masline", "verzi"],
+    ["negre", "umplute"], 0.15),
+
+  // ══ HONEY — polyfloral only; monofloral types (salcâm/tei/cătină) are a real, priced-
+  //    differently variety split, same as apple variety, and are left for a later batch rather
+  //    than merged in.
+  //
+  //    Measured EMPTY at first: every "Miere Poliflora" product in this catalog leads with a
+  //    TWO-WORD brand ("Fine Life", "METRO Chef", "RIOBA"), which pushed both "miere" and
+  //    "poliflora" past the proposer's first-two-token lead check — the telemea problem
+  //    (CLAUDE.md) in a harder form a single alternate head could not fix. Fixed properly at
+  //    the source rather than loosened here: `propose-equivalence.ts`'s lead check is now
+  //    brand-aware (strips the product's own `brand` field before taking the lead two tokens),
+  //    which is also how this exposed real exclude-list gaps in ~15 OTHER, older classes — see
+  //    their own updated comments (cartofi-albi-kg, salata-verde-kg, carne-porc-1kg, etc.).
+  pack("miere-poliflora-500g", "Miere poliflora, 500 g", "kg", 0.5,
+    ["miere", "poliflora"],
+    ["salcam", "tei", "catina", "manuca", "turmeric", "stick", "portionat"]),
+
+  // ══ APPLE CIDER VINEGAR — a distinct product from the existing `otet-alcool-1l`, not a size
+  //    sibling of it.
+  pack("otet-mere-500ml", "Oțet de mere, 500 ml", "l", 0.5,
+    ["otet", "mere"],
+    ["balsamic", "alcool"]),
+
+  // ══ EGGS — siblings of the existing `oua-l-10` / `oua-m-10` at the other common pack counts.
+  //    Quail eggs ("prepelita") are already excluded by the base rule this mirrors.
+  { slug: "oua-l-20", label: "Ouă mărimea L, 20 buc", unit: "buc", unitSize: 20, attributes: { size: "L", require: ["l|marimea l|marime l"], exclude: ["m/l|prepelita|ciocolata"] } },
+  { slug: "oua-m-20", label: "Ouă mărimea M, 20 buc", unit: "buc", unitSize: 20, attributes: { size: "M", require: ["m|marimea m|marime m"], exclude: ["m l|prepelita|ciocolata"] } },
+  { slug: "oua-m-30", label: "Ouă mărimea M, 30 buc", unit: "buc", unitSize: 30, attributes: { size: "M", require: ["m|marimea m|marime m"], exclude: ["m l|prepelita|ciocolata"] } },
+
+  // ══ CREAM — two DIFFERENT products sharing one head noun, and the existing `smantana-200g`
+  //    (soured/table cream) already excludes "gatit" to keep this one out, rather than merging
+  //    them. Coconut cream is a distinct product, not a dairy-cream variant.
+  pack("smantana-gatit-200ml", "Smântână pentru gătit, 200 ml", "l", 0.2,
+    ["smantana", "gatit"],
+    ["cocos"]),
+  // Sibling of `smantana-200g` at the other dominant card size (370-375 g across three brands).
+  pack("smantana-370g", "Smântână, 370 g", "kg", 0.37,
+    ["smantana"],
+    ["branza", "crema", "almette", "gatit"]),
 ];

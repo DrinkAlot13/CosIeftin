@@ -125,7 +125,16 @@ async function main() {
       // false assignments — and they are the dangerous kind, because a wrong class makes
       // the resolver offer a substitute that is not equivalent.
       if (k.head) {
-        const lead = tokensRo(p.name).slice(0, 2);
+        // BRAND-AWARE, same reasoning `headNoun` already uses (scrape-util.ts): a two-word
+        // brand ("Fine Life", "METRO Chef", "RIOBA") pushes the real discriminator past the
+        // first two tokens just as surely as a one-word brand does, and measuring this file's
+        // own `miere-poliflora-500g` class against the live catalog found exactly that — every
+        // member leads with a brand, so the raw first-two-tokens check passed zero candidates
+        // though real ones exist. Stripping the product's OWN brand field before taking the
+        // lead only ever ADMITS more candidates to the require/exclude checks below; it cannot
+        // weaken them, so it is safe to widen without re-measuring every existing class.
+        const brandParts = new Set(normalizeRo(p.brand ?? "").split(/\s+/).filter(Boolean));
+        const lead = tokensRo(p.name).filter((t) => !brandParts.has(t)).slice(0, 2);
         // The class's own discriminator counts as a head noun too. "Brânză telemea" has head
         // "branza", but every telemea in the catalog is named "Telemea de vaca ..." — leading
         // with the discriminator, not the category word. Requiring the label's head alone
