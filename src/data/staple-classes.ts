@@ -141,4 +141,23 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("malai-500g", "Mălai, 500 g", "kg", 0.5,
     ["malai"],
     ["integral"]),
+
+  // ══ YOGHURT — the SAME require/exclude as the already-live `iaurt-natural-400g` /
+  //    `iaurt-grecesc-400g` classes, at the two other sizes this catalog actually sells them in
+  //    (150 g single pots, 900 g tubs). Deliberately not a new judgement call: "natural"/
+  //    "grecesc" in a Romanian product name already implies plain, which is why the existing
+  //    400 g classes don't additionally exclude every flavour by name and this doesn't either —
+  //    consistency with a rule already proven, not a fresh one.
+  pack("iaurt-natural-150g", "Iaurt natural, 150 g", "kg", 0.15,
+    ["natural"],
+    ["bautura", "inghetata", "chec", "grecesc", "fructe"]),
+  pack("iaurt-grecesc-150g", "Iaurt grecesc, 150 g", "kg", 0.15,
+    ["grecesc"],
+    ["bautura", "inghetata", "chec"]),
+  pack("iaurt-natural-900g", "Iaurt natural, 900 g", "kg", 0.9,
+    ["natural"],
+    ["bautura", "inghetata", "chec", "grecesc", "fructe"]),
+  pack("iaurt-grecesc-900g", "Iaurt grecesc, 900 g", "kg", 0.9,
+    ["grecesc"],
+    ["bautura", "inghetata", "chec"]),
 ];
