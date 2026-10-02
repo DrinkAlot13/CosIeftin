@@ -108,6 +108,13 @@ function herb(slug: string, label: string, require: string[], extraExclude: stri
   return { ...k, attributes: { ...k.attributes, minUnitSize: HERB_MIN_KG } };
 }
 
+/** A fresh berry: same as `fresh`, but with a lower floor — berries' own standard pack is a
+ *  125 g punnet, below `LOOSE_MIN_KG` (0.15), and neither is sold dried under these names. */
+function berry(slug: string, label: string, require: string[], extraExclude: string[] = []): ProduceClass {
+  const k = fresh(slug, label, require, extraExclude);
+  return { ...k, attributes: { ...k.attributes, minUnitSize: 0.1 } };
+}
+
 export const PRODUCE_CLASSES: ProduceClass[] = [
   // ── fruit ─────────────────────────────────────────────────────────────────────
   fresh("banane-kg", "Banane, la kg", ["banane"], ["rosii", "dole chips"]),
@@ -132,8 +139,8 @@ export const PRODUCE_CLASSES: ProduceClass[] = [
   fresh("cirese-kg", "Cireșe, la kg", ["cirese"]),
   fresh("visine-kg", "Vișine, la kg", ["visine"]),
   fresh("capsuni-kg", "Căpșuni, la kg", ["capsuni"]),
-  fresh("zmeura-kg", "Zmeură, la kg", ["zmeura"]),
-  fresh("afine-kg", "Afine, la kg", ["afine"]),
+  berry("zmeura-kg", "Zmeură, la kg", ["zmeura"]),
+  berry("afine-kg", "Afine, la kg", ["afine"]),
   fresh("portocale-kg", "Portocale, la kg", ["portocale"], ["suc de", "rosii"]),
   fresh("mandarine-kg", "Mandarine, la kg", ["mandarine"]),
   fresh("lamai-kg", "Lămâi, la kg", ["lamai|lamaie"], ["limes"]),

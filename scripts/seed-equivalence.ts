@@ -14,6 +14,13 @@
 import { prisma } from "../src/lib/db";
 import { PRODUCE_CLASSES } from "../src/data/produce-classes";
 import { PRIVATE_LABEL_CLASSES } from "../src/data/private-label-classes";
+import { STAPLE_CLASSES } from "../src/data/staple-classes";
+// Recovered, not written this session: real curated classes (cider, tofu, dried basil, sour
+// borscht, flatbread) that existed on disk but were never imported here, so every seed run
+// silently deleted their DB rows as "not defined in code" — the tool working exactly as
+// designed, against a wiring bug rather than a bad class. See the file's own header for why
+// each one survived a much larger rejected shortlist.
+import { BATCH1_CLASSES } from "../src/data/batch1-classes";
 
 type Klass = { slug: string; label: string; section?: string; unit: string; unitSize: number; attributes: Record<string, unknown> & { require?: string[]; exclude?: string[] } };
 
@@ -141,6 +148,8 @@ const CLASSES: Klass[] = [
   { slug: "detergent-rufe-3l", label: "Detergent lichid rufe, 3 L", unit: "l", unitSize: 3, attributes: { forma: "lichid", require: ["rufe"], exclude: ["vase|geam|pardoseli|wc|baie|universal|masina de spalat vase"] } },
   ...PRODUCE_CLASSES,
   ...PRIVATE_LABEL_CLASSES,
+  ...STAPLE_CLASSES,
+  ...BATCH1_CLASSES,
 ];
 
 async function main() {

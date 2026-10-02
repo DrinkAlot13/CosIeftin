@@ -59,6 +59,7 @@
     "withhold:numeric-variant-codes": "tsx scripts/withhold-numeric-variant-codes.ts",
     "audit:variant-code-diff": "tsx scripts/audit-variant-code-diff.ts",
     "seed:equivalence": "tsx scripts/seed-equivalence.ts",
+    "cluster:report": "tsx scripts/cluster-report.ts",
     "migrate:money": "tsx scripts/migrate-money-bani.ts",
     "propose:equivalence": "tsx scripts/propose-equivalence.ts",
     "tune:bands": "tsx scripts/tune-bands.ts",

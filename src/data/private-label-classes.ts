@@ -59,7 +59,7 @@ const BIO = ["bio", "eco", "organic", "ecologic"];
  * default of ±10% keeps a 400 g tin out of a 500 g class; where a real product line straddles
  * more than that (680 g and 690 g brines), the class says so itself.
  */
-function pack(
+export function pack(
   slug: string,
   label: string,
   unit: "kg" | "l" | "buc",
