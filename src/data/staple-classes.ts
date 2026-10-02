@@ -283,4 +283,22 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("fulgi-porumb-500g", "Fulgi de porumb, 500 g", "kg", 0.5,
     ["fulgi", "porumb"],
     []),
+
+  // ══ BATCH 7 ═════════════════════════════════════════════════════════════════════════════
+
+  // ══ SEEDS — chia and pumpkin are distinct, specifically-shopped-for seed types at their own
+  //    price point, not a footnote of the existing sunflower-seed classes.
+  pack("seminte-chia-200g", "Semințe de chia, 200 g", "kg", 0.2,
+    ["seminte", "chia"],
+    []),
+  pack("seminte-dovleac-150g", "Semințe de dovleac, 150 g", "kg", 0.15,
+    ["seminte", "dovleac"],
+    []),
+
+  // ══ PEANUTS — siblings of the existing `arahide-coaja-500g`/`arahide-decojite-500g` at a
+  //    smaller, very common pack size. Raw (never roasted), honey-coated and chocolate-coated
+  //    are real, differently-priced forms and stay out.
+  pack("arahide-sarate-300g", "Arahide sărate, 300 g", "kg", 0.3,
+    ["arahide"],
+    ["cruda", "crude", "miere", "ciocolata", "in coaja"]),
 ];
