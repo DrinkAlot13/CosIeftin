@@ -243,4 +243,44 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("smantana-370g", "Smântână, 370 g", "kg", 0.37,
     ["smantana"],
     ["branza", "crema", "almette", "gatit"]),
+
+  // ══ BATCH 6 ═════════════════════════════════════════════════════════════════════════════
+
+  // ══ TELEMEA — siblings of the existing `branza-telemea-400g` at the other common sizes. Does
+  //    NOT split by species (vacă/capră/oaie), matching that class's own established behaviour —
+  //    not a new judgement call.
+  pack("telemea-200g", "Brânză telemea, 200 g", "kg", 0.2,
+    ["telemea"],
+    ["burduf", "topita", "cheddar", "mozzarella"]),
+  pack("telemea-1kg", "Brânză telemea, 1 kg", "kg", 1,
+    ["telemea"],
+    ["burduf", "topita", "cheddar", "mozzarella"]),
+
+  // ══ MOZZARELLA — plain solid/log form only. Mini balls ("bilute"/"rulouri"/"ciliegine"),
+  //    sliced and grated are different uses at different prices, same reasoning as cascaval.
+  pack("mozzarella-125g", "Mozzarella, 125 g", "kg", 0.125,
+    ["mozzarella"],
+    ["rasa", "felii", "feliata", "mini", "rulouri", "bilute", "ciliegine", "fresca mini"]),
+
+  // ══ TUNA — olive-oil-packed only, single can. Own-juice and sunflower-oil-packed are real,
+  //    differently-priced forms left for a later pass, not merged in.
+  pack("ton-ulei-masline-160g", "Ton în ulei de măsline, 160 g", "kg", 0.16,
+    ["ton", "ulei", "masline"],
+    ["floarea soarelui", "iute"]),
+
+  // ══ HAM — Praga-style (boiled, sliced) only. Serrano is a completely different cured product
+  //    at a different price; turkey/chicken ham are a different meat, not a form of this one.
+  pack("sunca-praga-100g", "Șuncă Praga, 100 g", "kg", 0.1,
+    ["sunca", "praga"],
+    ["serrano", "curcan", "pui"]),
+  pack("sunca-praga-200g", "Șuncă Praga, 200 g", "kg", 0.2,
+    ["sunca", "praga"],
+    ["serrano", "curcan", "pui"]),
+
+  // ══ CORN FLAKES — sibling of the existing `fulgi-ovaz-500g` (oats), for the other common
+  //    flake grain in this catalog. "fara zahar" (no added sugar) is a real member, not
+  //    excluded — only the grain is the discriminator here.
+  pack("fulgi-porumb-500g", "Fulgi de porumb, 500 g", "kg", 0.5,
+    ["fulgi", "porumb"],
+    []),
 ];
