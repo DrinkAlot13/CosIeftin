@@ -402,4 +402,14 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("lotiune-corp-400ml", "Loțiune de corp, 400 ml", "l", 0.4,
     ["lotiune", "corp"],
     [], 0.25),
+
+  // ══ BATCH 14 — DISH SOAP PASTE, same scent-tolerant judgement again. "pasta" (paste form,
+  // vs. liquid) is required so this stays its own product, not a size sibling of a liquid
+  // dish soap class.
+  pack("detergent-vase-pasta-225g", "Detergent de vase, pastă, 225 g", "kg", 0.225,
+    ["detergent", "vase", "pasta"],
+    [], 0.25),
+  pack("detergent-vase-pasta-400g", "Detergent de vase, pastă, 400 g", "kg", 0.4,
+    ["detergent", "vase", "pasta"],
+    [], 0.2),
 ];
