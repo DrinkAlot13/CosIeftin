@@ -412,4 +412,17 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("detergent-vase-pasta-400g", "Detergent de vase, pastă, 400 g", "kg", 0.4,
     ["detergent", "vase", "pasta"],
     [], 0.2),
+
+  // ══ BATCH 15 — AIR FRESHENER, same scent-tolerant judgement. Room spray and solid toilet
+  // blocks are naturally two different units already (l vs kg), so they don't need an explicit
+  // exclude to stay apart - requiring "camera" vs "toaleta" is what actually separates them.
+  pack("odorizant-camera-120ml", "Odorizant de cameră, 120 ml", "l", 0.12,
+    ["odorizant", "camera"],
+    [], 0.15),
+  pack("odorizant-camera-150ml", "Odorizant de cameră, 150 ml", "l", 0.15,
+    ["odorizant", "camera"],
+    [], 0.15),
+  pack("odorizant-toaleta-50g", "Odorizant pentru toaletă, 50 g", "kg", 0.05,
+    ["odorizant", "toaleta"],
+    [], 0.2),
 ];
