@@ -484,4 +484,14 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   // brushes and the denture-cleaning brush are a different product, not a size of this one.
   { slug: "periuta-dinti-medie", label: "Periuță de dinți, medie", unit: "buc", unitSize: 2,
     attributes: { require: ["periuta", "dinti", "mediu|medium"], exclude: ["copii", "kids", "ani", "proteze", "interdental", "soft", "moi"], anySize: true, minUnitSize: 1, maxUnitSize: 6 } },
+
+  // ══ BATCH 20 — GLASS CLEANER, scent-tolerant, two real catalog spellings ("spray" vs
+  // "solutie" geamuri) kept as two classes rather than forced into one, the same reasoning as
+  // the sachet-count vs gram-weight tea classes above.
+  pack("spray-geamuri-500ml", "Spray pentru geamuri, 500 ml", "l", 0.5,
+    ["spray", "geamuri"],
+    [], 0.2),
+  pack("solutie-geamuri-500ml", "Soluție pentru geamuri, 500 ml", "l", 0.5,
+    ["solutie", "geamuri"],
+    [], 0.2),
 ];
