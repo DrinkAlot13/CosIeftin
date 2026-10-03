@@ -511,5 +511,12 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
     ["verzi", "umplute", "mix", "ansoa"], 0.1),
   pack("masline-verzi-700g", "Măsline verzi, 700 g", "kg", 0.7,
     ["masline", "verzi"],
-    ["negre", "umplute", "mix"], 0.1),
+    ["negre", "umplute", "mix", "ansoa"], 0.1),
+
+  // ══ CROISSANT, plain vanilla cream only — sibling of the existing `croissant-cacao-85g`.
+  // "vanilie și X" combination fillings are a real second flavour, not a variant of plain
+  // vanilla, so every other flavour word seen alongside it in this cluster is named out.
+  pack("croissant-vanilie-65g", "Croissant cu cremă de vanilie, 65 g", "kg", 0.065,
+    ["croissant", "vanilie"],
+    ["capsuni", "visine", "cacao", "biscuiti", "caise", "fistic", "dublu", "dubla"], 0.2),
 ];
