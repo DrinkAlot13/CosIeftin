@@ -442,4 +442,19 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("zahar-vanilinat-8g", "Zahăr vanilinat, 8 g", "kg", 0.008,
     ["zahar", "vanilinat|vanilat"],
     [], 0.3),
+
+  // ══ BATCH 17 — COFFEE CAPSULES, split by MACHINE COMPATIBILITY, not flavour. Unlike every
+  // flavour-driven food class above, this discriminator is a hard physical constraint — a
+  // Nespresso capsule does not fit a Dolce Gusto machine — so the three systems can never be
+  // one class, and flavour WITHIN a system is treated the deodorant-spray way (a preference,
+  // not a different product), except decaf, which is a caffeine-content fact, not a flavour.
+  pack("cafea-capsule-nespresso-10", "Capsule cafea compatibile Nespresso, 10 buc", "buc", 10,
+    ["capsule", "cafea", "nespresso"],
+    ["decofeinizat", "decafeinizat", "ciocolata", "kitkat"], 0.2),
+  pack("cafea-capsule-dolce-gusto-16", "Capsule cafea compatibile Dolce Gusto, 16 buc", "buc", 16,
+    ["capsule", "cafea", "dolce", "gusto"],
+    ["decofeinizat", "decafeinizat", "ciocolata", "kitkat"], 0.15),
+  pack("cafea-capsule-tassimo-16", "Capsule cafea compatibile Tassimo, 16 buc", "buc", 16,
+    ["capsule", "cafea", "tassimo"],
+    ["decofeinizat", "decafeinizat", "ciocolata", "kitkat"], 0.15),
 ];
