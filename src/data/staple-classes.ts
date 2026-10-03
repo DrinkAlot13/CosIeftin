@@ -341,4 +341,22 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("biscuiti-digestivi-400g", "Biscuiți digestivi, 400 g", "kg", 0.4,
     ["digestiv"],
     ["musli", "fulgi de ciocolata"], 0.2),
+
+  // ══ BATCH 10 — PLAIN SALTED CRISPS, the one safe cut out of `kg::chipsuri` (196 products,
+  //    otherwise entirely flavoured: sour cream & onion, cheese, paprika, BBQ, chicken...).
+  //    "sare" alone is not enough — "cu smântână, sare și ceapă" would also satisfy a bare
+  //    `require: ["sare"]`, so every OTHER flavour word seen in this cluster is named out too.
+  //    Verified member-by-member with `verify:class` before applying.
+  pack("chipsuri-sare-100g", "Chipsuri cu sare, 100 g", "kg", 0.1,
+    ["chipsuri", "sare"],
+    ["smantana", "ceapa", "cascaval", "paprika", "paprica", "barbeque", "piper", "iaurt",
+     "pui", "marar", "patrunjel", "lime", "otet", "cheddar", "branza", "fara sare", "sfecla", "pastarnac", "batate", "plantan"], 0.15),
+  pack("chipsuri-sare-125g", "Chipsuri cu sare, 125 g", "kg", 0.125,
+    ["chipsuri", "sare"],
+    ["smantana", "ceapa", "cascaval", "paprika", "paprica", "barbeque", "piper", "iaurt",
+     "pui", "marar", "patrunjel", "lime", "otet", "cheddar", "branza", "fara sare", "sfecla", "pastarnac", "batate", "plantan"], 0.15),
+  pack("chipsuri-sare-170g", "Chipsuri cu sare, 170 g", "kg", 0.17,
+    ["chipsuri", "sare"],
+    ["smantana", "ceapa", "cascaval", "paprika", "paprica", "barbeque", "piper", "iaurt",
+     "pui", "marar", "patrunjel", "lime", "otet", "cheddar", "branza", "fara sare", "sfecla", "pastarnac", "batate", "plantan"], 0.1),
 ];
