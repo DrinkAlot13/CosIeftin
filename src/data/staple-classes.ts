@@ -384,4 +384,22 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("gel-de-dus-550ml", "Gel de duș, 550 ml", "l", 0.55,
     ["gel", "dus"],
     ["sampon"], 0.45),
+
+  // ══ BATCH 13 — more scent-tolerant personal care, same judgement as deodorant/shower gel.
+  //    Liquid hand soap: "antibacterian" is kept OUT, since that is a real functional claim
+  //    (an added active ingredient), not a fragrance — the same distinction that kept deodorant
+  //    FORM split while leaving its scent alone.
+  // `intim`/`antiseptic`/`spuma` added after `verify:class`: intimate wash is a different
+  // product category, antiseptic is a functional claim like antibacterial, and foaming soap is
+  // a different dispensing format (the same "form, not scent" line drawn for deodorant).
+  pack("sapun-lichid-500ml", "Săpun lichid, 500 ml", "l", 0.5,
+    ["sapun", "lichid"],
+    ["antibacterian", "sanytol", "intim", "antiseptic", "spuma"], 0.5),
+
+  // Body lotion only — "lotiune" alone also covers sunscreen, after-shave and micellar
+  // cleansing lotion, which are different products, not a scent of this one. Requiring "corp"
+  // (body) excludes all of those structurally, the same way "dus" did for shower gel.
+  pack("lotiune-corp-400ml", "Loțiune de corp, 400 ml", "l", 0.4,
+    ["lotiune", "corp"],
+    [], 0.25),
 ];
