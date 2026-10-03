@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { deliveryPlatformWhere } from "@/lib/platform/visibility";
 import { normalizeText } from "@/lib/matching";
-import { headNoun, overlapTokens } from "@/lib/scrape-util";
+import { headNoun, overlapTokens, doseTokens } from "@/lib/scrape-util";
 
 /** An offer's price in bani. Sorting and comparison use this, never the legacy float. */
 const baniOf = (o: { price: number; priceBani?: number | null }): number => o.priceBani ?? Math.round(o.price * 100);
@@ -490,21 +490,110 @@ export async function structuralCandidateIds(
   // (brand name, a flavour word) must not disqualify a substitute, only a product that is
   // plainly a different kind of thing should.
   if (opts.requireMutualDistinction) {
-    const pOver = new Set(overlapTokens(normalizeText(p.name)));
-    matched = matched.filter((c) => {
-      const cOver = new Set(overlapTokens(normalizeText(c.name)));
-      const pOnly = [...pOver].filter((t) => !cOver.has(t));
-      const cOnly = [...cOver].filter((t) => !pOver.has(t));
-      // EITHER side, not both: "Crema depilatoare Veet Aloe Vera si Vitamina E pentru piele
-      // sensibila" vs "NIVEA Crema" has nothing unshared on the SHORT side, so an AND-of-both
-      // check passed it — hand cream as a depilatory cream's substitute. The requested
-      // product carrying several tokens the candidate never mentions is itself the warning
-      // sign, independent of what the candidate adds back.
-      return pOnly.length < 2 && cOnly.length < 2;
-    });
+    matched = matched.filter((c) => passesMutualDistinction(p.name, c.name));
   }
 
   return matched.map((c) => c.id);
+}
+
+/**
+ * The ONE mutual-distinction check, extracted so `structuralCandidateIds` and
+ * `semanticCandidateIds` (below) share it rather than each keeping a copy that can drift —
+ * see the `headNoun` duplicate incident this project already paid for once.
+ *
+ * EITHER side carrying 2+ tokens the other lacks disqualifies the pair. "Crema depilatoare Veet
+ * Aloe Vera și Vitamina E pentru piele sensibilă" vs "NIVEA Crema" has nothing unshared on the
+ * SHORT side, so an AND-of-both check passed it — hand cream as a depilatory cream's substitute.
+ * The requested product carrying several tokens the candidate never mentions is itself the
+ * warning sign, independent of what the candidate adds back.
+ */
+export function passesMutualDistinction(
+  nameA: string, nameB: string,
+  opts: { strict?: boolean; brandA?: string | null; brandB?: string | null } = {},
+): boolean {
+  // Brand tokens are stripped before counting, same reasoning as `headNoun`'s own brand-skip:
+  // a different brand repeating itself in the name is not a second product fact, it is the
+  // brand. Without this, `strict` mode below would block every cross-brand match on the brand
+  // WORD alone ("MEDA Cabanos" vs "aro Cabanos" differ only by brand and nothing else).
+  const brandTokens = (b?: string | null) => new Set(b ? overlapTokens(normalizeText(b)) : []);
+  const aBrand = brandTokens(opts.brandA);
+  const bBrand = brandTokens(opts.brandB);
+  const aOver = new Set([...overlapTokens(normalizeText(nameA))].filter((t) => !aBrand.has(t)));
+  const bOver = new Set([...overlapTokens(normalizeText(nameB))].filter((t) => !bBrand.has(t)));
+  const aOnly = [...aOver].filter((t) => !bOver.has(t));
+  const bOnly = [...bOver].filter((t) => !aOver.has(t));
+  // `strict`: EITHER side having even ONE unshared (non-brand) token disqualifies the pair, not
+  // just two. Built for `semanticCandidateIds`, measured necessary rather than assumed: the
+  // loose "2+ on BOTH sides" rule that is correctly calibrated for the structural (head-noun)
+  // tier let "Chipsuri cu paprica" pass against "Chipsuri cu sare" (one unshared word each
+  // side — a real flavour swap, not a rephrasing) and "aro Napolitane Cacao" against "...
+  // Vanilie" the same way. A high embedding score does not compensate for this — both scored
+  // 0.93-0.95, as high as genuine matches. The cost is real too: it also blocks some good
+  // matches ("Balsam de păr-spray Gliss..." vs "Gliss ... Balsam de Păr", differing only by the
+  // word "spray"), which is the right trade per this project's own rule — a missed comparison
+  // costs nothing, a false one costs trust — doubly so for this, the least-certain tier.
+  if (opts.strict) return aOnly.length === 0 && bOnly.length === 0;
+  return aOnly.length < 2 && bOnly.length < 2;
+}
+
+/**
+ * Cosine similarity between two embedding vectors, both already L2-normalized at
+ * computation time (`compute-embeddings.ts`), so this is just the dot product.
+ */
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+function toFloat32Array(bytes: Uint8Array): Float32Array {
+  return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+}
+
+/**
+ * The THIRD, weakest substitution tier: semantic similarity, for when a product has no curated
+ * class AND `structuralCandidateIds` (same head noun) finds nothing — the recall gap a head-noun
+ * match cannot close by construction, because two products describing the same thing in
+ * different words never share a head noun at all.
+ *
+ * MEASURED, NOT ASSUMED: a BGE-M3 cosine-similarity threshold alone is not a safe accept/reject
+ * decision — "crema depilatoare" against "crema de mâini" scores 0.856, HIGHER than two genuine
+ * coffee-bean matches scored against each other (0.827-0.841). So this is a candidate FINDER
+ * only: `MIN_SIMILARITY` is set low enough to catch real synonyms, and every candidate still has
+ * to pass `passesMutualDistinction` before being returned — the same token-based safety gate the
+ * structural tier uses, not a second, independent judgement call.
+ */
+const SEMANTIC_MIN_SIMILARITY = 0.8;
+
+export async function semanticCandidateIds(
+  p: { id: number; name: string; brand: string | null; unit: string; unitSize: number; section: string; embedding: Uint8Array | null },
+  sizeTolerance: number,
+  take = 500,
+): Promise<number[]> {
+  if (!p.embedding) return [];
+  const pVec = toFloat32Array(p.embedding);
+  const pDose = doseTokens(p.name);
+  const cands = await prisma.product.findMany({
+    where: {
+      section: p.section,
+      unit: p.unit,
+      id: { not: p.id },
+      embedding: { not: null },
+      offers: { some: {} },
+      unitSize: { gte: p.unitSize * (1 - sizeTolerance), lte: p.unitSize * (1 + sizeTolerance) },
+    },
+    select: { id: true, name: true, brand: true, embedding: true },
+    take,
+  });
+  return cands
+    .filter((c) => c.embedding && cosineSimilarity(pVec, toFloat32Array(c.embedding)) >= SEMANTIC_MIN_SIMILARITY)
+    // A stated strength must not CONTRADICT (3.5% milk is not the 1.5% class) — measured
+    // necessary: "Lapte Uht 3.5%" scored 0.979 against "Lapte Uht 1.5%", HIGHER than every
+    // genuine match found in the same sample. Cosine similarity cannot see a number swap; only
+    // an explicit dose comparison can.
+    .filter((c) => { const cDose = doseTokens(c.name); return !pDose || !cDose || pDose === cDose; })
+    .filter((c) => passesMutualDistinction(p.name, c.name, { strict: true, brandA: p.brand, brandB: c.brand }))
+    .map((c) => c.id);
 }
 
 export async function getAlternatives(productId: number, limit = 8, strictness: Strictness = "equivalent") {

@@ -16,7 +16,7 @@ import { parseQuantity } from "@/lib/units/parseQuantity";
 import { getCurrentUser } from "@/lib/auth";
 import { validateTiers, type RawTier } from "@/lib/price/bulkTiers";
 import { guard } from "@/lib/rate-limit";
-import { structuralCandidateIds, BASKET_STRUCTURAL_TOLERANCE } from "@/lib/queries";
+import { structuralCandidateIds, semanticCandidateIds, BASKET_STRUCTURAL_TOLERANCE } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   const slugs = [...new Set(wanted.map((w: { slug: string }) => w.slug))] as string[];
   const requested = await prisma.product.findMany({
     where: { slug: { in: slugs } },
-    select: { id: true, slug: true, name: true, brand: true, unit: true, unitSize: true, section: true, equivalenceClassId: true },
+    select: { id: true, slug: true, name: true, brand: true, unit: true, unitSize: true, section: true, equivalenceClassId: true, embedding: true },
   });
   const bySlug = new Map(requested.map((p) => [p.slug, p]));
 
@@ -60,15 +60,21 @@ export async function POST(req: NextRequest) {
   // anything in the same equivalence class (that is what makes substitution possible).
   const classIds = [...new Set(requested.map((p) => p.equivalenceClassId).filter((x): x is number => x != null))];
 
-  // Products with no curated equivalence class still deserve a substitution attempt — the same
-  // head-noun/unit/size-band rule "similar products" uses (`structuralCandidateIds` in
-  // queries.ts), at this feature's own looser tolerance. Mirrors the wiring in
-  // /api/basket/shop.
+  // Products with no curated equivalence class still deserve a substitution attempt. Mirrors
+  // the wiring in /api/basket/shop: `structuralCandidateIds` (head noun) plus
+  // `semanticCandidateIds` (embedding similarity, for true synonyms a head noun can't catch),
+  // both gated by the same mutual-distinction check.
   const noClass = requested.filter((p) => p.equivalenceClassId == null);
-  const structuralByProduct = new Map<number, number[]>(
-    await Promise.all(noClass.map(async (p) => [p.id, await structuralCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE, { requireMutualDistinction: true })] as [number, number[]])),
+  const candidatesByProduct = new Map<number, number[]>(
+    await Promise.all(noClass.map(async (p) => {
+      const [structural, semantic] = await Promise.all([
+        structuralCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE, { requireMutualDistinction: true }),
+        semanticCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE),
+      ]);
+      return [p.id, [...new Set([...structural, ...semantic])]] as [number, number[]];
+    })),
   );
-  const allStructuralIds = [...new Set([...structuralByProduct.values()].flat())];
+  const allStructuralIds = [...new Set([...candidatesByProduct.values()].flat())];
 
   const offers = await prisma.offer.findMany({
     where: {
@@ -161,7 +167,7 @@ export async function POST(req: NextRequest) {
       return p
         ? {
             productId: p.id, qty: w.qty, substitutionMode: w.mode, requestedQuantity: w.requestedQuantity,
-            structuralCandidateProductIds: structuralByProduct.get(p.id),
+            structuralCandidateProductIds: candidatesByProduct.get(p.id),
           }
         : null;
     })

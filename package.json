@@ -61,6 +61,7 @@
     "seed:equivalence": "tsx scripts/seed-equivalence.ts",
     "cluster:report": "tsx scripts/cluster-report.ts",
     "verify:class": "tsx scripts/verify-class-members.ts",
+    "compute:embeddings": "tsx scripts/compute-embeddings.ts",
     "migrate:money": "tsx scripts/migrate-money-bani.ts",
     "propose:equivalence": "tsx scripts/propose-equivalence.ts",
     "tune:bands": "tsx scripts/tune-bands.ts",
@@ -209,18 +210,10 @@
     "probe:extension-ids": "tsx scripts/probe-extension-ids.ts",
     "audit:off-hitrate": "tsx scripts/audit-off-hitrate.ts",
     "golden:baseline": "tsx scripts/golden-baseline.ts",
-    "propose:class-opportunities": "tsx scripts/propose-class-opportunities.ts",
-    "audit:brand-gap": "tsx scripts/audit-brand-gap.ts",
-    "backfill:brands": "tsx scripts/backfill-brands.ts",
-    "audit:brands": "tsx scripts/audit-brands.ts",
-    "probe:brand": "tsx scripts/probe-brand-detail.ts",
-    "null:carrefour-brands": "tsx scripts/null-carrefour-brands.ts",
-    "backfill:detail-brands": "tsx scripts/backfill-detail-brands.ts",
-    "seed:batch1": "tsx scripts/seed-batch1.ts",
-    "audit:platform": "tsx scripts/audit-platform.ts",
-    "shots": "tsx scripts/shots.ts"
+    "propose:class-opportunities": "tsx scripts/propose-class-opportunities.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@prisma/client": "^5.22.0",
     "dotenv": "^16.4.5",
     "next": "14.2.35",
@@ -235,5 +228,8 @@
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
+  },
+  "allowScripts": {
+    "onnxruntime-node@1.30.0": true
   }
 }

@@ -22,7 +22,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { explainResolution } from "@/lib/substitution/explain";
 import { loadMerchants, loadOfferExtras, loadOffers, loadUserContext } from "@/lib/substitution/load";
 import { resolveLine, type ListLine, type SubstitutionMode } from "@/lib/substitution/resolve";
-import { structuralCandidateIds, BASKET_STRUCTURAL_TOLERANCE } from "@/lib/queries";
+import { structuralCandidateIds, semanticCandidateIds, BASKET_STRUCTURAL_TOLERANCE } from "@/lib/queries";
 import { guard } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -60,21 +60,29 @@ export async function POST(req: NextRequest) {
   const slugs = [...new Set(items.map((i) => i.slug))];
   const products = await prisma.product.findMany({
     where: { slug: { in: slugs } },
-    select: { id: true, slug: true, name: true, brand: true, unit: true, unitSize: true, section: true, equivalenceClassId: true },
+    select: { id: true, slug: true, name: true, brand: true, unit: true, unitSize: true, section: true, equivalenceClassId: true, embedding: true },
   });
   const bySlug = new Map(products.map((p) => [p.slug, p]));
 
   const classIds = [...new Set(products.map((p) => p.equivalenceClassId).filter((x): x is number => x != null))];
 
-  // Products with no curated equivalence class still deserve a substitution attempt — same
-  // head-noun/unit/size-band rule "similar products" uses (`structuralCandidateIds` in
-  // queries.ts), just at this feature's own, looser tolerance. Computed per product (not per
-  // line) since several lines can share a product, and merged into one wider offer pool below.
+  // Products with no curated equivalence class still deserve a substitution attempt. Two
+  // tiers, both in queries.ts: `structuralCandidateIds` (same head noun — misses true synonyms
+  // by construction) and `semanticCandidateIds` (embedding similarity, for exactly that recall
+  // gap, gated by the same mutual-distinction check so a wider net doesn't mean a looser one).
+  // Computed per product (not per line) since several lines can share a product, and merged
+  // into one wider offer pool below.
   const noClass = products.filter((p) => p.equivalenceClassId == null);
-  const structuralByProduct = new Map<number, number[]>(
-    await Promise.all(noClass.map(async (p) => [p.id, await structuralCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE, { requireMutualDistinction: true })] as [number, number[]])),
+  const candidatesByProduct = new Map<number, number[]>(
+    await Promise.all(noClass.map(async (p) => {
+      const [structural, semantic] = await Promise.all([
+        structuralCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE, { requireMutualDistinction: true }),
+        semanticCandidateIds(p, BASKET_STRUCTURAL_TOLERANCE),
+      ]);
+      return [p.id, [...new Set([...structural, ...semantic])]] as [number, number[]];
+    })),
   );
-  const allStructuralIds = [...new Set([...structuralByProduct.values()].flat())];
+  const allStructuralIds = [...new Set([...candidatesByProduct.values()].flat())];
 
   const [ctx, offers] = await Promise.all([
     loadUserContext((await getCurrentUser())?.id ?? null, {
@@ -100,7 +108,7 @@ export async function POST(req: NextRequest) {
       productId: p.id,
       qty: item.qty,
       substitutionMode: item.mode === "EXACT" ? "EXACT" : "EQUIVALENT",
-      structuralCandidateProductIds: structuralByProduct.get(p.id),
+      structuralCandidateProductIds: candidatesByProduct.get(p.id),
     };
     const r = resolveLine(line, merchant.id, ctx, offers);
     const explanation = explainResolution(r, merchant.name, p.unit);

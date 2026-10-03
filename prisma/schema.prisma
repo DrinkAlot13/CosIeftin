@@ -88,6 +88,15 @@ model Product {
   alerts     PriceAlert[]
   equivalenceClassId Int?
   equivalenceClass   EquivalenceClass? @relation(fields: [equivalenceClassId], references: [id])
+  /// A semantic-similarity vector (BGE-M3, 1024 float32s, raw bytes) for the substitution
+  /// engine's SEMANTIC fallback tier — used only when a product has no curated equivalence
+  /// class AND no structural (head-noun) candidate at a given merchant. Never read as a
+  /// verdict on its own: a candidate found this way still has to pass the same mutual-
+  /// distinction check the structural tier uses, because embedding similarity alone does not
+  /// reliably separate "same product" from "same category, different function" (measured:
+  /// "crema depilatoare" scored HIGHER against "crema de mâini" than two genuine coffee-bean
+  /// matches scored against each other — see structural-equivalence docs in queries.ts).
+  embedding          Bytes?
   attributes ProductAttribute[]
   favorites  UserFavorite[]
   productAdds UserProductAdd[]
