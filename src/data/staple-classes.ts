@@ -494,4 +494,13 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("solutie-geamuri-500ml", "Soluție pentru geamuri, 500 ml", "l", 0.5,
     ["solutie", "geamuri"],
     [], 0.2),
+
+  // ══ BATCH 21 — TOMATO PASTE, two common jar sizes. "ardei" (pepper paste) and "vegetala"
+  // (vegetable spread) share the bare head noun "pasta" and are different products.
+  pack("pasta-tomate-70g", "Pastă de tomate, 70 g", "kg", 0.07,
+    ["pasta", "tomate"],
+    ["ardei", "vegetala"], 0.15),
+  pack("pasta-tomate-720g", "Pastă de tomate, 720 g", "kg", 0.72,
+    ["pasta", "tomate"],
+    ["ardei", "vegetala"], 0.15),
 ];
