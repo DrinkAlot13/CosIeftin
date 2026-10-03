@@ -519,4 +519,23 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("croissant-vanilie-65g", "Croissant cu cremă de vanilie, 65 g", "kg", 0.065,
     ["croissant", "vanilie"],
     ["capsuni", "visine", "cacao", "biscuiti", "caise", "fistic", "dublu", "dubla"], 0.2),
+
+  // ══ BATCH 24 — the riskiest remaining categories (sauces, bars, cakes, ice cream, seasoning
+  // mixes, cereal), taken on deliberately: each gets the full verify:class read before
+  // applying, same as chocolate did, precisely because these are where a quick guess would be
+  // most likely to repeat the "false match worse than no match" shape.
+
+  // MAYONNAISE — a clean, well-defined category across many brands, ~400-440 g.
+  // `shaorma`/`parmezan`/`usturoi`/`vegan`/`post` added after `verify:class`: a shoarma sauce
+  // and a parmesan-garlic sauce are flavoured variants, and vegan/Lenten mayo is a different
+  // (egg-free) recipe and price point, not a size of plain mayo.
+  pack("sos-maioneza-400g", "Sos de maioneză, 400 g", "kg", 0.4,
+    ["sos", "maioneza"],
+    ["shaorma", "parmezan", "usturoi", "vegan", "post"], 0.15),
+
+  // BASIL PESTO, plain only — "cu rucola"/"și roșii"/"cu ardei iute"/"cu fistic" are real
+  // second ingredients, not a variant of plain basil pesto.
+  pack("sos-pesto-busuioc-190g", "Sos pesto cu busuioc, 190 g", "kg", 0.19,
+    ["sos", "pesto", "busuioc"],
+    ["rucola", "rosii", "ardei", "fistic", "rosso"], 0.1),
 ];
