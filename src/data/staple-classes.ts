@@ -551,4 +551,18 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
     ["inghetata", "ciocolata"],
     ["caramel", "biscuiti", "mascarpone", "amarena", "afine", "capsuni", "zmeura", "alune",
      "migdale", "vanilie", "iaurt", "pepene", "mango", "fistic", "topping", "sirop", "unt", "vegana", "soia"], 0.1),
+
+  // ══ DRINK SYRUP, by fruit — raspberry/cherry/strawberry are as distinct and specifically-
+  // shopped-for as an apple variety, not a flavour footnote of one generic syrup class.
+  // "Sirop cafea" (coffee-drink syrup) is a different use entirely and is naturally excluded by
+  // requiring the fruit word, not caught by chance.
+  pack("sirop-zmeura-700ml", "Sirop de zmeură, 700 ml", "l", 0.7,
+    ["sirop", "zmeura"],
+    ["lamaie"], 0.3),
+  pack("sirop-visine-700ml", "Sirop de vișine, 700 ml", "l", 0.7,
+    ["sirop", "visine"],
+    [], 0.3),
+  pack("sirop-capsuni-700ml", "Sirop de căpșuni, 700 ml", "l", 0.7,
+    ["sirop", "capsuni"],
+    [], 0.3),
 ];
