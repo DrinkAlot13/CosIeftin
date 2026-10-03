@@ -37,11 +37,16 @@ type Cheapest = {
   depositLine?: number;
   /** the next rung, only when reaching it costs LESS IN TOTAL than the current quantity */
   nextRung?: { addUnits: number; atQty: number; newUnitPrice: number; savesTotal: number } | null;
+  /** this is NOT the exact product asked for — a curated/structural/semantic substitute instead */
+  substituted?: boolean;
+  substituteName?: string;
 };
 type PerItem = { productId: number; slug: string; name: string; qty: number; cheapest: Cheapest | null };
 type StoreTotal = {
   merchantId: number; slug: string; name: string; color: string | null; storeType: string | null;
   subtotal: number; deliveryFee: number; total: number; missing: number; itemsFound: number;
+  /** of `itemsFound`, how many were substitutes rather than the exact product */
+  substituted?: number;
   belowMinOrder: boolean; minOrder: number | null; needForMinOrder: number | null; needForFreeDelivery: number | null;
   usesLoyalty: boolean; priceSource: string;
 };
@@ -125,6 +130,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
       body: JSON.stringify({
         items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
         includeDeliveryPlatform: withGlovo,
+        mode: strict,
       }),
     })
       .then((r) => r.json())
@@ -151,7 +157,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemsKey, withGlovo]);
+  }, [itemsKey, withGlovo, strict]);
 
   // Suggestions for the add box.
   useEffect(() => {
@@ -320,6 +326,13 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                             <div className="muted lr-cheap">
                               cel mai ieftin: <b>{pi.cheapest.merchantName}</b> · {formatRON(pi.cheapest.linePrice)}
                             </div>
+                            {/* NEVER silently swap: a substitute is said out loud, not folded
+                                into "cel mai ieftin" as if it were the product asked for. */}
+                            {pi.cheapest.substituted && pi.cheapest.substituteName && (
+                              <div className="lr-cheap muted" style={{ fontSize: 12.5 }}>
+                                🔁 înlocuit cu <b>{pi.cheapest.substituteName}</b>
+                              </div>
+                            )}
                             {/*
                               The line already reached a quantity rung, so the total above IS
                               the discounted total. Saying so matters: an unexplained lower
@@ -536,7 +549,11 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                             ) : st.storeType === "physical" ? "—" : "gratis"}
                           </td>
                           <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{formatRON(st.total)}</td>
-                          <td className="muted">{st.itemsFound}/{result.itemCount}{st.missing > 0 ? ` (lipsesc ${st.missing})` : ""}</td>
+                          <td className="muted">
+                            {st.itemsFound}/{result.itemCount}
+                            {st.missing > 0 ? ` (lipsesc ${st.missing})` : ""}
+                            {st.substituted ? ` · ${st.substituted} înlocuite` : ""}
+                          </td>
                           {/* The coverage number says what is missing; this says what to do
                               about it. Every row gets the link, not only incomplete ones — a
                               complete basket at one shop is exactly when you want to go there. */}
