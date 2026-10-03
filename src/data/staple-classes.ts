@@ -301,4 +301,31 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("arahide-sarate-300g", "Arahide sărate, 300 g", "kg", 0.3,
     ["arahide"],
     ["cruda", "crude", "miere", "ciocolata", "in coaja"]),
+
+  // ══ BATCH 8 — CHOCOLATE, the deliberately-deferred category, done carefully ═══════════════
+  //
+  // `kg::ciocolata` is 423 products and overwhelmingly filled/flavoured (caramel, pistachio,
+  // hazelnut, raisin, biscuit, raspberry, almond, yoghurt, rum, orange, Oreo, cheesecake...). A
+  // plain milk/dark bar sitting one word away from a filled one is exactly the shape of false
+  // match this project keeps finding, so this exclude list is long on purpose, built by reading
+  // every member this script's dry run actually proposes (not guessed from the 60-row sample
+  // `cluster:report` prints) — see the workflow note in `propose:equivalence`'s own dry-run
+  // step, which this class went through twice before being applied.
+  // Both lists below were tightened against the FULL candidate set the dry run actually
+  // proposed (not the 60-row cluster sample) — `fine-life caju`, `klc ciocolata lapte
+  // noisette` (noisette = hazelnut, French) and `mousse de lapte` only surfaced that way.
+  pack("ciocolata-lapte-90g", "Ciocolată cu lapte, 90 g", "kg", 0.09,
+    ["ciocolata", "lapte"],
+    ["caramel", "fistic", "kadayif", "arahide", "alune", "stafide", "biscuiti", "zmeura",
+     "migdale", "iaurt", "cappuccino", "triolade", "cocos", "quinoa", "portocal", "oreo",
+     "cheesecake", "rom", "vanilie", "capsuni", "visine", "menaj", "alba", "bubbly", "milkinis",
+     "cows", "crema", "umplutura", "interior", "biscoff", "dubai", "cards", "merci",
+     "caju", "mousse", "orez", "noisette", "menta", "amarena", "m m", "glazura", "bomboane",
+     "batoane", "toblerone", "vegana", "mix"], 0.15),
+  pack("ciocolata-neagra-85g", "Ciocolată neagră, 85 g", "kg", 0.085,
+    ["ciocolata", "neagra|amaruie"],
+    ["caramel", "fistic", "kadayif", "arahide", "alune", "stafide", "biscuiti", "zmeura",
+     "migdale", "iaurt", "cappuccino", "rom", "vanilie", "capsuni", "visine", "menaj", "crema",
+     "umplutura", "interior", "orange", "raspberry", "portocal",
+     "cafea", "mango", "banana", "bucatele", "afine", "lime", "ghimbir", "menta"], 0.15),
 ];
