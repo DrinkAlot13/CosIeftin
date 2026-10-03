@@ -442,10 +442,18 @@ export const BASKET_STRUCTURAL_TOLERANCE = 0.35;
 export async function structuralCandidateIds(
   p: { id: number; name: string; brand: string | null; unit: string; unitSize: number; section: string },
   sizeTolerance: number,
-  opts: { requireMutualDistinction?: boolean; take?: number } = {},
+  opts: { requireMutualDistinction?: boolean; strict?: boolean; take?: number } = {},
 ): Promise<number[]> {
   const head = headNounOf(p.name, p.brand);
   if (!head) return [];
+  // `doseTokens` reads the RAW name on purpose: `normalizeText` strips `%` and the decimal
+  // point before this ever ran, so `doseTokens(normalizeText("3.5% grasime"))` was always "" —
+  // every fat-percentage and alcohol-percentage dose silently vanished, and the contradiction
+  // filter below never had anything to compare. Measured on `getAlternatives`'s real output
+  // AFTER the filter below had supposedly shipped: 1.5% milk was still offered 1.7% milk, 20%
+  // smantana was still offered 12%, 2% iaurt was still offered 10%. `semanticCandidateIds`
+  // already called `doseTokens(p.name)` unnormalized — this brings the structural tier in line.
+  const pDose = doseTokens(p.name);
   const cands = await prisma.product.findMany({
     where: {
       section: p.section,
@@ -469,6 +477,15 @@ export async function structuralCandidateIds(
   // `creminos`, not `unt`.
   let matched = cands.filter((c) => headNounOf(c.name, c.brand) === head);
 
+  // A stated strength must not CONTRADICT (CLAUDE.md: "3,5% vs 1,5%... mărimea L vs M" — this
+  // is the SAME check, applied here because it was missing: measured live on
+  // `getAlternatives`'s real output, whole milk (3.5%) was suggested interchangeably with
+  // semi-skimmed (1.5%), 10%-fat Greek yogurt with 3.5%, 16%-fat cream with 12%, and a size-L
+  // egg carton with size-M — `doseTokens` already parses both percentages and "mărimea L/M",
+  // it was simply never asked here. Silence is not disagreement, so a product with no dose
+  // never blocks one that has it — only a stated CONTRADICTION does.
+  matched = matched.filter((c) => { const cDose = doseTokens(c.name); return !pDose || !cDose || pDose === cDose; });
+
   // ── A HEAD NOUN CAN BE TOO GENERIC TO CARRY THE WHOLE JUDGEMENT, AND SIZE STOPS GUARDING
   //    AGAINST IT AS THE SIZE BAND WIDENS.
   //
@@ -490,7 +507,7 @@ export async function structuralCandidateIds(
   // (brand name, a flavour word) must not disqualify a substitute, only a product that is
   // plainly a different kind of thing should.
   if (opts.requireMutualDistinction) {
-    matched = matched.filter((c) => passesMutualDistinction(p.name, c.name));
+    matched = matched.filter((c) => passesMutualDistinction(p.name, c.name, { strict: opts.strict, brandA: p.brand, brandB: c.brand }));
   }
 
   return matched.map((c) => c.id);
@@ -599,7 +616,14 @@ export async function semanticCandidateIds(
 export async function getAlternatives(productId: number, limit = 8, strictness: Strictness = "equivalent") {
   const p = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true, brand: true, unit: true, unitSize: true, section: true } });
   if (!p) return [];
-  const ids = await structuralCandidateIds(p, ALTERNATIVES_SIZE_TOLERANCE);
+  // `requireMutualDistinction` + `strict` added after live evidence (a real shopper's cart):
+  // the loose ("2+ unshared tokens on BOTH sides") rule misses a short candidate name that adds
+  // nothing back, which is exactly how "Napolact Chefir fără lactoză" got offered "Napolact
+  // Chefir" (regular, contains lactose) as a "similar" suggestion, and "Lapte batut" got
+  // offered "Lapte acidofil" — two different cultured-milk drinks, one word apart. Strict mode
+  // (ANY unshared non-brand word blocks) catches both; the dose check above independently
+  // catches every fat-percentage and egg-size mismatch this surfaced.
+  const ids = await structuralCandidateIds(p, ALTERNATIVES_SIZE_TOLERANCE, { requireMutualDistinction: true, strict: true });
   if (ids.length === 0) return [];
   const cands = await prisma.product.findMany({
     where: { id: { in: ids } },
