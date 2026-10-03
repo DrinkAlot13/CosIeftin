@@ -457,4 +457,24 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("cafea-capsule-tassimo-16", "Capsule cafea compatibile Tassimo, 16 buc", "buc", 16,
     ["capsule", "cafea", "tassimo"],
     ["decofeinizat", "decafeinizat", "ciocolata", "kitkat"], 0.15),
+
+  // ══ BATCH 18 ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Same two concepts as `ceai-musetel-20`/`ceai-menta-20` above, but this merchant counts the
+  // box in SACHETS (buc) rather than grams — a different pricing unit, so a genuine sibling
+  // class, not a duplicate of the kg one (mixing buc and kg in one class would break lei-per-
+  // unit comparison).
+  pack("ceai-musetel-buc20", "Ceai de mușețel, 20 plicuri", "buc", 20,
+    ["ceai", "musetel"],
+    ["fructe", "menta", "verde", "negru", "tei"], 0.3),
+  pack("ceai-menta-buc20", "Ceai de mentă, 20 plicuri", "buc", 20,
+    ["ceai", "menta"],
+    ["fructe", "musetel", "verde", "negru", "tei"], 0.3),
+
+  // ══ RAZOR — 3-blade disposable only, any pack count (priced per razor either way, the way
+  // loose-produce classes price per kg regardless of pack). Blade count is a real, priced-
+  // differently spec, same reasoning as olive colour or almond form, so 2-blade/5-blade stay
+  // their own (unwritten) classes rather than being merged in by a looser rule.
+  { slug: "aparat-ras-3lame", label: "Aparat de ras de unică folosință, 3 lame", unit: "buc", unitSize: 4,
+    attributes: { require: ["aparat", "ras", "3 lame"], exclude: ["tantari"], anySize: true, minUnitSize: 1, maxUnitSize: 10 } },
 ];
