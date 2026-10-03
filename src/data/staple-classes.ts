@@ -200,10 +200,10 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   // plain pitted olives.
   pack("masline-negre-350g", "Măsline negre, 350 g", "kg", 0.35,
     ["masline", "negre"],
-    ["verzi", "umplute"], 0.15),
+    ["verzi", "umplute", "mix", "ansoa"], 0.15),
   pack("masline-verzi-350g", "Măsline verzi, 350 g", "kg", 0.35,
     ["masline", "verzi"],
-    ["negre", "umplute"], 0.15),
+    ["negre", "umplute", "mix"], 0.15),
 
   // ══ HONEY — polyfloral only; monofloral types (salcâm/tei/cătină) are a real, priced-
   //    differently variety split, same as apple variety, and are left for a later batch rather
@@ -503,4 +503,13 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("pasta-tomate-720g", "Pastă de tomate, 720 g", "kg", 0.72,
     ["pasta", "tomate"],
     ["ardei", "vegetala"], 0.15),
+
+  // ══ OLIVES, larger jar — siblings of `masline-negre-350g`/`masline-verzi-350g` at the other
+  // common jar size (690-700 g). Same excludes.
+  pack("masline-negre-700g", "Măsline negre, 700 g", "kg", 0.7,
+    ["masline", "negre"],
+    ["verzi", "umplute", "mix", "ansoa"], 0.1),
+  pack("masline-verzi-700g", "Măsline verzi, 700 g", "kg", 0.7,
+    ["masline", "verzi"],
+    ["negre", "umplute", "mix"], 0.1),
 ];
