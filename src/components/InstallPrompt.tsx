@@ -80,7 +80,7 @@ export function InstallPrompt({ ready }: { ready: boolean }) {
       <div style={{ flex: 1 }}>
         {showIos ? (
           <>
-            <p><b>Pune CoșMic pe ecranul principal.</b></p>
+            <p><b>Pune CosIeftin pe ecranul principal.</b></p>
             <p className="muted">
               Apasă <b>Partajează</b> în bara Safari, apoi <b>„Adaugă la ecranul principal”</b>.
               Lista rămâne disponibilă și fără semnal, în magazin.
@@ -88,7 +88,7 @@ export function InstallPrompt({ ready }: { ready: boolean }) {
           </>
         ) : (
           <>
-            <p><b>Pune CoșMic pe ecranul principal.</b></p>
+            <p><b>Pune CosIeftin pe ecranul principal.</b></p>
             <p className="muted">Se deschide direct pe listă și merge și fără semnal, în magazin.</p>
           </>
         )}

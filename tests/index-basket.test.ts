@@ -1,11 +1,11 @@
-// The Indexul CoșMic basket definition + the split-vs-single decision, which is the
+// The Indexul CosIeftin basket definition + the split-vs-single decision, which is the
 // single most consequential number the site shows a shopper.
 import { describe, it, expect } from "./run";
 import { INDEX_BASKET } from "../src/lib/index-basket";
 import { changeBetween, periodChanges, type SeriesPoint } from "../src/lib/index-series";
 import { optimizeBasket, type ProductForBasket } from "../src/lib/basket";
 
-describe("Indexul CoșMic — basket definition", () => {
+describe("Indexul CosIeftin — basket definition", () => {
   it("covers the staples a Romanian household buys every week", () => {
     const keys = INDEX_BASKET.map((b) => b.key);
     for (const need of ["lapte", "paine", "oua", "ulei", "faina", "zahar", "unt", "orez", "cafea", "hartie", "detergent"]) {
@@ -33,7 +33,7 @@ describe("Indexul CoșMic — basket definition", () => {
   });
 });
 
-describe("Indexul CoșMic — comparisons refuse unlike things", () => {
+describe("Indexul CosIeftin — comparisons refuse unlike things", () => {
   const pt = (day: string, total: number, priced: number): SeriesPoint => ({
     day, total, priced, of: 40, complete: priced === 40, byMerchant: [],
   });

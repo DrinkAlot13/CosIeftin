@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 type Update = { message?: { chat?: { id?: number | string }; text?: string } };
 
 const HELP = [
-  "👋 Salut! Sunt botul <b>CoșMic</b> — te anunț când se ieftinesc produsele pe care le urmărești.",
+  "👋 Salut! Sunt botul <b>CosIeftin</b> — te anunț când se ieftinesc produsele pe care le urmărești.",
   "",
   "<b>Comenzi:</b>",
   "/watch lapte zuzu — urmărește produsul",

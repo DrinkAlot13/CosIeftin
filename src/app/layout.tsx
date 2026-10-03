@@ -11,8 +11,8 @@ import { jsonLdScript, siteUrl, websiteJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: {
-    default: "CoșMic — compară prețuri la alimente în România",
-    template: "%s · CoșMic",
+    default: "CosIeftin — compară prețuri la alimente în România",
+    template: "%s · CosIeftin",
   },
   description:
     "Compară prețurile la alimente din marile lanțuri (Kaufland, Lidl, Carrefour, Auchan…) și fă-ți lista de cumpărături la cel mai mic preț.",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   // The two platforms overlap almost nowhere, which is why the probe checks them separately.
   appleWebApp: {
     capable: true,
-    title: "CoșMic",
+    title: "CosIeftin",
     statusBarStyle: "default",
   },
   icons: {
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
-    siteName: "CoșMic",
+    siteName: "CosIeftin",
     locale: "ro_RO",
     type: "website",
   },

@@ -180,7 +180,7 @@ export default async function HealthPage() {
           </p>
           <p className="muted" style={{ margin: "0 0 10px", fontSize: 13.5 }}>
             {cmp.basket.atLeast3} din {cmp.basket.total} în 3+ magazine · {cmp.basket.atLeast4} în 4+.
-            Acesta este numărul care descrie ce vede un cumpărător — coșul fix din Indexul CoșMic.
+            Acesta este numărul care descrie ce vede un cumpărător — coșul fix din Indexul CosIeftin.
           </p>
           <p style={{ margin: "0 0 6px", fontSize: 15 }}>
             tot catalogul: <b>{cmp.catalog.share2.toFixed(1).replace(".", ",")}%</b> în 2+ magazine{" "}

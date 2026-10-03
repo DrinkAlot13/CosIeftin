@@ -1,4 +1,4 @@
-// CoșMic service worker — makes the shopping list usable IN STORE, where signal is worst.
+// CosIeftin service worker — makes the shopping list usable IN STORE, where signal is worst.
 //
 // v2. The first version rendered "Ești offline" on every page WHILE THE BROWSER WAS ONLINE,
 // persistently, on the dev origin. Three defects stacked:
@@ -114,7 +114,7 @@ self.addEventListener("fetch", (event) => {
                 "<meta name=\"sw-diagnostic\" content=\"server-down-while-online\">" +
                 "<body style=\"font-family:system-ui;padding:40px;max-width:36em;margin:auto;line-height:1.55\">" +
                 "<h1>Serverul nu răspunde</h1>" +
-                "<p>Ești <b>online</b> — conexiunea ta funcționează. Serverul CoșMic nu a răspuns.</p>" +
+                "<p>Ești <b>online</b> — conexiunea ta funcționează. Serverul CosIeftin nu a răspuns.</p>" +
                 hint +
                 "</body>",
               { status: 502, headers: { "Content-Type": "text/html; charset=utf-8", "X-SW-Diagnostic": "server-down-while-online" } },

@@ -121,7 +121,7 @@ export function websiteJsonLd(): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "CoșMic",
+    name: "CosIeftin",
     url: siteUrl(),
     inLanguage: "ro-RO",
     potentialAction: {

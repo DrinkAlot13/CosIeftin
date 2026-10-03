@@ -14,7 +14,7 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Termeni de utilizare",
-  description: "Condițiile în care poate fi folosit CoșMic.",
+  description: "Condițiile în care poate fi folosit CosIeftin.",
 };
 
 const CONTACT = "contact@cosieftin.ro";
@@ -32,7 +32,7 @@ export default function TermeniPage() {
 
       <h2>1. Ce este acest serviciu</h2>
       <p>
-        CoșMic este un comparator de prețuri. Afișăm prețuri colectate din paginile publice ale
+        CosIeftin este un comparator de prețuri. Afișăm prețuri colectate din paginile publice ale
         magazinelor și te ajutăm să vezi unde este mai ieftin un coș de cumpărături.{" "}
         <b>Nu vindem produse, nu încasăm plăți și nu suntem parte în relația dintre tine și
         magazin.</b> Orice cumpărare se face la magazin, pe site-ul sau în magazinul lui, după

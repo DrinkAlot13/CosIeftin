@@ -1,4 +1,4 @@
-# CoșMic — grocery price comparison + smart shopping list (RO)
+# CosIeftin — grocery price comparison + smart shopping list (RO)
 
 Compare prices for a curated set of grocery items across Romanian chains (Kaufland,
 Lidl, Carrefour, Auchan, Mega Image, Profi), see the cheapest per item with **price

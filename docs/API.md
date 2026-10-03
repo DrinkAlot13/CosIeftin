@@ -1,4 +1,4 @@
-# CoșMic public read API — v1
+# CosIeftin public read API — v1
 
 **Status: SPECIFICATION. Nothing here is built yet.** Read this before it is, because a
 browser extension, a PWA and possibly a native app all consume it, and the cheapest place to

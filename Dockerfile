@@ -1,4 +1,4 @@
-# CoșMic — single image that serves the Next.js app AND can run the scrapers
+# CosIeftin — single image that serves the Next.js app AND can run the scrapers
 # (including the Playwright/Chromium ones). Based on the Playwright image so
 # Chromium + its system deps are already present.
 FROM mcr.microsoft.com/playwright:v1.62.1-jammy

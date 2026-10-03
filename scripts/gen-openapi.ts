@@ -69,10 +69,10 @@ function main(): void {
   const doc = {
     openapi: "3.0.3",
     info: {
-      title: "CoșMic API",
+      title: "CosIeftin API",
       version: "1.0.0",
       description:
-        "API public de citire pentru catalogul CoșMic.\n\n" +
+        "API public de citire pentru catalogul CosIeftin.\n\n" +
         "Fiecare preț poartă data la care a fost observat. Rândurile reținute de o verificare " +
         "nu sunt niciodată returnate. „Nu avem o comparație pentru acest produs” este un răspuns " +
         "de sine stătător, nu o listă goală — 89% dintre produsele cu preț au un singur magazin.\n\n" +

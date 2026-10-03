@@ -21,7 +21,7 @@ import { formatRON } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Ambalaje micșorate — CoșMic",
+  title: "Ambalaje micșorate — CosIeftin",
   description:
     "Produse la care ambalajul s-a micșorat, iar prețul pe kilogram sau pe litru a crescut. Verificat manual, cu datele la vedere.",
 };

@@ -32,7 +32,7 @@ import { verdictExplanation } from "@/lib/discount-verify";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Reduceri reale — CoșMic",
+  title: "Reduceri reale — CosIeftin",
   description:
     "Reduceri la care prețul de acum chiar este sub minimul ultimelor 30 de zile publicat de magazin. Cu ambele cifre la vedere.",
 };

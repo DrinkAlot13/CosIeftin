@@ -20,7 +20,7 @@ export const revalidate = 86400; // dropped by tag when the nightly finishes; se
 
 export const metadata = {
   title: "Toate categoriile",
-  description: "Toate departamentele și raioanele din CoșMic, cu numărul de produse cu preț azi.",
+  description: "Toate departamentele și raioanele din CosIeftin, cu numărul de produse cu preț azi.",
 };
 
 export default async function CategoryIndexPage() {

@@ -28,7 +28,7 @@ function seededSlugs(): Set<string> {
   return out;
 }
 
-describe("Indexul CoșMic — basket v2 definition", () => {
+describe("Indexul CosIeftin — basket v2 definition", () => {
   it("is version 2", () => {
     expect(BASKET_V2_VERSION).toBe(2);
   });

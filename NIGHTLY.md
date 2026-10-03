@@ -16,7 +16,7 @@
 - **scrape:dcneu-tiers** — one bounded batch (default 160, parallel ×4) of DCNeu quantity
   discounts; only products still missing tiers, so coverage grows every night.
 - **backfill:namenorm** — refreshes the diacritic-folded search key on new products.
-- **index:compute** — prices the Indexul CoșMic basket and stores one row per day.
+- **index:compute** — prices the Indexul CosIeftin basket and stores one row per day.
 - **notify:alerts** — Telegram price-drop notifications. **Safe by default:** with no
   `TELEGRAM_BOT_TOKEN` it dry-runs and sends nothing.
 

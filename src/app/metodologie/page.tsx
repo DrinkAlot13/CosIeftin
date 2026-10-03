@@ -1,4 +1,4 @@
-// How CoșMic works, in plain Romanian.
+// How CosIeftin works, in plain Romanian.
 //
 // Not a legal page. `/termeni` and `/confidentialitate` are the legal pages; `/despre` is the
 // short pitch. This is the one that answers "why should I believe your prices", and it has to
@@ -12,7 +12,7 @@ import { countStats } from "@/lib/queries";
 
 export const revalidate = 3600;
 export const metadata = {
-  title: "Cum funcționează CoșMic",
+  title: "Cum funcționează CosIeftin",
   description:
     "De unde luăm prețurile, cât de des le actualizăm, ce înseamnă fiecare tip de preț și cum poți raporta o greșeală.",
 };
@@ -45,7 +45,7 @@ export default async function MetodologiePage() {
         <span>Cum funcționează</span>
       </nav>
 
-      <h1 style={{ fontSize: 30, marginBottom: 6 }}>Cum funcționează CoșMic</h1>
+      <h1 style={{ fontSize: 30, marginBottom: 6 }}>Cum funcționează CosIeftin</h1>
       <p className="muted" style={{ fontSize: 15, lineHeight: 1.6, marginTop: 0 }}>
         Comparăm prețuri la alimente și produse de uz casnic din magazinele de mai jos. Nu
         vindem nimic și nu încasăm nimic de la tine — te trimitem la magazin, unde faci
@@ -205,7 +205,7 @@ export default async function MetodologiePage() {
       </section>
 
       <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 20 }}>Indexul CoșMic — versiunea coșului</h2>
+        <h2 style={{ fontSize: 20 }}>Indexul CosIeftin — versiunea coșului</h2>
         <p>
           Indexul urmărește 40 de nevoi de bază. <b>Definiția lor s-a schimbat o dată</b>, iar
           cele două definiții nu sunt comparabile între ele:
@@ -247,7 +247,7 @@ export default async function MetodologiePage() {
         </p>
         <ul>
           <li>
-            <b>Coșul de bază</b> — cele 40 de linii din Indexul CoșMic (lapte, pâine, ouă,
+            <b>Coșul de bază</b> — cele 40 de linii din Indexul CosIeftin (lapte, pâine, ouă,
             ulei, zahăr…): <b>{"~"}62% au preț în 2 sau mai multe magazine</b>.
           </li>
           <li>

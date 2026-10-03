@@ -9,9 +9,9 @@ export function Header({ categories }: { categories: MenuCategory[] }) {
   return (
     <header className="site-header">
       <div className="container header-top">
-        <Link href="/" className="brand" aria-label="CoșMic acasă">
+        <Link href="/" className="brand" aria-label="CosIeftin acasă">
           <span className="brand-mark">🛒</span>
-          Coș<span className="brand-ro">Mic</span>
+          Cos<span className="brand-ro">Ieftin</span>
         </Link>
         <SearchAutocomplete />
         <Link href="/lista" className="header-list-link">🛒 Lista</Link>
@@ -44,7 +44,7 @@ export function Header({ categories }: { categories: MenuCategory[] }) {
             <li><Link href="/oferte"><span aria-hidden>🔥</span> Oferte</Link></li>
             <li>
               <Link href="/index-cosmic" title="Un coș fix de 40 de produse de bază, urmărit în timp">
-                <span aria-hidden>📊</span> Indexul CoșMic <span className="nav-sub">— cât costă coșul</span>
+                <span aria-hidden>📊</span> Indexul CosIeftin <span className="nav-sub">— cât costă coșul</span>
               </Link>
             </li>
             <li><Link href="/retete"><span aria-hidden>🍳</span> Rețete</Link></li>

@@ -10,7 +10,7 @@ import { prisma } from "@/lib/db";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Cum funcționează CoșMic",
+  title: "Cum funcționează CosIeftin",
   description:
     "De unde vin prețurile, cât de des se actualizează, cum potrivim produsele între magazine și ce nu putem garanta.",
 };
@@ -33,9 +33,9 @@ export default async function DesprePage() {
 
   return (
     <div className="container legal">
-      <h1>Cum funcționează CoșMic</h1>
+      <h1>Cum funcționează CosIeftin</h1>
       <p className="lead">
-        CoșMic compară prețuri la alimente între magazinele din România. Pagina asta explică de
+        CosIeftin compară prețuri la alimente între magazinele din România. Pagina asta explică de
         unde vin cifrele și — la fel de important — ce nu putem garanta.
       </p>
 

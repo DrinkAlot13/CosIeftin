@@ -1,4 +1,4 @@
-# CoșMic — project rules for Claude Code
+# CosIeftin — project rules for Claude Code
 
 ## What this is
 Romanian grocery price-comparison + basket optimizer. Next.js 14 App Router,

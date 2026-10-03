@@ -2,7 +2,7 @@
   "name": "cosmic",
   "version": "0.1.0",
   "private": true,
-  "description": "CoșMic — grocery price comparison + smart shopping list for Romania",
+  "description": "CosIeftin — grocery price comparison + smart shopping list for Romania",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

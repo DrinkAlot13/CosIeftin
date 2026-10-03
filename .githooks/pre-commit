@@ -1,5 +1,5 @@
 #!/bin/sh
-# CoșMic pre-commit gate: typecheck + the golden-set matcher tests + the price-parser tests.
+# CosIeftin pre-commit gate: typecheck + the golden-set matcher tests + the price-parser tests.
 #
 # Deliberately `verify:code`, NOT `verify`. A commit changes CODE; it cannot change the state
 # of the database. Blocking a code commit because the DB still holds rows written by an older

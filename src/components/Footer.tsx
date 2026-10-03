@@ -6,9 +6,9 @@ export function Footer({ categories }: { categories: MenuCategory[] }) {
     <footer className="site-footer">
       <div className="container footer-grid">
         <div>
-          <Link href="/" className="brand" aria-label="CoșMic acasă">
+          <Link href="/" className="brand" aria-label="CosIeftin acasă">
             <span className="brand-mark">🛒</span>
-            Coș<span className="brand-ro">Mic</span>
+            Cos<span className="brand-ro">Ieftin</span>
           </Link>
           <p className="muted" style={{ marginTop: 10, fontSize: 13.5 }}>
             Compară prețurile la alimente din marile lanțuri și fă-ți lista de cumpărături la cel mai mic preț.
@@ -35,7 +35,7 @@ export function Footer({ categories }: { categories: MenuCategory[] }) {
       <div className="container footer-note">
         <strong>Prețuri colectate automat.</strong> Prețurile sunt preluate din sursele publice ale magazinelor
         și pot fi diferite de cele din magazin în momentul cumpărării. Verifică întotdeauna prețul final pe
-        site-ul magazinului. CoșMic este un comparator — comenzile se fac pe site-ul magazinului.
+        site-ul magazinului. CosIeftin este un comparator — comenzile se fac pe site-ul magazinului.
         {" · "}
         <Link href="/admin" style={{ color: "var(--primary)" }}>Admin</Link>
       </div>

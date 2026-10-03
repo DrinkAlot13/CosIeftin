@@ -17,7 +17,7 @@ rather than guessing — the whole point of raising this before launch is to get
 | Offers | 1,602, of which **1,577 live** |
 | Merchants | carrefour (1,231), finestore (277), lemanoir (94) |
 | Age gate | **none anywhere on the site** — grep for age/majorat/18 ani returns nothing |
-| Sales | none. CoșMic compares and links out; every transaction happens on the merchant's site |
+| Sales | none. CosIeftin compares and links out; every transaction happens on the merchant's site |
 
 That last row is the load-bearing fact for most of what follows.
 
@@ -26,7 +26,7 @@ That last row is the load-bearing fact for most of what follows.
 Romanian obligations around alcohol split into two families, and they land on different parties.
 
 **Sale-side.** Selling or serving alcohol to a person under 18 is sanctioned under Legea
-61/1991 (public order). The obligation sits on the *seller*. CoșMic is not the seller: the
+61/1991 (public order). The obligation sits on the *seller*. CosIeftin is not the seller: the
 basket links out, the merchant takes the order, the merchant delivers, and the merchant is
 the one who must verify age at delivery. Nothing here transfers that duty to us.
 

@@ -15,8 +15,8 @@ file, which is the first hard blocker.
 
 | what Bubblewrap uses | required | ours | verdict |
 |---|---|---|---|
-| `name` | yes | "CoșMic — compară prețuri la alimente" | ✅ |
-| `short_name` | yes (launcher label) | "CoșMic" | ✅ |
+| `name` | yes | "CosIeftin — compară prețuri la alimente" | ✅ |
+| `short_name` | yes (launcher label) | "CosIeftin" | ✅ |
 | `start_url` | yes | `/lista` | ✅ |
 | `scope` | yes | `/` | ✅ — everything on-site stays in-app |
 | `display` | `standalone` or `fullscreen` | `standalone` | ✅ |

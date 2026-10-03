@@ -653,7 +653,7 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
 .ms-callout { padding: 10px 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-2); font-size: 13.5px; }
 .mr-rate a { color: var(--primary); text-decoration: underline; }
 
-/* "Indexul CoșMic" alone told nobody what the page was — the owner of the site did not know.
+/* "Indexul CosIeftin" alone told nobody what the page was — the owner of the site did not know.
    The nav now carries a short gloss, dropped on narrow screens where the bar is tight and the
    title attribute still explains it. */
 .nav-sub { color: var(--muted); font-weight: 500; }
@@ -741,7 +741,7 @@ a.mr-name:hover { color: var(--primary); text-decoration: underline; }
 .stat-sub td { padding-top: 0; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .stat-sub + tr td { border-top: none; }
 
-/* ── Indexul CoșMic v2. */
+/* ── Indexul CosIeftin v2. */
 .idx-head { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
 .pill-warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
 .idx-shops { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }

@@ -588,7 +588,7 @@ The fabrication guard was NOT touched. It was right on the input it was given �
 been claiming a per-product URL it did not have, which is the schema's stated failure mode
 ("an absent link must be visibly null rather than silently pointing at a generic page").
 
-### Soak-period change — Indexul CoșMic switched to basket v2 (2026-09-07)
+### Soak-period change — Indexul CosIeftin switched to basket v2 (2026-09-07)
 
 **Changes what a headline number means.** Day fourteen must not read the v1 and v2 totals as one
 series; they measure different baskets. The chart breaks at the boundary and the page says so.

@@ -1,4 +1,4 @@
-// CoșMic — grocery price comparison data model.
+// CosIeftin — grocery price comparison data model.
 // SQLite for local dev; switch provider to "postgresql" for production.
 
 generator client {
@@ -598,7 +598,7 @@ model ProductSpec {
   @@index([key, value])
 }
 
-/// Daily value of the fixed "Indexul CoșMic" basket — the public inflation series.
+/// Daily value of the fixed "Indexul CosIeftin" basket — the public inflation series.
 /// One row per day; the JSON keeps the per-line breakdown that produced the total.
 model IndexSnapshot {
   id        Int      @id @default(autoincrement())

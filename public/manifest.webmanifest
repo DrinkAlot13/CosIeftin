@@ -1,6 +1,6 @@
 {
-  "name": "CoșMic — compară prețuri la alimente",
-  "short_name": "CoșMic",
+  "name": "CosIeftin — compară prețuri la alimente",
+  "short_name": "CosIeftin",
   "description": "Compară prețurile la alimente și fă-ți lista de cumpărături la cel mai mic preț.",
   "start_url": "/lista",
   "scope": "/",

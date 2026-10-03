@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const idx = await priceBasketV2();
   const day = idx.computedAt.toISOString().slice(0, 10);
 
-  console.log(`\nIndexul CoșMic — ${day}  (coș v${BASKET_V2_VERSION}, ${INDEX_BASKET_V2.length} clase)\n`);
+  console.log(`\nIndexul CosIeftin — ${day}  (coș v${BASKET_V2_VERSION}, ${INDEX_BASKET_V2.length} clase)\n`);
 
   console.log(`  PER MAGAZIN — un coș este comparabil doar cu unul care a acoperit aceleași linii`);
   console.log(`  ${pad("magazin", 18)} ${lp("linii", 7)} ${lp("total", 11)}`);

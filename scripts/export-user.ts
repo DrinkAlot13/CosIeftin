@@ -61,7 +61,7 @@ async function main(): Promise<void> {
 
   const payload = {
     exportedAt: new Date().toISOString(),
-    about: "Toate datele pe care CoșMic le păstrează despre acest cont.",
+    about: "Toate datele pe care CosIeftin le păstrează despre acest cont.",
     account: {
       username: user.username,
       createdAt: user.createdAt,

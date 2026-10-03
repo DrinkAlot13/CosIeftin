@@ -1,4 +1,4 @@
-// Indexul CoșMic — what a basket of 40 everyday needs costs, and how that moves.
+// Indexul CosIeftin — what a basket of 40 everyday needs costs, and how that moves.
 //
 // ── WHAT CHANGED, AND WHY IT HAD TO.
 //
@@ -29,7 +29,7 @@ import { versionedSeries, changeWithin } from "@/lib/index-series-v2";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Indexul CoșMic — cât costă un coș de 40 de produse de bază",
+  title: "Indexul CosIeftin — cât costă un coș de 40 de produse de bază",
   description:
     "Un coș de 40 de nevoi de bază, evaluat la fiecare magazin cu echivalentul lui. Nu este o cifră oficială de inflație.",
 };
@@ -53,7 +53,7 @@ export default async function IndexPage() {
   return (
     <div className="container" style={{ paddingBottom: 60 }}>
       <div className="section" style={{ paddingBottom: 0 }}>
-        <h1 style={{ fontSize: 28, marginBottom: 4 }}>Indexul CoșMic — cât costă coșul</h1>
+        <h1 style={{ fontSize: 28, marginBottom: 4 }}>Indexul CosIeftin — cât costă coșul</h1>
         <p className="muted" style={{ maxWidth: 720 }}>
           40 de nevoi de bază — lapte, ouă, pâine, ulei, detergent — evaluate la fiecare magazin
           cu <b>echivalentul lui</b>. Nu este o cifră oficială de inflație și nu încearcă să fie.
