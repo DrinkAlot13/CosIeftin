@@ -538,4 +538,17 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("sos-pesto-busuioc-190g", "Sos pesto cu busuioc, 190 g", "kg", 0.19,
     ["sos", "pesto", "busuioc"],
     ["rucola", "rosii", "ardei", "fistic", "rosso"], 0.1),
+
+  // ══ TUB ICE CREAM, plain vanilla / plain chocolate only — the two narrowest, safest cuts out
+  // of a cluster that otherwise combines 3+ flavours per product (caramel, biscuits,
+  // mascarpone, cherry, berries, nuts...). Every other flavour word actually seen in this
+  // cluster is excluded, same discipline as the chocolate classes.
+  pack("inghetata-vanilie-500ml", "Îngheță de vanilie, 500 ml", "l", 0.5,
+    ["inghetata", "vanilie"],
+    ["caramel", "biscuiti", "mascarpone", "amarena", "afine", "capsuni", "zmeura", "alune",
+     "migdale", "ciocolata", "cacao", "iaurt", "pepene", "mango", "fistic", "topping", "sirop", "vegana", "soia"], 0.1),
+  pack("inghetata-ciocolata-500ml", "Îngheță de ciocolată, 500 ml", "l", 0.5,
+    ["inghetata", "ciocolata"],
+    ["caramel", "biscuiti", "mascarpone", "amarena", "afine", "capsuni", "zmeura", "alune",
+     "migdale", "vanilie", "iaurt", "pepene", "mango", "fistic", "topping", "sirop", "unt", "vegana", "soia"], 0.1),
 ];
