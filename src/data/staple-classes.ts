@@ -477,4 +477,11 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   // their own (unwritten) classes rather than being merged in by a looser rule.
   { slug: "aparat-ras-3lame", label: "Aparat de ras de unică folosință, 3 lame", unit: "buc", unitSize: 4,
     attributes: { require: ["aparat", "ras", "3 lame"], exclude: ["tantari"], anySize: true, minUnitSize: 1, maxUnitSize: 10 } },
+
+  // ══ TOOTHBRUSH — adult, MEDIUM bristles only, any pack count. Bristle firmness is a real,
+  // sometimes medically-relevant spec (soft is often what sensitive gums need), same reasoning
+  // as razor blade count, so it is required explicitly rather than left to chance. Kids'
+  // brushes and the denture-cleaning brush are a different product, not a size of this one.
+  { slug: "periuta-dinti-medie", label: "Periuță de dinți, medie", unit: "buc", unitSize: 2,
+    attributes: { require: ["periuta", "dinti", "mediu|medium"], exclude: ["copii", "kids", "ani", "proteze", "interdental", "soft", "moi"], anySize: true, minUnitSize: 1, maxUnitSize: 6 } },
 ];
