@@ -374,4 +374,14 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("deodorant-spray-150ml", "Deodorant spray, 150 ml", "l", 0.15,
     ["deodorant", "spray"],
     ["incaltaminte"], 0.2),
+
+  // ══ BATCH 12 — SHOWER GEL, same scent-tolerant judgement as deodorant spray, carved out of
+  //    `l::gel` (348 products) which otherwise mixes it with drain-cleaner and dishwasher-
+  //    descaler gel under the same bare head noun "gel" — requiring "dus" (shower) keeps those
+  //    out structurally, not by naming every cleaning-chemical product. The 2-in-1 shower-gel-
+  //    and-shampoo combo is excluded: it is a different product, not a shower gel with an
+  //    extra feature. Wide window: this catalog's real bottle sizes span 400-750 ml.
+  pack("gel-de-dus-550ml", "Gel de duș, 550 ml", "l", 0.55,
+    ["gel", "dus"],
+    ["sampon"], 0.45),
 ];
