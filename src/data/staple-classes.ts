@@ -425,4 +425,21 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
   pack("odorizant-toaleta-50g", "Odorizant pentru toaletă, 50 g", "kg", 0.05,
     ["odorizant", "toaleta"],
     [], 0.2),
+
+  // ══ BATCH 16 ═══════════════════════════════════════════════════════════════════════════
+  pack("branza-vaci-proaspata-200g", "Brânză de vaci proaspătă, 200 g", "kg", 0.2,
+    ["branza", "vaci", "proaspata"],
+    ["smantana", "light", "usoara"], 0.3),
+  // `trufe`/`mistret`/`masline`/`ardei`/`ceapa` added after `verify:class`: truffles, wild
+  // boar, olives, peppers and onion are all real recipe flavours sitting right inside this
+  // window, not a plain pork pâté.
+  pack("pate-porc-100g", "Pate de porc, 100 g", "kg", 0.1,
+    ["pate", "porc"],
+    ["ficat", "unt", "ton", "picant", "trufe", "mistret", "masline", "ardei", "ceapa"], 0.25),
+  pack("ulei-susan-125ml", "Ulei de susan, 125 ml", "l", 0.125,
+    ["ulei", "susan"],
+    [], 0.3),
+  pack("zahar-vanilinat-8g", "Zahăr vanilinat, 8 g", "kg", 0.008,
+    ["zahar", "vanilinat|vanilat"],
+    [], 0.3),
 ];
