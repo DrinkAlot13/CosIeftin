@@ -328,4 +328,17 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
      "migdale", "iaurt", "cappuccino", "rom", "vanilie", "capsuni", "visine", "menaj", "crema",
      "umplutura", "interior", "orange", "raspberry", "portocal",
      "cafea", "mango", "banana", "bucatele", "afine", "lime", "ghimbir", "menta"], 0.15),
+
+  // ══ BATCH 9 — BISCUITS, two narrow safe sub-types out of a 521-product, mostly-filled
+  //    cluster (sandwich cookies, savory crackers, granola bars). These two are genuinely
+  //    plain-by-definition product TYPES, not a guess at where the flavour line falls:
+  //    "Petit Beurre" names a standardised plain butter biscuit, and nothing calling itself
+  //    that in this catalog carries a filling. "Digestiv" is likewise a plain, filling-free
+  //    category name. Verified with `verify:class` before applying, same as chocolate.
+  pack("biscuiti-petit-beurre-100g", "Biscuiți Petit Beurre, 100 g", "kg", 0.1,
+    ["petit", "beurre"],
+    [], 0.2),
+  pack("biscuiti-digestivi-400g", "Biscuiți digestivi, 400 g", "kg", 0.4,
+    ["digestiv"],
+    ["musli", "fulgi de ciocolata"], 0.2),
 ];
