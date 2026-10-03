@@ -359,4 +359,19 @@ export const STAPLE_CLASSES: PrivateLabelClass[] = [
     ["chipsuri", "sare"],
     ["smantana", "ceapa", "cascaval", "paprika", "paprica", "barbeque", "piper", "iaurt",
      "pui", "marar", "patrunjel", "lime", "otet", "cheddar", "branza", "fara sare", "sfecla", "pastarnac", "batate", "plantan"], 0.1),
+
+  // ══ BATCH 11 — DEODORANT SPRAY, a DELIBERATELY DIFFERENT judgement call from every food
+  //    class above. Scent is not excluded here, and neither is the men's/women's line, on
+  //    purpose: unlike a flavour, a fragrance does not change what the product DOES, and a
+  //    shopper substituting "Dove Men Clean Comfort" for "Dove Women Fresh Natural" when the
+  //    exact one is out of stock is a far smaller leap than chocolate-for-chocolate ever is.
+  //    FORM still matters and stays split: requiring "spray" naturally keeps roll-on and stick
+  //    out (their names say so), because application method, unlike scent, does change the
+  //    product. 150 ml is this catalog's overwhelmingly dominant spray size.
+  // `incaltaminte` added after `verify:class` turned up "Deodorant spray pentru interior
+  // incaltaminte" — a SHOE freshener, not a personal antiperspirant, sitting right inside the
+  // size window at 125 ml.
+  pack("deodorant-spray-150ml", "Deodorant spray, 150 ml", "l", 0.15,
+    ["deodorant", "spray"],
+    ["incaltaminte"], 0.2),
 ];
