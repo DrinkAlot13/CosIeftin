@@ -27,7 +27,11 @@ import { ensureBackup } from "../src/lib/ensure-backup";
 // fish whose pack weight the card does not state. Its price is split across two <span>s with no
 // currency symbol anywhere, so `composeSplitPrice` refuses anything that is not exactly
 // (lei, bani) — see `scripts/adapters/selgros.ts`.
-const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "selgros", "platform"];
+//
+// `dm` JOINED after the `cosmetice` section was found to have exactly one merchant (Farmacia
+// Tei) — see `scripts/adapters/dm.ts` for why Dr. Max/Sensiblu/Catena were investigated and
+// ruled out first. ~11,000 products via a clean JSON batch API, no anti-bot wall.
+const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "selgros", "platform", "dm"];
 
 function run(script: string): boolean {
   const r = spawnSync("npm", ["run", script], { stdio: "inherit", shell: true });

@@ -115,8 +115,13 @@ export class FieldCoverage {
 export function parseJsonPayload(raw: string, map: JsonMap, route: Route, ad: Adapter, tally?: ParseTally, cov?: FieldCoverage): StoreProduct[] {
   let data: unknown;
   try { data = JSON.parse(raw); } catch { return []; }
-  const arr = dig(data, map.items);
-  if (!Array.isArray(arr)) return [];
+  const dug = dig(data, map.items);
+  // Most APIs return an array at `items`. dm.ro's batch endpoint returns an OBJECT keyed by
+  // product id instead (`{"2036693": {...}, "2611994": {...}}`) — a shape chosen so the caller
+  // can address one product by id, not to be walked in order. Object.values() reads it the same
+  // way a search API's array would; a response that is neither is the one real "nothing here".
+  const arr = Array.isArray(dug) ? dug : dug && typeof dug === "object" ? Object.values(dug) : null;
+  if (!arr) return [];
   const out: StoreProduct[] = [];
   for (const it of arr) {
     const name = String(dig(it, map.name) ?? "").replace(/\s+/g, " ").trim();

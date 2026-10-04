@@ -29,6 +29,7 @@
     "scrape:store": "tsx scripts/scrape-adapter.ts",
     "scrape:penny": "tsx scripts/scrape-adapter.ts penny",
     "scrape:selgros": "tsx scripts/scrape-adapter.ts selgros",
+    "scrape:dm": "tsx scripts/scrape-adapter.ts dm",
     "set-store-economics": "tsx scripts/set-store-economics.ts",
     "scrape:dcneu": "tsx scripts/scrape-dcneu.ts",
     "scrape:dcneu-tiers": "tsx scripts/scrape-dcneu-tiers.ts",

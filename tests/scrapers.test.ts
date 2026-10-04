@@ -77,3 +77,56 @@ describe("adapter JSON parser", () => {
   it("dig() walks dotted paths incl. array indexes", () =>
     expect(dig({ a: { b: [{ c: 7 }] } }, "a.b.0.c")).toBe(7));
 });
+
+describe("adapter JSON parser — object-keyed item maps (dm.ro's batch shape)", () => {
+  // dm.ro's `/products/tiles/{country}/dans/{dans}` returns `{"products": {"<id>": {...}}}` —
+  // an OBJECT keyed by product id, not an array. A caller asking for ids that don't exist gets
+  // them simply absent from the map, never a null placeholder, so Object.values() here must not
+  // choke on that either.
+  const payload = JSON.stringify({
+    products: {
+      "100": { title: { tileHeadline: "Crema de fata 50 ml" }, price: { price: { current: { value: "48,95 lei" } } }, self: "/p/d/100/crema", brand: { name: "Nivea" }, gtin: 9005800227269 },
+      "200": { title: { tileHeadline: "Sampon 250 ml" }, price: { price: { current: { value: "14,95 lei" } } }, self: "/p/d/200/sampon", brand: { name: "Balea" }, gtin: 1234567890123 },
+    },
+  });
+  const map = { items: "products", name: "title.tileHeadline", price: "price.price.current.value", link: "self", brand: "brand.name", ean: "gtin" };
+  const ad = { slug: "dm", name: "dm", websiteUrl: "https://www.dm.ro", section: "cosmetice", mode: "json" as const, routes: [] };
+  const out = parseJsonPayload(payload, map, { url: "" }, ad);
+
+  it("reads every value out of the object map", () => expect(out.length).toBe(2));
+  it("parses the RO-formatted price text", () => expect(out[0].price).toBeCloseTo(48.95));
+  it("resolves the relative self link", () => expect(out[0].url).toBe("https://www.dm.ro/p/d/100/crema"));
+  it("reads the brand name", () => expect(out[1].brand).toBe("Balea"));
+  it("still returns [] for an array-shaped items path (the common case stays untouched)", () => {
+    const arrayPayload = JSON.stringify({ products: [{ title: { tileHeadline: "X" }, price: { price: { current: { value: "1,00 lei" } } } }] });
+    const arrOut = parseJsonPayload(arrayPayload, map, { url: "" }, ad);
+    expect(arrOut.length).toBe(1);
+  });
+  it("returns [] when items resolves to neither an array nor an object", () => {
+    const scalarPayload = JSON.stringify({ products: "nope" });
+    expect(parseJsonPayload(scalarPayload, map, { url: "" }, ad).length).toBe(0);
+  });
+});
+
+describe("dm.ro batch-tiles parser (fixture)", () => {
+  const path = join(FIX, "dm", "r-p1.txt");
+  const raw = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const map = { items: "products", name: "title.tileHeadline", price: "price.price.current.value", link: "self", image: "images.0.tileSrc", brand: "brand.name", ean: "gtin" };
+  const ad = { slug: "dm", name: "dm drogerie markt", websiteUrl: "https://www.dm.ro", section: "cosmetice", mode: "json" as const, routes: [] };
+  const out = raw ? parseJsonPayload(raw, map, { url: "" }, ad) : [];
+
+  it("fixture exists (run: FIXTURE_SAVE=1 npm run scrape:dm)", () => expect(raw.length).toBeGreaterThan(1000));
+  // The saved fixture is whichever batch FIXTURE_SAVE happened to write last — the final batch
+  // of a run is a REMAINDER (pool size mod BATCH_SIZE), so this only needs to rule out "empty
+  // or near-empty", not assert the full 180.
+  it("extracts a realistic batch of products", () => expect(out.length).toBeGreaterThan(10));
+  it("every product has a name and a parsed price", () =>
+    expect(out.every((p) => p.name.length > 0 && p.price > 0)).toBeTruthy());
+  it("every product URL points back at dm.ro's own product path", () =>
+    expect(out.every((p) => (p.url ?? "").startsWith("https://www.dm.ro/p/d/"))).toBeTruthy());
+  it("EANs that are present are checksum-valid (parseEan rejects a bad one)", () => {
+    const withEan = out.filter((p) => p.ean);
+    expect(withEan.length).toBeGreaterThan(0);
+    expect(withEan.every((p) => /^\d{8}$|^\d{12,14}$/.test(p.ean!))).toBeTruthy();
+  });
+});
