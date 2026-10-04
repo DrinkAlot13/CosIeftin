@@ -53,8 +53,18 @@ async function main(): Promise<void> {
   if (!apply) { console.log(`\nDRY RUN — nothing written. Re-run with --apply.`); return; }
 
   await prisma.offer.update({ where: { id: o.id }, data: { flagged: true, flagReason: reason } });
-  // storeKey must be stable and unique per merchant; the article id from the URL is both.
-  const storeKey = key || `product-${o.product.id}`;
+  // storeKey must be unique per (merchant, product) — NOT just per merchant. It used to be just
+  // the article id from the URL, on the assumption that was unique per merchant too. It is not:
+  // a fan-out bug (one generic source article matched to many catalog products — see the "A
+  // PEER-RELATIVE CHECK" / fan-out sections of CLAUDE.md for why this shape recurs) means several
+  // DIFFERENT rejects can share the same article id. `MatchOverride` is `@@unique([merchantId,
+  // storeKey])`, so withholding a second product on the same article used to silently UPSERT over
+  // the first reject instead of adding one — found live on Mega Image's "Cafea boabe Espresso
+  // 1kg" (article 57549), which matched 16 different coffee products; rejecting them one at a
+  // time left only the LAST one's reject actually in the table, so the other 15 pairings would
+  // have been proposed again on the very next scrape despite each having been "withheld".
+  const article = key || `product-${o.product.id}`;
+  const storeKey = `${article}:${o.product.id}`;
   await prisma.matchOverride.upsert({
     where: { merchantId_storeKey: { merchantId: o.merchant.id, storeKey } },
     update: { productId: o.product.id, decision: "reject", note: reason },
