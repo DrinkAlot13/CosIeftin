@@ -1,6 +1,6 @@
 import { StoreTypeBadge } from "@/components/StoreTypeBadge";
 import { DELIVERY_PLATFORM_LABEL, isDeliveryPlatform } from "@/lib/platform/visibility";
-import { AVAILABILITY_LABELS, formatDate, formatPerUnit, formatRON } from "@/lib/format";
+import { AVAILABILITY_LABELS, formatDate, formatPerUnit, formatRON, relativeDays } from "@/lib/format";
 import { cardSavingBani, loyaltyLabel, requiresCard, shelfLabel, withCardPhrase, LOYALTY_BADGE } from "@/lib/loyalty";
 import type { OfferRow } from "@/lib/queries";
 
@@ -74,6 +74,15 @@ export function OfferTable({ offers, unit }: { offers: OfferRow[]; unit: string 
                   {oos && o.lastObservedAt && (
                     <div className="m-net" style={{ marginTop: 2, fontSize: 11 }}>
                       ultimul preț {formatDate(o.lastObservedAt)}
+                    </div>
+                  )}
+                  {/* An in-stock row said nothing about when it was last checked, so "today" and
+                      "12 days ago, right at the staleness cutoff" looked identical. Quiet below
+                      2 days — the common case — so this does not compete with the OOS date above
+                      for attention on the row that actually needs it. */}
+                  {!oos && o.lastObservedAt && relativeDays(o.lastObservedAt) !== "azi" && relativeDays(o.lastObservedAt) !== "ieri" && (
+                    <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
+                      verificat {relativeDays(o.lastObservedAt)}
                     </div>
                   )}
                 </td>

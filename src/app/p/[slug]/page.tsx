@@ -6,6 +6,7 @@ import { BulkTierTable } from "@/components/BulkTierTable";
 import { visibleTiers } from "@/lib/bulk-tiers";
 import { priceDisplayFor, priceRange } from "@/lib/reference-price";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
+import { PriceHistoryExport } from "@/components/PriceHistoryExport";
 import { PriceStoryPanel } from "@/components/PriceStoryPanel";
 import { spanLabelRo } from "@/lib/price-story";
 import { ProductCard } from "@/components/ProductCard";
@@ -314,6 +315,9 @@ export default async function ItemPage({
         <div className="card chart-card">
           <PriceHistoryChart dates={chartDates} series={chartSeries} />
           <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Treci cu mouse-ul peste grafic pentru prețul fiecărui magazin.</p>
+          <div style={{ marginTop: 6 }}>
+            <PriceHistoryExport dates={chartDates} series={chartSeries} productName={product.name} />
+          </div>
         </div>
       </section>
 
