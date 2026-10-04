@@ -11,7 +11,7 @@ import { addItem, CART_EVENT, getActive, removeItem } from "@/lib/carts";
  * Fire-and-forget on purpose: a failed count must never block the add. The cart is the thing
  * the shopper asked for; the favourite is a convenience we infer.
  */
-function recordAdd(productId?: number) {
+export function recordAdd(productId?: number) {
   if (!productId) return;
   const body = JSON.stringify({ productId, add: true });
   const headers = { "content-type": "application/json" };

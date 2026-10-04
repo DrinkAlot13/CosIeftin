@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { AddToList } from "@/components/AddToList";
+import { AutoAddFromQuery } from "@/components/AutoAddFromQuery";
 import { OfferTable } from "@/components/OfferTable";
 import { BulkTierTable } from "@/components/BulkTierTable";
 import { visibleTiers } from "@/lib/bulk-tiers";
@@ -236,6 +238,14 @@ export default async function ItemPage({
               </a>
             )}
             <AddToList slug={product.slug} name={product.name} productId={product.id} />
+            {/* useSearchParams() (for the ?add=1 Telegram-alert deep link) requires a Suspense
+                boundary, or it forces this whole ISR'd (revalidate = 3600) page to opt out of
+                static generation at build time. Isolated to its own invisible component rather
+                than folded into AddToList, which also renders inside ProductCard — many per
+                page, many pages — and has no use for this. */}
+            <Suspense fallback={null}>
+              <AutoAddFromQuery slug={product.slug} name={product.name} productId={product.id} />
+            </Suspense>
             <TrackPrice slug={product.slug} name={product.name} price={summary.lowest} />
           </div>
           {/*

@@ -55,7 +55,9 @@ async function main() {
 
     const msg = priceDropMessage({
       productName: a.product.name,
-      productUrl: `${SITE}/p/${a.product.slug}`,
+      // ?add=1: AddToList.tsx adds the product to the shopper's list on landing, one tap from
+      // "it's cheaper now" to "it's in my list" instead of a link that only confirms the price.
+      productUrl: `${SITE}/p/${a.product.slug}?add=1`,
       oldPrice: a.basePrice,
       newPrice: best.price,
       storeName: best.merchant.name,
