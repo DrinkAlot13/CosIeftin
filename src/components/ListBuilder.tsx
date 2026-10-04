@@ -21,7 +21,7 @@ import {
   setQty,
 } from "@/lib/carts";
 import { getPreferred, PREF_EVENT } from "@/lib/stores-pref";
-import { basketTrend, snapshotBasket } from "@/lib/basket-trend";
+import { basketTrendWindows, snapshotBasket } from "@/lib/basket-trend";
 import { getCards, WALLET_EVENT } from "@/lib/cards-wallet";
 import { StorePrefs } from "@/components/StorePrefs";
 import { StoreTypeBadge } from "@/components/StoreTypeBadge";
@@ -84,6 +84,24 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
   // markup is invisible once it is summed. Measured medians: +11.8% glovo-kaufland, +23.8%
   // glovo-profi, −1.0% glovo-penny. Off unless asked for, and the label says what it changes.
   const [withGlovo, setWithGlovo] = useState(false);
+  // Budget cap: a number the shopper sets once, remembered locally. Not sent to the server —
+  // it does not change WHICH offers are chosen, only whether a warning shows against the total
+  // already computed. A real "cheapest basket under N lei" would mean re-running the optimizer
+  // with a cost ceiling, which is a different, bigger feature; this is the honest cheap version.
+  const [budget, setBudget] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("cosmic_budget");
+      if (raw) setBudget(Number(raw) || null);
+    } catch { /* ignore */ }
+  }, []);
+  const setBudgetPersist = (v: number | null) => {
+    setBudget(v);
+    try {
+      if (v == null) localStorage.removeItem("cosmic_budget");
+      else localStorage.setItem("cosmic_budget", String(v));
+    } catch { /* ignore */ }
+  };
   const [q, setQ] = useState("");
   const [sug, setSug] = useState<Suggestion[]>([]);
   const [pref, setPref] = useState<string[]>([]);
@@ -354,6 +372,10 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                           <>
                             <div className="muted lr-cheap">
                               cel mai ieftin: <b>{pi.cheapest.merchantName}</b> · {formatRON(pi.cheapest.linePrice)}
+                              {/* A card price must say so — it is not a price every shopper
+                                  sees. isBuyable() already refuses to offer it without a card;
+                                  this is the label for the shopper WHO HAS one. */}
+                              {pi.cheapest.loyalty && <span title="Preț cu cardul de fidelitate" style={{ marginLeft: 4 }}>💳</span>}
                             </div>
                             {/* NEVER silently swap: a substitute is said out loud, not folded
                                 into "cel mai ieftin" as if it were the product asked for. */}
@@ -444,6 +466,26 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
               </span>
             </label>
           )}
+          {items.length > 0 && (
+            <div className="pill-note" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <label htmlFor="budget-cap">Buget maxim (opțional):</label>
+              <input
+                id="budget-cap"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={1}
+                value={budget ?? ""}
+                onChange={(e) => setBudgetPersist(e.target.value ? Number(e.target.value) : null)}
+                placeholder="ex. 200"
+                style={{ width: 90 }}
+              />
+              <span className="muted" style={{ fontSize: 12.5 }}>lei</span>
+              {budget != null && (
+                <button type="button" className="linklike" onClick={() => setBudgetPersist(null)}>șterge</button>
+              )}
+            </div>
+          )}
           {result && items.length > 0 && (() => {
             // ── WHICHEVER IS CHEAPER IS THE ONE WE HIGHLIGHT, and only when the two describe
             //    the SAME basket.
@@ -508,6 +550,14 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                   </div>
                 )}
                 <div className="muted">fiecare produs de unde e cel mai ieftin</div>
+                {/* The money side of splitting is shown (the total); the TIME side — an extra
+                    trip per extra store — was not, and a shopper weighing "is it worth it"
+                    needs both, not just the one that happens to be a price. */}
+                {result.storesInSplit > 1 && (
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {result.storesInSplit} opriri — {result.storesInSplit - 1} {result.storesInSplit - 1 === 1 ? "tură în plus" : "ture în plus"} față de un singur magazin
+                  </div>
+                )}
               </div>
             );
             return (
@@ -529,6 +579,30 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                   🚚 Totalul împărțit include <b>{formatRON(result.splitDelivery)}</b> livrare — împărțind coșul plătești livrarea la fiecare magazin online.
                 </div>
               )}
+
+              {budget != null && budget > 0 && (() => {
+                const best = Math.min(result.bestComplete?.total ?? Infinity, result.splitTotal || Infinity);
+                if (!(best < Infinity) || best <= budget) return null;
+                // Which ONE item removed would help most — a cheap, honest nudge, not a real
+                // re-optimization under a cost ceiling (that is a different, bigger feature).
+                const priciest = [...result.perItem].filter((pi) => pi.cheapest).sort((a, b) => (b.cheapest!.linePrice) - (a.cheapest!.linePrice))[0];
+                return (
+                  <div className="save-note" style={{ color: "var(--danger, #b3261e)" }}>
+                    ⚠️ Peste buget cu <b>{formatRON(best - budget)}</b> (buget {formatRON(budget)}).
+                    {priciest && <> Cel mai scump produs e <b>{priciest.name}</b> ({formatRON(priciest.cheapest!.linePrice)}).</>}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const loyaltyLines = result.perItem.filter((pi) => pi.cheapest?.loyalty).length;
+                if (loyaltyLines === 0) return null;
+                return (
+                  <div className="save-note muted">
+                    💳 {loyaltyLines} {loyaltyLines === 1 ? "produs foloseește" : "produse folosesc"} prețul cu cardul de fidelitate.
+                  </div>
+                );
+              })()}
 
               {/* ── SAY WHICH IS CHEAPER, INCLUDING WHEN IT IS THE SINGLE SHOP.
                      The old version had a note for "the split saves you money" and a note for
@@ -554,10 +628,24 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
               ) : null}
 
               {(() => {
-                const t = basketTrend(result.splitTotal);
-                if (!t || Math.abs(t.deltaPct) < 0.5) return null;
-                const up = t.deltaPct > 0;
-                return <div className="save-note muted">{up ? "📈" : "📉"} Coșul tău e cu <b>{Math.abs(t.deltaPct).toFixed(1)}%</b> {up ? "mai scump" : "mai ieftin"} față de {t.sinceDate}.</div>;
+                // Three fixed windows rather than one "since we started watching" number — a
+                // shopper who has used the list for months cannot otherwise tell "up 2% this
+                // week" apart from "up 40% since March". Each is honestly absent until enough
+                // history actually exists for it, never guessed.
+                const windows = basketTrendWindows(result.splitTotal).filter((w) => Math.abs(w.deltaPct) >= 0.5);
+                if (windows.length === 0) return null;
+                return (
+                  <div className="save-note muted" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    {windows.map((w) => {
+                      const up = w.deltaPct > 0;
+                      return (
+                        <span key={w.label}>
+                          {up ? "📈" : "📉"} <b>{Math.abs(w.deltaPct).toFixed(1)}%</b> față de acum {w.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
               })()}
 
               <div className="card" style={{ overflowX: "auto", marginTop: 16 }}>
