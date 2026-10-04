@@ -43,11 +43,11 @@ export function BlocklistManager() {
   return (
     <div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Un brand de evitat (ex. Nestle)" style={{ flex: 1, minWidth: 180 }} />
+        <input aria-label="Brand de evitat" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Un brand de evitat (ex. Nestle)" style={{ flex: 1, minWidth: 180 }} />
         <button type="button" className="btn btn-outline btn-sm" onClick={() => add("brand", brand)}>Adaugă brand</button>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Un cuvânt de evitat în denumire (ex. gluten)" style={{ flex: 1, minWidth: 180 }} />
+        <input aria-label="Cuvânt de evitat în denumire" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Un cuvânt de evitat în denumire (ex. gluten)" style={{ flex: 1, minWidth: 180 }} />
         <button type="button" className="btn btn-outline btn-sm" onClick={() => add("attributeTag", tag)}>Adaugă cuvânt</button>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>

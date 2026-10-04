@@ -41,8 +41,8 @@ export function ReportProblem({ productSlug }: { productSlug: string }) {
 
   return (
     <div className="card" style={{ marginTop: 8, padding: 12, maxWidth: 420, fontSize: 13 }}>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>Ce e greșit?</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+      <div id="report-kind-label" style={{ fontWeight: 600, marginBottom: 6 }}>Ce e greșit?</div>
+      <div role="radiogroup" aria-labelledby="report-kind-label" style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="radio" name="report-kind" checked={kind === "wrong_price"} onChange={() => setKind("wrong_price")} />
           Prețul afișat nu e cel real
@@ -58,6 +58,7 @@ export function ReportProblem({ productSlug }: { productSlug: string }) {
       </div>
       <input
         type="text"
+        aria-label="Detalii (opțional)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="Detalii (opțional)"
