@@ -13,6 +13,7 @@ import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ProductImage } from "@/components/ProductImage";
 import { TrackPrice } from "@/components/TrackPrice";
 import { SuggestEquivalent } from "@/components/SuggestEquivalent";
+import { ReportProblem } from "@/components/ReportProblem";
 import { formatPerUnit, formatRON } from "@/lib/format";
 import { isCurrent } from "@/lib/pricing";
 import { getAlternatives, getClassEquivalents, getItemPage } from "@/lib/queries";
@@ -299,12 +300,10 @@ export default async function ItemPage({
         {/*
           Every item page carries the report link. A comparison site's only asset is that
           people believe the numbers, and the cheapest way to find a wrong match is to let
-          the person looking at it tell us.
+          the person looking at it tell us. It used to link to /metodologie, a page ABOUT
+          methodology — a dead end, not a way to tell us anything.
         */}
-        <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
-          Prețul nu e corect sau pagina amestecă două produse?{" "}
-          <Link href="/metodologie" style={{ color: "var(--primary)" }}>raportează un preț greșit</Link>
-        </p>
+        <ReportProblem productSlug={product.slug} />
       </section>
 
       <section className="section">

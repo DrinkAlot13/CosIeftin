@@ -24,6 +24,7 @@
 //   UserBlocklist      things they never want suggested
 //   UserProductAdd     the per-person add counter that drives inferred favourites
 //   EquivalenceSuggestion  "this product is the same as that one" claims they submitted
+//   ProductReport      "this price/product is wrong" reports they submitted while signed in
 //
 // NOT deleted: `ProductAddCount`. It is one row per PRODUCT holding a total, with no user, no
 // session and no timestamps per event — nothing in it refers to a person, and subtracting a
@@ -59,6 +60,7 @@ async function eraseAccount(username: string, write: boolean): Promise<void> {
     blocklist: await prisma.userBlocklist.count({ where: { userId: user.id } }),
     productAdds: await prisma.userProductAdd.count({ where: { userId: user.id } }),
     equivalenceSuggestions: await prisma.equivalenceSuggestion.count({ where: { userId: user.id } }),
+    productReports: await prisma.productReport.count({ where: { userId: user.id } }),
   };
 
   console.log(`  account   #${user.id}  ${user.username}  created ${user.createdAt.toISOString().slice(0, 10)}${user.isAdmin ? "  [ADMIN]" : ""}`);
@@ -79,6 +81,7 @@ async function eraseAccount(username: string, write: boolean): Promise<void> {
     await tx.userBlocklist.deleteMany({ where: { userId: user.id } });
     await tx.userProductAdd.deleteMany({ where: { userId: user.id } });
     await tx.equivalenceSuggestion.deleteMany({ where: { userId: user.id } });
+    await tx.productReport.deleteMany({ where: { userId: user.id } });
     await tx.user.delete({ where: { id: user.id } });
   });
 
@@ -89,6 +92,7 @@ async function eraseAccount(username: string, write: boolean): Promise<void> {
     (await prisma.userBlocklist.count({ where: { userId: user.id } })) +
     (await prisma.userProductAdd.count({ where: { userId: user.id } })) +
     (await prisma.equivalenceSuggestion.count({ where: { userId: user.id } })) +
+    (await prisma.productReport.count({ where: { userId: user.id } })) +
     (await prisma.groceryList.count({ where: { userId: user.id } }));
 
   console.log(`\n  ERASED. account rows remaining: ${left}, dependent rows remaining: ${orphans}`);

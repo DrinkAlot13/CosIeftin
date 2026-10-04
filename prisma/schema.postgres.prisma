@@ -123,6 +123,7 @@ model Product {
   pendingMatches PendingMatch[]
   suggestedAsA EquivalenceSuggestion[] @relation("SuggestionProductA")
   suggestedAsB EquivalenceSuggestion[] @relation("SuggestionProductB")
+  reports      ProductReport[]
   /// How far this product's daily-low price has fallen from its recent peak, in percent.
   ///
   /// PRECOMPUTED, because deriving it on request meant loading every grocery product with
@@ -698,6 +699,7 @@ model User {
   blocklist    UserBlocklist[]
   productAdds  UserProductAdd[]
   equivalenceSuggestions EquivalenceSuggestion[]
+  productReports ProductReport[]
 }
 
 /// A SHOPPER'S claim that two products are the same purchase — "X is the same as Y" — queued for
@@ -731,6 +733,32 @@ model EquivalenceSuggestion {
   // first — a unique index can't do that normalization itself.
   @@unique([productAId, productBId])
   @@index([status])
+}
+
+/// A shopper's report that something is wrong on a product page — a wrong PRICE (this number is
+/// not what the shop charges) or a wrong PRODUCT (this page is actually a different item), kept
+/// as distinct kinds rather than one free-text box, because they point a reviewer at completely
+/// different places: a price report is a job for the scraper/parser, a product report is a job
+/// for the matcher (MatchOverride, equivalence classes). Anonymous reporting is allowed —
+/// `userId` is nullable — because requiring an account here would suppress most of the reports
+/// this exists to collect.
+model ProductReport {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  userId     Int?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "wrong_price" | "wrong_product" | "other"
+  kind       String
+  note       String?
+  /// "OPEN" | "RESOLVED" | "DISMISSED"
+  status     String   @default("OPEN")
+  resolvedAt DateTime?
+  resolveNote String?
+  createdAt  DateTime @default(now())
+
+  @@index([status])
+  @@index([productId])
 }
 
 /// A saved shopping list (tied to a user, or anonymous via `token`).
