@@ -12,6 +12,7 @@ import { ProductCard } from "@/components/ProductCard";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ProductImage } from "@/components/ProductImage";
 import { TrackPrice } from "@/components/TrackPrice";
+import { SuggestEquivalent } from "@/components/SuggestEquivalent";
 import { formatPerUnit, formatRON } from "@/lib/format";
 import { isCurrent } from "@/lib/pricing";
 import { getAlternatives, getClassEquivalents, getItemPage } from "@/lib/queries";
@@ -370,6 +371,11 @@ export default async function ItemPage({
           </div>
         </section>
       )}
+
+      {/* Shown whether or not the system already found alternatives — a shopper who actually
+          buys both products is evidence a catalog scan cannot produce on its own. */}
+      <SuggestEquivalent productSlug={data.product.slug} />
+
       <div style={{ height: 24 }} />
     </div>
   );

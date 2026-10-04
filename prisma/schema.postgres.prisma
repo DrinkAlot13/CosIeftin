@@ -121,6 +121,8 @@ model Product {
   blocked    UserBlocklist[]
   packChanges ProductPackChange[]
   pendingMatches PendingMatch[]
+  suggestedAsA EquivalenceSuggestion[] @relation("SuggestionProductA")
+  suggestedAsB EquivalenceSuggestion[] @relation("SuggestionProductB")
   /// How far this product's daily-low price has fallen from its recent peak, in percent.
   ///
   /// PRECOMPUTED, because deriving it on request meant loading every grocery product with
@@ -695,6 +697,40 @@ model User {
   favorites    UserFavorite[]
   blocklist    UserBlocklist[]
   productAdds  UserProductAdd[]
+  equivalenceSuggestions EquivalenceSuggestion[]
+}
+
+/// A SHOPPER'S claim that two products are the same purchase — "X is the same as Y" — queued for
+/// human review before it can affect anyone's basket. This is the scaling answer to equivalence
+/// curation: 226+ classes were built this session by reading the catalog category by category,
+/// which does not scale past what one person can read. A shopper who actually buys the two
+/// products has evidence a catalog scan does not.
+///
+/// It is NOT auto-applied, for the same reason `MatchOverride`'s "confirm" decision is a human
+/// action and `propose:equivalence` is a dry-run by default: CLAUDE.md is explicit that "whether
+/// an equivalence class describes a real purchase is a judgement about the world, not a property
+/// of the data", and a false equivalence is worse than a missing one. A suggestion only becomes
+/// real when `scripts/review-equivalence-suggestions.ts --apply` confirms it.
+model EquivalenceSuggestion {
+  id          Int      @id @default(autoincrement())
+  productAId  Int
+  productA    Product  @relation("SuggestionProductA", fields: [productAId], references: [id])
+  productBId  Int
+  productB    Product  @relation("SuggestionProductB", fields: [productBId], references: [id])
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note        String?
+  /// "PENDING" | "CONFIRMED" | "REJECTED"
+  status      String   @default("PENDING")
+  reviewedAt  DateTime?
+  reviewNote  String?
+  createdAt   DateTime @default(now())
+
+  // Unordered pair: (A, B) and (B, A) are the same claim, enforced at the write site
+  // (src/app/api/equivalence-suggestions/route.ts) by always storing the lower product id
+  // first — a unique index can't do that normalization itself.
+  @@unique([productAId, productBId])
+  @@index([status])
 }
 
 /// A saved shopping list (tied to a user, or anonymous via `token`).
