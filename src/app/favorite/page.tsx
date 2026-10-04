@@ -91,6 +91,14 @@ export default async function FavoritePage() {
                             📉 -{r.dropPct.toFixed(0)}% față de vârful recent
                           </div>
                         )}
+                        {/* The shopper's OWN repurchase rhythm, not a guessed one — needs at
+                            least 2 distinct add-days to have an interval at all, and only shows
+                            once they're actually due (>=80% of their usual gap). */}
+                        {r.usualGapDays != null && r.daysSinceLastAdd != null && r.daysSinceLastAdd >= r.usualGapDays * 0.8 && (
+                          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                            🔁 de obicei cumperi din nou la ~{r.usualGapDays} zile — ultima dată acum {r.daysSinceLastAdd} zile
+                          </div>
+                        )}
                       </td>
                       <td className="muted" style={{ fontSize: 13 }}>
                         {r.source === "EXPLICIT"

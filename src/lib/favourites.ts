@@ -103,7 +103,7 @@ export async function recordAdd(userId: number, productId: number, at = new Date
       lastAddedAt: at,
       ...(isNewDay ? { distinctDays: nextDays, lastAddDay: today } : {}),
     },
-    create: { userId, productId, count: 1, lastAddedAt: at, distinctDays: 1, lastAddDay: today },
+    create: { userId, productId, count: 1, lastAddedAt: at, firstAddedAt: at, distinctDays: 1, lastAddDay: today },
     select: { count: true, distinctDays: true },
   });
 
@@ -138,6 +138,13 @@ export type FavouriteRow = {
   /** How far below its recent peak this product's price currently sits, precomputed nightly.
    *  null means not computed (no live offer, or not enough history) — distinct from 0. */
   dropPct: number | null;
+  /** Days since this was last added — null when never recorded via recordAdd (e.g. an
+   *  EXPLICIT-only favourite with no add history). */
+  daysSinceLastAdd: number | null;
+  /** The shopper's own average repurchase gap in days, from firstAddedAt/lastAddedAt/
+   *  distinctDays — null unless at least 2 distinct days are on record, because a single data
+   *  point has no interval to report. Never guessed from fewer. */
+  usualGapDays: number | null;
 };
 
 /** Everything this shopper has favourited, with the evidence behind an inferred one. */
@@ -152,11 +159,21 @@ export async function listFavourites(userId: number): Promise<FavouriteRow[]> {
       },
     },
   });
-  const counts = new Map(
-    (await prisma.userProductAdd.findMany({ where: { userId }, select: { productId: true, count: true } }))
-      .map((r) => [r.productId, r.count]),
+  const adds = new Map(
+    (await prisma.userProductAdd.findMany({
+      where: { userId },
+      select: { productId: true, count: true, lastAddedAt: true, firstAddedAt: true, distinctDays: true },
+    })).map((r) => [r.productId, r]),
   );
-  return rows.map((r) => ({
+  const now = Date.now();
+  return rows.map((r) => {
+    const add = adds.get(r.productId);
+    const daysSinceLastAdd = add ? Math.floor((now - add.lastAddedAt.getTime()) / 86_400_000) : null;
+    const usualGapDays =
+      add?.firstAddedAt && add.distinctDays && add.distinctDays >= 2
+        ? Math.round((add.lastAddedAt.getTime() - add.firstAddedAt.getTime()) / 86_400_000 / (add.distinctDays - 1))
+        : null;
+    return {
     productId: r.productId,
     slug: r.product.slug,
     name: r.product.name,
@@ -164,9 +181,12 @@ export async function listFavourites(userId: number): Promise<FavouriteRow[]> {
     image: r.product.image,
     source: r.source === "INFERRED" ? "INFERRED" : "EXPLICIT",
     addedAt: r.addedAt,
-    addCount: counts.get(r.productId) ?? 0,
+    addCount: add?.count ?? 0,
     dropPct: r.product.dropPct,
     categoryName: r.product.category?.name ?? "Fără categorie",
     categorySlug: r.product.category?.slug ?? null,
-  }));
+    daysSinceLastAdd,
+    usualGapDays,
+    };
+  });
 }

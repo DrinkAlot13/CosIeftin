@@ -958,6 +958,11 @@ model UserProductAdd {
   product   Product  @relation(fields: [productId], references: [id])
   count     Int      @default(1)
   lastAddedAt DateTime @default(now())
+  /// NULL for rows written before this column existed — same "not recorded, never guessed"
+  /// posture as distinctDays below. Needed to compute a real repurchase INTERVAL
+  /// (lastAddedAt - firstAddedAt) / (distinctDays - 1); without it there is a count and a most
+  /// recent date but no span, so a "due for a restock" estimate cannot be made honestly.
+  firstAddedAt DateTime?
 
   /// ── HOW MANY DISTINCT DAYS THIS WAS ADDED ON, which is what "three times" was always
   ///    meant to mean.

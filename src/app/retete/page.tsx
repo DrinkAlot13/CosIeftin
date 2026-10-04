@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { RecipeAdd } from "@/components/RecipeAdd";
 import { RECIPES } from "@/data/recipes";
+import { recipeJsonLd, jsonLdScript } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Rețete — coș automat" };
@@ -23,7 +24,9 @@ export default function RetetePage() {
       </p>
       <div className="grid-products" style={{ marginTop: 16 }}>
         {RECIPES.map((r) => (
-          <div key={r.slug} className="card" style={{ padding: 16 }}>
+          <div key={r.slug} id={r.slug} className="card" style={{ padding: 16 }}>
+            {/* eslint-disable-next-line react/no-danger */}
+            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(recipeJsonLd(r)) }} />
             <div style={{ fontSize: 30 }}>{r.emoji}</div>
             <h3 style={{ margin: "6px 0 4px" }}>{r.name}</h3>
             <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>{r.note}</p>

@@ -117,6 +117,24 @@ export function breadcrumbJsonLd(trail: { name: string; path: string }[]): Recor
   };
 }
 
+/**
+ * Recipe structured data (schema.org/Recipe). Honest limitation: Google's rich-result
+ * eligibility for recipes specifically wants an `image`, which these recipes do not have (each
+ * carries only an emoji, not a photo) — so this is valid structured data, not a guarantee of a
+ * rich snippet. Fixing that is a content gap (real photos), not a code gap.
+ */
+export function recipeJsonLd(recipe: { slug: string; name: string; note: string; ingredients: { label: string }[] }): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Recipe",
+    name: recipe.name,
+    description: recipe.note,
+    url: abs(`/retete#${recipe.slug}`),
+    recipeIngredient: recipe.ingredients.map((i) => i.label),
+    inLanguage: "ro-RO",
+  };
+}
+
 export function websiteJsonLd(): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
