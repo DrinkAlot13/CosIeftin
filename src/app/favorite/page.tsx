@@ -8,8 +8,10 @@
 
 import Link from "next/link";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
+import { ProductCard } from "@/components/ProductCard";
 import { getCurrentUser } from "@/lib/auth";
 import { INFERRED_AFTER_ADDS, listFavourites, type FavouriteRow } from "@/lib/favourites";
+import { getPersonalizedDeals } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Favoritele mele" };
@@ -28,7 +30,10 @@ export default async function FavoritePage() {
     );
   }
 
-  const rows = await listFavourites(user.id);
+  const [rows, personalizedDeals] = await Promise.all([
+    listFavourites(user.id),
+    getPersonalizedDeals(user.id),
+  ]);
   const byCategory = new Map<string, FavouriteRow[]>();
   for (const r of rows) {
     const list = byCategory.get(r.categoryName) ?? [];
@@ -115,6 +120,21 @@ export default async function FavoritePage() {
             </div>
           </section>
         ))
+      )}
+
+      {personalizedDeals.length > 0 && (
+        <section style={{ marginTop: 32 }}>
+          <div className="section-head">
+            <h2 style={{ margin: 0, fontSize: 18 }}>Preț bun acum, în categoriile tale</h2>
+          </div>
+          <p className="muted" style={{ fontSize: 13, marginTop: -4, marginBottom: 10 }}>
+            Produse noi (nu încă favorite) din categoriile unde ai deja favorite, cu un preț sub
+            vârful recent — aceeași regulă ca pe pagina de oferte, nu una mai relaxată.
+          </p>
+          <div className="grid-products">
+            {personalizedDeals.map((p) => <ProductCard key={p.id} p={p} />)}
+          </div>
+        </section>
       )}
     </div>
   );

@@ -889,6 +889,41 @@ export async function getHomeSections() {
 export type HomeProduct = Awaited<ReturnType<typeof getHomeSections>>["featured"][number];
 
 /**
+ * A real price drop, in the categories this shopper actually favourites — not a generic "deals"
+ * shelf. Reuses the exact same dropPct/2+-merchant rules as getHomeSections' "drops" section
+ * (a drop on a single-merchant product is one shop changing its own price, not a comparison), so
+ * personalizing this never means loosening what counts as a real deal.
+ */
+export async function getPersonalizedDeals(userId: number, limit = 6): Promise<HomeProduct[]> {
+  const favourites = await prisma.userFavorite.findMany({
+    where: { userId },
+    select: { productId: true, product: { select: { categoryId: true } } },
+  });
+  if (favourites.length === 0) return [];
+  const categoryIds = [...new Set(favourites.map((f) => f.product.categoryId).filter((x): x is number => x != null))];
+  if (categoryIds.length === 0) return [];
+  const excludeIds = favourites.map((f) => f.productId);
+
+  const shelf = { ...cardProductSelect, offers: cardOfferSelect } as const;
+  const rows = await prisma.product.findMany({
+    where: {
+      section: "grocery",
+      categoryId: { in: categoryIds },
+      id: { notIn: excludeIds },
+      dropPct: { gt: 2 },
+      offers: { some: liveOffer() },
+    },
+    select: shelf,
+    orderBy: { dropPct: "desc" },
+    take: limit * 4, // over-fetch: the 2+ merchant rule below is not expressible in this query
+  });
+  return decorate(rows)
+    .map((p, i) => ({ ...p, drop: rows[i].dropPct ?? 0 }))
+    .filter((p) => p.summary.hasCurrentPrice && p.summary.offerCount >= 2)
+    .slice(0, limit);
+}
+
+/**
  * Products (with active offers) for a basket, by slug.
  *
  * ── DELIVERY-PLATFORM OFFERS ARE EXCLUDED BY DEFAULT, AND THEY WERE NOT.
