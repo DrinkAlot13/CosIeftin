@@ -25,9 +25,11 @@ export default async function AdminPage() {
   const s = await getAdminStats();
   // The sub-pages existed and nothing linked to them, so the review queue and the refused
   // prices were only reachable by typing the URL. A queue nobody can find is not a queue.
-  const [pendingMatches, openAnomalies] = await Promise.all([
+  const [pendingMatches, openAnomalies, pendingSuggestions, openReports] = await Promise.all([
     prisma.pendingMatch.count({ where: { resolved: false } }),
     prisma.priceAnomaly.count({ where: { resolved: false } }),
+    prisma.equivalenceSuggestion.count({ where: { status: "PENDING" } }),
+    prisma.productReport.count({ where: { status: "OPEN" } }),
   ]);
 
   return (
@@ -62,6 +64,9 @@ export default async function AdminPage() {
             { href: "/admin/review", label: "Revizuire", hint: "produse semnalate" },
             { href: "/admin/stats", label: "Statistici", hint: "adâncimea prețurilor, per magazin, unde lipsesc potrivirile" },
             { href: "/admin/logs", label: "Jurnale nightly", hint: "ce a scris fiecare rulare — descărcabile" },
+            { href: "/admin/soak", label: "Raport soak", hint: "ultimele 14 nopți, dintr-o privire" },
+            { href: "/admin/equivalence-suggestions", label: "Sugestii de echivalență", hint: `${pendingSuggestions} în așteptare`, badge: pendingSuggestions },
+            { href: "/admin/product-reports", label: "Rapoarte produse", hint: `${openReports} deschise`, badge: openReports },
           ].map((t) => (
             <Link
               key={t.href}
