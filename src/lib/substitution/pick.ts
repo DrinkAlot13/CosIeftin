@@ -70,6 +70,7 @@ export function anonymousContext(preferPrivateLabel = false): UserContext {
     inferredFavouriteProductIds: new Set(),
     blockedProductIds: new Set(),
     blockedBrands: new Set(),
+    blockedAttributeTags: new Set(),
     preferPrivateLabel,
     hasLoyaltyCards: false,
   };

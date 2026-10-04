@@ -29,6 +29,9 @@ const lei = (bani: number) => `${(bani / 100).toFixed(2).replace(".", ",")} lei`
 export function RecipeAdd({ slug, name, count }: { slug: string; name: string; count: number }) {
   const [state, setState] = useState<"idle" | "loading" | "preview" | "added">("idle");
   const [lines, setLines] = useState<Line[]>([]);
+  // No recipe here declares a base serving count, so this scales the recipe's own quantities
+  // by a plain multiplier rather than claiming "for N people" — a number we do not actually have.
+  const [multiplier, setMultiplier] = useState(1);
 
   async function resolve() {
     setState("loading");
@@ -36,7 +39,7 @@ export function RecipeAdd({ slug, name, count }: { slug: string; name: string; c
       const r = await fetch("/api/recipe/resolve", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify({ slug, multiplier }),
       });
       const j = (await r.json()) as { lines?: Line[] };
       setLines(j.lines ?? []);
@@ -112,8 +115,19 @@ export function RecipeAdd({ slug, name, count }: { slug: string; name: string; c
   }
 
   return (
-    <button type="button" className="btn btn-outline" onClick={resolve} disabled={state === "loading"}>
-      {state === "loading" ? "Se caută…" : `🛒 Vezi ce alegem (${count})`}
-    </button>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <label className="muted" style={{ fontSize: 12.5, display: "flex", gap: 4, alignItems: "center" }}>
+        Cantități ×
+        <select value={multiplier} onChange={(e) => setMultiplier(Number(e.target.value))} style={{ fontSize: 12.5 }}>
+          <option value={0.5}>0.5</option>
+          <option value={1}>1</option>
+          <option value={2}>2</option>
+          <option value={3}>3</option>
+        </select>
+      </label>
+      <button type="button" className="btn btn-outline" onClick={resolve} disabled={state === "loading"}>
+        {state === "loading" ? "Se caută…" : `🛒 Vezi ce alegem (${count})`}
+      </button>
+    </div>
   );
 }

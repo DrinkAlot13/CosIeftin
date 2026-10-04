@@ -40,7 +40,7 @@ for (let p = 1; p <= 12; p++) {
 const LINES: ListLine[] = Array.from({ length: 12 }, (_, i) => ({ productId: i + 1, qty: 1, substitutionMode: "EQUIVALENT" as const }));
 const ctx = (o: Partial<UserContext> = {}): UserContext => ({
   favouriteProductIds: new Set(), inferredFavouriteProductIds: new Set(),
-  blockedProductIds: new Set(), blockedBrands: new Set(),
+  blockedProductIds: new Set(), blockedBrands: new Set(), blockedAttributeTags: new Set(),
   preferPrivateLabel: false, hasLoyaltyCards: false, ...o,
 });
 

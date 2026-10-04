@@ -130,6 +130,7 @@ export async function loadUserContext(
     inferredFavouriteProductIds: new Set(),
     blockedProductIds: new Set(),
     blockedBrands: new Set(),
+    blockedAttributeTags: new Set(),
     preferPrivateLabel: Boolean(opts.preferPrivateLabel),
     hasLoyaltyCards: Boolean(opts.hasLoyaltyCards),
   };
@@ -137,7 +138,7 @@ export async function loadUserContext(
 
   const [favs, blocks] = await Promise.all([
     prisma.userFavorite.findMany({ where: { userId }, select: { productId: true, source: true } }),
-    prisma.userBlocklist.findMany({ where: { userId }, select: { productId: true, brand: true } }),
+    prisma.userBlocklist.findMany({ where: { userId }, select: { productId: true, brand: true, attributeTag: true } }),
   ]);
   for (const f of favs) {
     (f.source === "INFERRED" ? base.inferredFavouriteProductIds : base.favouriteProductIds).add(f.productId);
@@ -145,6 +146,7 @@ export async function loadUserContext(
   for (const b of blocks) {
     if (b.productId != null) base.blockedProductIds.add(b.productId);
     if (b.brand) base.blockedBrands.add(b.brand.toLowerCase());
+    if (b.attributeTag) base.blockedAttributeTags.add(b.attributeTag.toLowerCase());
   }
   return base;
 }

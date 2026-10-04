@@ -25,10 +25,15 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const limited = guard("write", req);
   if (limited) return limited;
-  const body = (await req.json().catch(() => null)) as { slug?: unknown; preferPrivateLabel?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { slug?: unknown; preferPrivateLabel?: unknown; multiplier?: unknown } | null;
   const slug = typeof body?.slug === "string" ? body.slug : "";
   const recipe = RECIPES.find((r) => r.slug === slug);
   if (!recipe) return NextResponse.json({ error: "Rețetă necunoscută." }, { status: 404 });
+
+  // No recipe here declares a base serving count, so this scales the recipe's OWN quantities
+  // by a plain multiplier rather than claiming "for N people" — that claim would be a number we
+  // do not actually have per recipe, which is worse than not offering it.
+  const multiplier = typeof body?.multiplier === "number" && body.multiplier > 0 && body.multiplier <= 10 ? body.multiplier : 1;
 
   const classSlugs = [...new Set(recipe.ingredients.map((i) => i.classSlug))];
   const classes = await prisma.equivalenceClass.findMany({
@@ -51,17 +56,18 @@ export async function POST(req: NextRequest) {
   const slugById = new Map(slugRows.map((p) => [p.id, p.slug]));
 
   const lines = recipe.ingredients.map((ing) => {
+    const qty = Math.max(1, Math.round(ing.qty * multiplier));
     const cls = bySlug.get(ing.classSlug);
     if (!cls) {
       return {
-        classSlug: ing.classSlug, label: ing.label, qty: ing.qty,
+        classSlug: ing.classSlug, label: ing.label, qty,
         unavailable: true, why: "Nu cunoaștem acest tip de produs.", chosen: null, alternatives: 0,
       };
     }
-    const pick = pickForClass(cls.id, ctx, offers, { unitsNeeded: cls.unitSize * ing.qty });
+    const pick = pickForClass(cls.id, ctx, offers, { unitsNeeded: cls.unitSize * qty });
     if (!pick) {
       return {
-        classSlug: ing.classSlug, label: ing.label, qty: ing.qty,
+        classSlug: ing.classSlug, label: ing.label, qty,
         unavailable: true,
         why: `Nu avem ${cls.label.toLowerCase()} în stoc la niciun magazin urmărit.`,
         chosen: null, alternatives: 0,
@@ -70,7 +76,7 @@ export async function POST(req: NextRequest) {
     return {
       classSlug: ing.classSlug,
       label: ing.label,
-      qty: ing.qty,
+      qty,
       unavailable: false,
       chosen: {
         productId: pick.offer.product.id,

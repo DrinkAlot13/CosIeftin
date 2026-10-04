@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
   const [favs, blocks] = user
     ? await Promise.all([
         prisma.userFavorite.findMany({ where: { userId: user.id }, select: { productId: true, source: true } }),
-        prisma.userBlocklist.findMany({ where: { userId: user.id }, select: { productId: true, brand: true } }),
+        prisma.userBlocklist.findMany({ where: { userId: user.id }, select: { productId: true, brand: true, attributeTag: true } }),
       ])
     : [[], []];
   const ctx: UserContext = {
@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
     inferredFavouriteProductIds: new Set(favs.filter((f) => f.source === "INFERRED").map((f) => f.productId)),
     blockedProductIds: new Set(blocks.map((b) => b.productId).filter((x): x is number => x != null)),
     blockedBrands: new Set(blocks.map((b) => b.brand?.toLowerCase()).filter((x): x is string => !!x)),
+    blockedAttributeTags: new Set(blocks.map((b) => b.attributeTag?.toLowerCase()).filter((x): x is string => !!x)),
     preferPrivateLabel: Boolean(body.preferPrivateLabel),
     hasLoyaltyCards: Boolean(body.hasLoyaltyCards),
   };

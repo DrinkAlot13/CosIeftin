@@ -26,7 +26,7 @@ function offer(p: Partial<OfferLike> & { id: number; productId: number; merchant
 
 const ctx = (over: Partial<UserContext> = {}): UserContext => ({
   favouriteProductIds: new Set(), inferredFavouriteProductIds: new Set(),
-  blockedProductIds: new Set(), blockedBrands: new Set(),
+  blockedProductIds: new Set(), blockedBrands: new Set(), blockedAttributeTags: new Set(),
   preferPrivateLabel: false, hasLoyaltyCards: false, ...over,
 });
 
@@ -125,6 +125,13 @@ describe("resolver — exclusions a shopper cannot buy through", () => {
   it("a blocked brand is excluded and the alternative wins", () => {
     const blocked = offer({ ...base, product: { id: 500, name: "", brand: "Nope", equivalenceClassId: EGGS_CLASS, isPrivateLabel: false } });
     const r = resolveLine({ productId: 500, qty: 1, substitutionMode: "EQUIVALENT" }, 1, ctx({ blockedBrands: new Set(["nope"]) }), [blocked, alt]);
+    expect(r.offer!.product.id).toBe(501);
+    expect(r.reason.excluded!.blocked).toBe(1);
+  });
+  // UserBlocklist.attributeTag existed as a column with no reader anywhere in the app.
+  it("a blocked attribute word excludes any product whose name carries it", () => {
+    const withGluten = offer({ ...base, name: "Pâine cu gluten" });
+    const r = resolveLine({ productId: 500, qty: 1, substitutionMode: "EQUIVALENT" }, 1, ctx({ blockedAttributeTags: new Set(["gluten"]) }), [withGluten, alt]);
     expect(r.offer!.product.id).toBe(501);
     expect(r.reason.excluded!.blocked).toBe(1);
   });

@@ -38,6 +38,7 @@ export const NEUTRAL_CONTEXT: UserContext = {
   inferredFavouriteProductIds: new Set(),
   blockedProductIds: new Set(),
   blockedBrands: new Set(),
+  blockedAttributeTags: new Set(),
   preferPrivateLabel: false,
   hasLoyaltyCards: false,
 };

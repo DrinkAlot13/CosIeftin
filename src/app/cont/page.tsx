@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/actions";
 import { getCurrentUser } from "@/lib/auth";
+import { BlocklistManager } from "@/components/BlocklistManager";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contul meu" };
@@ -24,6 +25,10 @@ export default async function ContPage() {
           Lista ta de cumpărături se salvează pe acest dispozitiv. Deschide{" "}
           <Link href="/lista" style={{ color: "var(--primary)" }}>🛒 Lista mea</Link> ca să compari coșul.
         </div>
+      </section>
+      <section className="section">
+        <div className="section-head"><h2 style={{ fontSize: 18 }}>Ce nu vreau să mi se sugereze</h2></div>
+        <BlocklistManager />
       </section>
       <div style={{ height: 32 }} />
     </div>

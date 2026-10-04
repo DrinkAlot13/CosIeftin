@@ -10,6 +10,7 @@
 //     carrying an unresolved price anomaly.
 
 import type { Bani } from "../price/parsePrice";
+import { normalizeRo } from "../text/normalizeRo";
 
 /** How far this line may be substituted. */
 export type SubstitutionMode = "EXACT" | "SAME_BRAND" | "EQUIVALENT" | "CHEAPEST";
@@ -63,6 +64,13 @@ export type UserContext = {
   inferredFavouriteProductIds: Set<number>;
   blockedProductIds: Set<number>;
   blockedBrands: Set<string>;
+  /**
+   * A word the shopper never wants to see in a product's name ("gluten", "lactoza",
+   * "arahide"...). Matched as a plain substring of the normalized name — NOT a verified
+   * allergen database, and never presented as one. `UserBlocklist.attributeTag` existed as a
+   * column with no reader anywhere in the app; this is the first thing that reads it.
+   */
+  blockedAttributeTags: Set<string>;
   preferPrivateLabel: boolean;
   /** the shopper actually carries the loyalty cards */
   hasLoyaltyCards: boolean;
@@ -135,6 +143,12 @@ export function totalForPacks(o: OfferLike, packs: number): Bani {
 export function isBuyable(o: OfferLike, ctx: UserContext, now: Date): { ok: boolean; why?: keyof NonNullable<ResolutionReason["excluded"]> } {
   if (ctx.blockedProductIds.has(o.product.id)) return { ok: false, why: "blocked" };
   if (o.product.brand && ctx.blockedBrands.has(o.product.brand.toLowerCase())) return { ok: false, why: "blocked" };
+  if (ctx.blockedAttributeTags.size > 0) {
+    const n = normalizeRo(o.product.name);
+    for (const tag of ctx.blockedAttributeTags) {
+      if (tag && n.includes(normalizeRo(tag))) return { ok: false, why: "blocked" };
+    }
+  }
   if (o.hasUnresolvedAnomaly) return { ok: false, why: "anomaly" };
   // stale = we stopped seeing it; expired = its promo window closed. Both make the price
   // untrustworthy, but for different reasons and with different user-facing copy.
