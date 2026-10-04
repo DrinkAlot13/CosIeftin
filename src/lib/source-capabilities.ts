@@ -63,3 +63,28 @@ export const SOURCE_CAPABILITIES: Record<string, SourceCapabilities> = {
 export function nullProductUrlIsExpected(merchantSlug: string): boolean {
   return SOURCE_CAPABILITIES[merchantSlug]?.hasProductUrls === false;
 }
+
+/**
+ * ── A SECOND KIND OF "LESS THAN YOU'D EXPECT", AND IT ALSO NEEDS A DECLARATION.
+ *
+ * A low item count for a merchant reads as a broken scraper. For most merchants it is. For
+ * these two it is the actual size of what the source publishes: Penny and Selgros have no
+ * browsable online catalog, only a homepage deals/flyer carousel — documented in their own
+ * adapters (`scripts/adapters/penny.ts`, `scripts/adapters/selgros.ts`) after someone already
+ * checked for a fuller route and found none. A shopper comparing a 20-item cart against ~30-60
+ * products sees "1/20" and reasonably reads it as this site being broken, when the honest
+ * reading is "this store only ever shows up for a handful of items, by design of their own
+ * website, not ours."
+ *
+ * Declared here rather than left in the adapter comments for the same reason as
+ * `SOURCE_CAPABILITIES` above: a comment in a scraper file cannot reach a UI component.
+ */
+export const LIMITED_CATALOG_MERCHANTS: Record<string, string> = {
+  penny: "Penny nu publică un catalog online — doar oferta săptămânii curente (în jur de 30 de produse). Un coș complet aici e puțin probabil.",
+  selgros: "Selgros nu publică un catalog online public — doar vitrina de oferte de pe prima pagină (în jur de 50-60 de produse). Catalogul complet există doar cu cont de cumpărător en-gros.",
+};
+
+/** The honest-limitation note for this merchant, or null when it publishes a real catalog. */
+export function limitedCatalogNote(merchantSlug: string): string | null {
+  return LIMITED_CATALOG_MERCHANTS[merchantSlug] ?? null;
+}

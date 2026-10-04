@@ -30,7 +30,12 @@ type Line = {
 };
 
 type Payload = {
-  merchant: { slug: string; name: string; storeType: string; websiteUrl: string | null; minOrderBani: number | null };
+  merchant: {
+    slug: string; name: string; storeType: string; websiteUrl: string | null; minOrderBani: number | null;
+    /** set when this merchant's scraped data is a weekly-offers/homepage carousel, not a real
+     *  catalog — so a low coverage number reads as an explained limitation, not a broken page */
+    limitedCatalogNote: string | null;
+  };
   lines: Line[];
   summary: {
     itemCount: number; found: number; substituted: number; unavailable: number;
@@ -116,6 +121,12 @@ export function ShopBasket({ shopSlug }: { shopSlug: string }) {
           </div>
         </div>
       </div>
+
+      {merchant.limitedCatalogNote && (
+        <div className="pill-note" style={{ marginBottom: 12 }}>
+          ℹ️ {merchant.limitedCatalogNote}
+        </div>
+      )}
 
       {summary.belowMinOrder && merchant.minOrderBani != null && (
         <div className="pill-note" style={{ marginBottom: 12 }}>

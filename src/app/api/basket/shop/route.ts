@@ -24,6 +24,7 @@ import { loadMerchants, loadOfferExtras, loadOffers, loadUserContext } from "@/l
 import { resolveLine, type ListLine, type SubstitutionMode } from "@/lib/substitution/resolve";
 import { structuralCandidateIds, semanticCandidateIds, BASKET_STRUCTURAL_TOLERANCE } from "@/lib/queries";
 import { guard } from "@/lib/rate-limit";
+import { limitedCatalogNote } from "@/lib/source-capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
       websiteUrl: merchantRow?.websiteUrl ?? null,
       priceChannel: merchantRow?.priceChannel ?? null,
       minOrderBani: merchant.minOrderBani,
+      limitedCatalogNote: limitedCatalogNote(merchant.slug),
     },
     lines,
     summary: {

@@ -49,6 +49,7 @@ type StoreTotal = {
   substituted?: number;
   belowMinOrder: boolean; minOrder: number | null; needForMinOrder: number | null; needForFreeDelivery: number | null;
   usesLoyalty: boolean; priceSource: string;
+  limitedCatalogNote?: string | null;
 };
 type Result = {
   perItem: PerItem[];
@@ -431,46 +432,60 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
             const oneStoreTotal = result.bestComplete?.total ?? null;
             const sameBasket = oneStoreTotal !== null;          // only bestComplete has every item
             const splitWins = !sameBasket || result.splitTotal <= oneStoreTotal;
+
+            // ── WHEN NO SINGLE SHOP HAS EVERYTHING, THE SPLIT ANSWER IS NOT A FALLBACK.
+            //
+            // With 90.6% of products living at only one merchant (measured against the live
+            // catalog), a varied cart having no complete single-store match is the EXPECTED
+            // case, not an edge case. Leading with "🏪 best single shop" when it only covers a
+            // partial basket reads as the real answer with an asterisk; the split total is the
+            // one number that actually prices the whole cart. So the split card goes FIRST,
+            // and the single-shop card is relabelled to say plainly that it is partial.
+            const singleCard = (
+              <div className={`card result-card${sameBasket && !splitWins ? " best" : ""}`}>
+                <div className="rc-label">{sameBasket ? "🏪 Cel mai ieftin într-un magazin" : "🏪 Cel mai complet, într-un magazin"}</div>
+                {result.bestComplete ? (
+                  <>
+                    <div className="rc-store">{result.bestComplete.name}</div>
+                    <div className="rc-total">{formatRON(result.bestComplete.total)}</div>
+                    <div className="muted">toate cele {result.itemCount} produse · o singură tură</div>
+                  </>
+                ) : result.bestBlockedByMinOrder ? (
+                  <>
+                    <div className="rc-store">{result.bestBlockedByMinOrder.name}</div>
+                    <div className="rc-total">{formatRON(result.bestBlockedByMinOrder.total)}</div>
+                    <div className="muted">
+                      are tot coșul, dar mai adaugă {formatRON(result.bestBlockedByMinOrder.needForMinOrder ?? 0)} ca să atingi comanda minimă
+                    </div>
+                  </>
+                ) : result.storeTotals[0] ? (
+                  <>
+                    <div className="rc-store">{result.storeTotals[0].name}</div>
+                    <div className="rc-total">{formatRON(result.storeTotals[0].total)}</div>
+                    <div className="muted">doar {result.storeTotals[0].itemsFound}/{result.itemCount} · niciun magazin n-are tot coșul</div>
+                  </>
+                ) : (
+                  <div className="muted">—</div>
+                )}
+              </div>
+            );
+            const splitCard = (
+              <div className={`card result-card${splitWins ? " best" : ""}`}>
+                <div className="rc-label">🧩 {sameBasket ? "Cel mai ieftin împărțit" : "Coșul complet, împărțit"}</div>
+                <div className="rc-store">{result.storesInSplit} {result.storesInSplit === 1 ? "magazin" : "magazine"}</div>
+                <div className="rc-total">{formatRON(result.splitTotal)}</div>
+                {result.totalDeposit != null && result.totalDeposit > 0 && (
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    + garanție SGR {formatRON(result.totalDeposit)} (se returnează)
+                  </div>
+                )}
+                <div className="muted">fiecare produs de unde e cel mai ieftin</div>
+              </div>
+            );
             return (
             <>
               <div className="result-cards">
-                <div className={`card result-card${sameBasket && !splitWins ? " best" : ""}`}>
-                  <div className="rc-label">🏪 Cel mai ieftin într-un magazin</div>
-                  {result.bestComplete ? (
-                    <>
-                      <div className="rc-store">{result.bestComplete.name}</div>
-                      <div className="rc-total">{formatRON(result.bestComplete.total)}</div>
-                      <div className="muted">toate cele {result.itemCount} produse · o singură tură</div>
-                    </>
-                  ) : result.bestBlockedByMinOrder ? (
-                    <>
-                      <div className="rc-store">{result.bestBlockedByMinOrder.name}</div>
-                      <div className="rc-total">{formatRON(result.bestBlockedByMinOrder.total)}</div>
-                      <div className="muted">
-                        are tot coșul, dar mai adaugă {formatRON(result.bestBlockedByMinOrder.needForMinOrder ?? 0)} ca să atingi comanda minimă
-                      </div>
-                    </>
-                  ) : result.storeTotals[0] ? (
-                    <>
-                      <div className="rc-store">{result.storeTotals[0].name}</div>
-                      <div className="rc-total">{formatRON(result.storeTotals[0].total)}</div>
-                      <div className="muted">are {result.storeTotals[0].itemsFound}/{result.itemCount} · lipsesc {result.storeTotals[0].missing}</div>
-                    </>
-                  ) : (
-                    <div className="muted">—</div>
-                  )}
-                </div>
-                <div className={`card result-card${splitWins ? " best" : ""}`}>
-                  <div className="rc-label">🧩 Cel mai ieftin împărțit</div>
-                  <div className="rc-store">{result.storesInSplit} {result.storesInSplit === 1 ? "magazin" : "magazine"}</div>
-                  <div className="rc-total">{formatRON(result.splitTotal)}</div>
-                  {result.totalDeposit != null && result.totalDeposit > 0 && (
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      + garanție SGR {formatRON(result.totalDeposit)} (se returnează)
-                    </div>
-                  )}
-                  <div className="muted">fiecare produs de unde e cel mai ieftin</div>
-                </div>
+                {sameBasket ? <>{singleCard}{splitCard}</> : <>{splitCard}{singleCard}</>}
                 {bestPreferred && (
                   <div className="card result-card">
                     <div className="rc-label">📍 În magazinele tale</div>
@@ -535,6 +550,11 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                             )}
                             {st.priceSource && !isShelfPrice(normalizePriceSource(st.priceSource)) && (
                               <div className="muted" style={{ fontSize: 11.5 }}>preț livrare (poate include adaos)</div>
+                            )}
+                            {st.limitedCatalogNote && (
+                              <div className="muted" style={{ fontSize: 11.5, fontStyle: "italic" }} title={st.limitedCatalogNote}>
+                                ℹ️ doar oferte, nu catalog complet
+                              </div>
                             )}
                           </td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatRON(st.subtotal)}</td>

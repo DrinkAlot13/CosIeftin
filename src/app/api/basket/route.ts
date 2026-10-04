@@ -29,6 +29,7 @@ import { loadMerchants, loadUserContext, loadOfferExtras } from "@/lib/substitut
 import { optimizeBasket, type MerchantBasket } from "@/lib/basket/optimize";
 import { resolveLine, type ListLine, type OfferLike, type SubstitutionMode } from "@/lib/substitution/resolve";
 import { unitPriceAtQty, nextRungHint, type Ladder } from "@/lib/bulk-tiers";
+import { limitedCatalogNote } from "@/lib/source-capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,9 @@ type StoreTotal = {
   substituted: number;
   belowMinOrder: boolean; minOrder: number | null; needForMinOrder: number | null; needForFreeDelivery: number | null;
   usesLoyalty: boolean; priceSource: string;
+  /** set when this merchant's scraped data is a weekly-offers/homepage carousel, not a real
+   *  catalog — a low coverage number here is an explained limitation, not a broken page */
+  limitedCatalogNote: string | null;
 };
 
 function toStoreTotal(mb: MerchantBasket, priceChannel: string): StoreTotal {
@@ -66,6 +70,7 @@ function toStoreTotal(mb: MerchantBasket, priceChannel: string): StoreTotal {
     needForFreeDelivery: mb.needForFreeDeliveryBani != null ? mb.needForFreeDeliveryBani / 100 : null,
     usesLoyalty: false,
     priceSource: priceChannel,
+    limitedCatalogNote: limitedCatalogNote(mb.merchant.slug),
   };
 }
 
