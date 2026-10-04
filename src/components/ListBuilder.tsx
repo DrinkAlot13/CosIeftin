@@ -22,6 +22,7 @@ import {
 } from "@/lib/carts";
 import { getPreferred, PREF_EVENT } from "@/lib/stores-pref";
 import { basketTrendWindows, snapshotBasket } from "@/lib/basket-trend";
+import { recordListVersion, listVersions } from "@/lib/list-history";
 import { getCards, WALLET_EVENT } from "@/lib/cards-wallet";
 import { StorePrefs } from "@/components/StorePrefs";
 import { StoreTypeBadge } from "@/components/StoreTypeBadge";
@@ -177,6 +178,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
           setLoading(false);
           snapshotBasket(d.splitTotal);
           saveBasket(`${itemsKey}${withGlovo ? "|glovo" : ""}`, d);
+          if (activeCart) recordListVersion(activeCart.id, activeCart.name, items);
         }
       })
       .catch(() => {
@@ -252,6 +254,14 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
     duplicateCart(activeCart.id);
   };
 
+  const [showHistory, setShowHistory] = useState(false);
+  const versions = useMemo(() => (activeCart ? listVersions(activeCart.id) : []), [activeCart, showHistory]);
+  function restoreVersion(day: string, dayItems: { slug: string; name: string; qty: number }[]) {
+    if (!activeCart) return;
+    createCart(`${activeCart.name} (din ${day})`); // sets itself active
+    for (const it of dayItems) addItem(it);
+  }
+
   const perItemBySlug = useMemo(() => new Map((result?.perItem ?? []).map((pi) => [pi.slug, pi])), [result]);
   const prefSet = useMemo(() => new Set(pref), [pref]);
   const sortedStoreTotals = useMemo(() => {
@@ -313,6 +323,9 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
                 Dublează
               </button>
             )}
+            <button type="button" className="linklike" onClick={() => setShowHistory((v) => !v)}>
+              Istoric {versions.length > 0 && `(${versions.length})`}
+            </button>
             {carts.length > 1 && <button type="button" className="linklike" onClick={removeActive}>Șterge lista</button>}
           </span>
         )}
@@ -331,6 +344,30 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
       {/* Asked after a list exists, never on arrival — see InstallPrompt for why that matters
           on Chrome specifically, where the event fires exactly once. */}
       <InstallPrompt ready={items.length > 0} />
+
+      {showHistory && (
+        <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Istoricul acestei liste</div>
+          {versions.length === 0 ? (
+            <div className="muted" style={{ fontSize: 13 }}>
+              Încă nicio versiune salvată — reținem o versiune pe zi, din ziua următoare în care
+              deschizi lista.
+            </div>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+              {versions.map((v) => (
+                <li key={v.day} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+                  <span className="muted" style={{ minWidth: 90 }}>{v.day}</span>
+                  <span>{v.items.length} produse</span>
+                  <button type="button" className="linklike" onClick={() => restoreVersion(v.day, v.items)}>
+                    restaurează într-o listă nouă
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="lista-layout">
         <div className="card lista-items">
