@@ -679,6 +679,7 @@ model User {
   equivalenceSuggestions EquivalenceSuggestion[]
   equivalenceSuggestionVotes EquivalenceSuggestionVote[]
   productReports ProductReport[]
+  userRecipes UserRecipe[]
 }
 
 /// A SHOPPER'S claim that two products are the same purchase — "X is the same as Y" — queued for
@@ -759,6 +760,28 @@ model ProductReport {
 
   @@index([status])
   @@index([productId])
+}
+
+/// A shopper-submitted recipe — an explicit, opt-in public contribution (like
+/// EquivalenceSuggestion / ProductReport), NOT a private list silently synced to the server; see
+/// GroceryList's own comment below for why that distinction matters here specifically.
+///
+/// Ingredients are free text, not EquivalenceClass slugs — unlike the curated RECIPES in
+/// src/data/recipes.ts, whose whole point was moving OFF free-text search resolution (see
+/// RecipeAdd.tsx's header comment: search ranking "cannot know what you buy... silently added
+/// whatever happened to rank first"). A regular shopper cannot realistically name an
+/// EquivalenceClass slug, so this is honestly the weaker, search-resolved kind — labelled as such
+/// everywhere it is shown, never presented as equivalent to a curated recipe.
+model UserRecipe {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  note        String?
+  /// One ingredient label per line, free text — resolved via /api/suggest at use time, not
+  /// stored as a product/class reference, because a product can be re-matched or a class renamed.
+  ingredients String
+  createdAt   DateTime @default(now())
 }
 
 /// A saved shopping list (tied to a user, or anonymous via `token`).

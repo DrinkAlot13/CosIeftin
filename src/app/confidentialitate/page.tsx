@@ -78,7 +78,9 @@ export default async function ConfidentialitatePage() {
           <b>Numele de utilizator</b> ales de tine și o formă criptată a parolei (scrypt cu sare aleatoare — parola în clar nu este stocată și nu o putem citi). Nu cerem și nu stocăm o adresă de e-mail.
           {" "}Numele de utilizator devine <b>public</b> dacă propui o echivalență confirmată sau
           semnalezi un preț greșit rezolvat — apare pe{" "}
-          <Link href="/contribuitori" style={{ color: "var(--primary)" }}>pagina contribuitorilor</Link>. Altfel rămâne privat.
+          <Link href="/contribuitori" style={{ color: "var(--primary)" }}>pagina contribuitorilor</Link>.
+          {" "}La fel dacă trimiți o rețetă pe <Link href="/retete" style={{ color: "var(--primary)" }}>pagina de rețete</Link> —
+          apare lângă rețetă, pentru toată lumea. Altfel rămâne privat.
         </li>
         <li><b>Produsele marcate ca favorite</b>, fie pentru că ai apăsat inima, fie pentru că le-ai adăugat de mai multe ori.</li>
         <li><b>De câte ori ai adăugat un produs în listă</b> și în câte zile diferite — de aici deducem „produsele tale obișnuite”.</li>

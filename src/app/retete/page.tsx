@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RecipeAdd } from "@/components/RecipeAdd";
+import { UserRecipes } from "@/components/UserRecipes";
 import { RECIPES } from "@/data/recipes";
 import { recipeJsonLd, jsonLdScript } from "@/lib/seo";
 
@@ -39,6 +40,17 @@ export default function RetetePage() {
           </div>
         ))}
       </div>
+
+      <section className="section" style={{ marginTop: 36 }}>
+        <div className="section-head"><h2 style={{ fontSize: 20 }}>Rețete de la cumpărători</h2></div>
+        <p className="muted" style={{ marginTop: -4, maxWidth: 640 }}>
+          Trimise liber de oricine, ingrediente în text liber — potrivite prin căutare, nu prin
+          echivalențele verificate de mai sus. Mai puțin precise; arătăm exact ce am găsit pentru
+          fiecare, înainte să adaugi ceva.
+        </p>
+        <UserRecipes />
+      </section>
+
       <div style={{ height: 32 }} />
     </div>
   );
