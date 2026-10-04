@@ -8,6 +8,10 @@ export type OfferLike = {
   priceSource?: string | null;
   flagged?: boolean;
   isStale?: boolean | null;
+  /** the write-time snapshot — stale the moment the promo window passes and the offer isn't
+   *  re-scraped, which is why `isCurrent` also checks `promoValidTo` directly below */
+  isExpired?: boolean | null;
+  promoValidTo?: Date | null;
 };
 
 /**
@@ -39,10 +43,23 @@ export function isCurrent(o: OfferLike, now: Date = new Date(), showDeliveryPlat
   // prices in every summary that called this — the withholding was real on the item table
   // and nowhere else.
   if (o.flagged) return false;
+  // ── THE STORED FLAG IS A WRITE-TIME SNAPSHOT; THE DATE IS NOT.
+  //
+  // `isExpired` is computed once, when the offer is (re-)scraped, from whatever `promoValidTo`
+  // was true then. An offer that stops being re-scraped keeps whatever `isExpired` it was last
+  // written with forever — `audit:db`'s "no offer past promoValidTo left unmarked as expired"
+  // found 100 such rows, all Kaufland, a FLYER source that is scraped far less often than a full
+  // online catalog. This function's own comment used to say "a FLYER offer expires by its promo
+  // window" without ever checking the window — the promise was stated, never implemented, same
+  // shape as every other "comment describes it, code does not do it" bug this project has found.
+  // `substitution/resolve.ts`'s `isBuyable` already checks the live date for exactly this reason;
+  // this is the same check, so the item page and the optimizer cannot disagree about it.
+  if (o.isExpired || (o.promoValidTo && o.promoValidTo.getTime() < now.getTime())) return false;
   if (!o.lastObservedAt) {
-    // A FLYER offer expires by its promo window, not by observation, so a missing date is
-    // normal there. For every other source a null means we did not see it — and after a full
-    // scrape, "we did not see it" is exactly what must not be shown as a current price.
+    // A FLYER offer expires by its promo window (just checked above), not by observation, so a
+    // missing date is normal there. For every other source a null means we did not see it — and
+    // after a full scrape, "we did not see it" is exactly what must not be shown as a current
+    // price.
     return (o.priceSource ?? "") === "FLYER";
   }
   return (now.getTime() - o.lastObservedAt.getTime()) / 86_400_000 <= MAX_DISPLAY_AGE_DAYS;

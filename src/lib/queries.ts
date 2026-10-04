@@ -43,6 +43,9 @@ const cardOfferSelect = {
   select: {
     price: true, priceBani: true, pricePerUnit: true,
     availability: true, isStale: true, flagged: true,
+    // `isCurrent` (pricing.ts) checks both — the stored flag is a write-time snapshot that goes
+    // stale the moment an offer stops being re-scraped, so the live date is checked too.
+    isExpired: true, promoValidTo: true,
     priceSource: true, lastObservedAt: true, merchantId: true,
     tiers: { select: { minQuantity: true, unitPriceBani: true, discountBp: true }, orderBy: { minQuantity: "asc" } },
   },
@@ -81,6 +84,11 @@ export function currentOfferWhere(now: Date = new Date(), showDeliveryPlatform =
     // every listing and count treated flagged rows as live.
     flagged: false,
     lastObservedAt: { gte: new Date(now.getTime() - MAX_DISPLAY_AGE_DAYS * 86_400_000) },
+    // Must also match isCurrent's promoValidTo check (pricing.ts) — `isExpired` is a write-time
+    // snapshot that goes stale the moment an offer stops being re-scraped, so the live date is
+    // the actual gate, same as `substitution/resolve.ts`'s `isBuyable`.
+    isExpired: false,
+    OR: [{ promoValidTo: null }, { promoValidTo: { gte: now } }] as Array<{ promoValidTo: null | { gte: Date } }>,
   } as const;
 }
 

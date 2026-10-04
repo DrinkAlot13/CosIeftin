@@ -34,6 +34,9 @@ export type OfferForOutlier = {
   flagged: boolean;
   isStale: boolean;
   availability: string;
+  /** write-time snapshot — see `isCurrent` (pricing.ts) for why `isVisible` also checks the date */
+  isExpired?: boolean;
+  promoValidTo?: Date | null;
 };
 
 export const baniOf = (o: OfferForOutlier): number => o.priceBani ?? Math.round(o.price * 100);
@@ -65,6 +68,7 @@ export function isOutlier(bani: number, med: number): boolean {
  * Data-integrity audits use a different population and say so; see `audit-db`'s header.
  */
 export function isVisible(o: OfferForOutlier): boolean {
+  if (o.isExpired || (o.promoValidTo && o.promoValidTo.getTime() < Date.now())) return false;
   return !o.flagged && !o.isStale && o.availability === "in stock" && baniOf(o) > 0;
 }
 

@@ -63,6 +63,7 @@
     "verify:class": "tsx scripts/verify-class-members.ts",
     "compute:embeddings": "tsx scripts/compute-embeddings.ts",
     "review:equivalence-suggestions": "tsx scripts/review-equivalence-suggestions.ts",
+    "backfill:expired-offers": "tsx scripts/backfill-expired-offers.ts",
     "migrate:money": "tsx scripts/migrate-money-bani.ts",
     "propose:equivalence": "tsx scripts/propose-equivalence.ts",
     "tune:bands": "tsx scripts/tune-bands.ts",
