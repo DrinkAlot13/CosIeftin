@@ -12,6 +12,7 @@ import {
   clearActive,
   createCart,
   deleteCart,
+  duplicateCart,
   getActive,
   getCarts,
   removeItem,
@@ -226,6 +227,12 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
     if (!activeCart) return;
     if (window.confirm(`Ștergi lista „${activeCart.name}”?`)) deleteCart(activeCart.id);
   };
+  // "Same list as last time" — the actual shape of a recurring shop, so a weekly staples list
+  // does not have to be rebuilt by hand from memory every week.
+  const duplicateActive = () => {
+    if (!activeCart || activeCart.items.length === 0) return;
+    duplicateCart(activeCart.id);
+  };
 
   const perItemBySlug = useMemo(() => new Map((result?.perItem ?? []).map((pi) => [pi.slug, pi])), [result]);
   const prefSet = useMemo(() => new Set(pref), [pref]);
@@ -283,6 +290,11 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
         {activeCart && (
           <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button type="button" className="linklike" onClick={renameActive}>Redenumește</button>
+            {activeCart.items.length > 0 && (
+              <button type="button" className="linklike" onClick={duplicateActive} title="Pornește o listă nouă cu aceleași produse">
+                Dublează
+              </button>
+            )}
             {carts.length > 1 && <button type="button" className="linklike" onClick={removeActive}>Șterge lista</button>}
           </span>
         )}

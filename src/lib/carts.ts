@@ -64,6 +64,22 @@ export function createCart(name?: string): string {
   save(s);
   return id;
 }
+/**
+ * "Same list as last time" — the real shape of a recurring shop. Copies the items (fresh
+ * quantities, same products) into a new cart and makes it active, so a weekly staples list does
+ * not have to be rebuilt by hand from memory every time.
+ */
+export function duplicateCart(id: string, name?: string): string | null {
+  const s = load();
+  const src = s.carts.find((c) => c.id === id);
+  if (!src) return null;
+  const newId = uid();
+  s.carts.push({ id: newId, name: (name || "").trim() || `${src.name} (copie)`, items: src.items.map((i) => ({ ...i })) });
+  s.activeId = newId;
+  save(s);
+  return newId;
+}
+
 export function renameCart(id: string, name: string) {
   const s = load();
   const c = s.carts.find((c) => c.id === id);

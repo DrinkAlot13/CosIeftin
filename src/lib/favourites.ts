@@ -135,6 +135,9 @@ export type FavouriteRow = {
   addCount: number;
   categoryName: string;
   categorySlug: string | null;
+  /** How far below its recent peak this product's price currently sits, precomputed nightly.
+   *  null means not computed (no live offer, or not enough history) — distinct from 0. */
+  dropPct: number | null;
 };
 
 /** Everything this shopper has favourited, with the evidence behind an inferred one. */
@@ -145,7 +148,7 @@ export async function listFavourites(userId: number): Promise<FavouriteRow[]> {
     select: {
       productId: true, source: true, addedAt: true,
       product: {
-        select: { slug: true, name: true, brand: true, image: true, category: { select: { name: true, slug: true } } },
+        select: { slug: true, name: true, brand: true, image: true, dropPct: true, category: { select: { name: true, slug: true } } },
       },
     },
   });
@@ -162,6 +165,7 @@ export async function listFavourites(userId: number): Promise<FavouriteRow[]> {
     source: r.source === "INFERRED" ? "INFERRED" : "EXPLICIT",
     addedAt: r.addedAt,
     addCount: counts.get(r.productId) ?? 0,
+    dropPct: r.product.dropPct,
     categoryName: r.product.category?.name ?? "Fără categorie",
     categorySlug: r.product.category?.slug ?? null,
   }));

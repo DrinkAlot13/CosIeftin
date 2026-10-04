@@ -85,6 +85,12 @@ export default async function FavoritePage() {
                       <td>
                         <Link href={`/p/${r.slug}`} style={{ fontWeight: 600 }}>{r.name}</Link>
                         {r.brand && <div className="muted" style={{ fontSize: 12 }}>{r.brand}</div>}
+                        {/* Same >2% floor as the deals page — a 0.4% wobble is noise, not news. */}
+                        {r.dropPct != null && r.dropPct > 2 && (
+                          <div style={{ fontSize: 12, color: "var(--primary)", fontWeight: 600, marginTop: 2 }}>
+                            📉 -{r.dropPct.toFixed(0)}% față de vârful recent
+                          </div>
+                        )}
                       </td>
                       <td className="muted" style={{ fontSize: 13 }}>
                         {r.source === "EXPLICIT"
