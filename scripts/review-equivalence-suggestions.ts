@@ -43,7 +43,7 @@ async function printPending() {
     const shopsB = [...new Set(r.productB.offers.map((o) => o.merchant.slug))];
     const pricesA = r.productA.offers.map((o) => o.priceBani).filter((x): x is number => x != null);
     const pricesB = r.productB.offers.map((o) => o.priceBani).filter((x): x is number => x != null);
-    console.log(`[#${r.id}] proposed by ${r.user.username}${r.note ? ` — "${r.note}"` : ""}`);
+    console.log(`[#${r.id}] proposed by ${r.user.username}${r.note ? ` — "${r.note}"` : ""}${r.corroborations > 1 ? `  (${r.corroborations} shoppers agree)` : ""}`);
     console.log(`  A: ${r.productA.name}${r.productA.brand ? ` (${r.productA.brand})` : ""}`);
     console.log(`     ${r.productA.unitSize} ${r.productA.unit} · ${bani(Math.min(...pricesA, Infinity))}-${bani(Math.max(...pricesA, -Infinity))} lei · ${shopsA.join(", ") || "no live offers"}${r.productA.equivalenceClassId ? "  [already in a class]" : ""}`);
     console.log(`  B: ${r.productB.name}${r.productB.brand ? ` (${r.productB.brand})` : ""}`);

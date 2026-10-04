@@ -677,6 +677,7 @@ model User {
   blocklist    UserBlocklist[]
   productAdds  UserProductAdd[]
   equivalenceSuggestions EquivalenceSuggestion[]
+  equivalenceSuggestionVotes EquivalenceSuggestionVote[]
   productReports ProductReport[]
 }
 
@@ -705,12 +706,33 @@ model EquivalenceSuggestion {
   reviewedAt  DateTime?
   reviewNote  String?
   createdAt   DateTime @default(now())
+  /// How many DISTINCT shoppers have made this exact claim. Starts at 1 (the submitter); a
+  /// second person submitting the same unordered pair increments this instead of being told
+  /// "already exists" and discarded — a claim three people independently made is real evidence
+  /// a reviewer should weigh, not noise to dedupe away.
+  corroborations Int    @default(1)
+  votes       EquivalenceSuggestionVote[]
 
   // Unordered pair: (A, B) and (B, A) are the same claim, enforced at the write site
   // (src/app/api/equivalence-suggestions/route.ts) by always storing the lower product id
   // first — a unique index can't do that normalization itself.
   @@unique([productAId, productBId])
   @@index([status])
+}
+
+/// One shopper's corroboration of an existing EquivalenceSuggestion — kept as its own table
+/// (rather than a counter alone) so the SAME shopper resubmitting cannot inflate
+/// `corroborations`; the unique constraint is the enforcement, the counter on the parent is a
+/// denormalized read-through of count(*) here, kept in sync at the one write site.
+model EquivalenceSuggestionVote {
+  id           Int                   @id @default(autoincrement())
+  suggestionId Int
+  suggestion   EquivalenceSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  userId       Int
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime              @default(now())
+
+  @@unique([suggestionId, userId])
 }
 
 /// A shopper's report that something is wrong on a product page — a wrong PRICE (this number is

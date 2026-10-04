@@ -58,6 +58,11 @@ export default async function EquivalenceSuggestionsPage() {
             <div key={r.id} className="card" style={{ padding: 14 }}>
               <div className="muted" style={{ fontSize: 12 }}>
                 propus de {r.user.username}{r.note && <> — &quot;{r.note}&quot;</>}
+                {r.corroborations > 1 && (
+                  <span style={{ marginLeft: 8, color: "var(--primary)", fontWeight: 600 }}>
+                    · {r.corroborations} cumpărători au spus la fel
+                  </span>
+                )}
               </div>
               <div style={{ display: "flex", gap: 20, flexWrap: "wrap", margin: "8px 0" }}>
                 <div>

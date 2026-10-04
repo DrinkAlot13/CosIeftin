@@ -54,6 +54,23 @@ export async function POST(req: NextRequest) {
     where: { productAId_productBId: { productAId, productBId } },
   });
   if (existing) {
+    // A second shopper making the SAME claim is evidence, not noise — record it as a
+    // corroboration (deduped per shopper via the vote table's unique constraint) rather than
+    // discarding it. Only while still PENDING: once reviewed, the decision stands.
+    if (existing.status === "PENDING" && existing.userId !== user.id) {
+      await prisma.equivalenceSuggestionVote.upsert({
+        where: { suggestionId_userId: { suggestionId: existing.id, userId: user.id } },
+        update: {},
+        create: { suggestionId: existing.id, userId: user.id },
+      });
+      // Recount from the real rows rather than incrementing — upsert does not say whether this
+      // was a new vote or an existing one, and the count must stay correct either way.
+      const count = await prisma.equivalenceSuggestionVote.count({ where: { suggestionId: existing.id } });
+      await prisma.equivalenceSuggestion.update({
+        where: { id: existing.id },
+        data: { corroborations: count + 1 }, // +1 for the original submitter, who has no vote row
+      });
+    }
     return NextResponse.json({
       ok: true,
       alreadyExists: true,

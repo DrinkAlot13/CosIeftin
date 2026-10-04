@@ -28,6 +28,7 @@ export function Footer({ categories }: { categories: MenuCategory[] }) {
         <div>
           <h4>Despre</h4>
           <Link href="/metodologie">Cum funcționează</Link>
+          <Link href="/contribuitori">Contribuitori</Link>
           <Link href="/termeni">Termeni de utilizare</Link>
           <Link href="/confidentialitate">Confidențialitate</Link>
         </div>
