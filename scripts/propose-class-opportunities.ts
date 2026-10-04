@@ -258,6 +258,20 @@ async function main(): Promise<void> {
   console.log(`  reading queue; they do not decide membership.`);
 
   console.log(`\n\n${"═".repeat(112)}`);
+  console.log("  THE TIGHT CANDIDATES, IN FULL — members, shops, own sizes and unit prices.");
+  console.log("═".repeat(112));
+  for (const [i, g] of tight.entries()) {
+    console.log(`\n[T${i + 1}] ${g.headNoun}  ·  ${g.bucket}  ·  ${g.members.length} products across ${g.merchants.length} shops  ·  spread ${g.spread!.toFixed(2)}x`);
+    console.log(`    shops: ${g.merchants.join(", ")}`);
+    for (const m of g.members) {
+      const up = m.unitPriceBani ? `${bani(m.unitPriceBani)}/${m.unit}` : "—";
+      console.log(
+        `      ${m.name.slice(0, 60).padEnd(61)}${String(m.unitSize ?? "").padStart(6)}${(m.unit ?? "").padEnd(4)}${bani(m.priceBani).padStart(8)}  ${up.padEnd(13)}${m.merchants.join("+")}${m.classSlug ? `  [${m.classSlug}]` : ""}`,
+      );
+    }
+  }
+
+  console.log(`\n\n${"═".repeat(112)}`);
   console.log("  THE SAME GROUPS, IN FULL — members, shops, own sizes and unit prices.");
   console.log("  Read these. The table above only says where to look.");
   console.log("═".repeat(112));

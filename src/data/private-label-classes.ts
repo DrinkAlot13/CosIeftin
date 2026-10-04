@@ -252,4 +252,124 @@ export const PRIVATE_LABEL_CLASSES: PrivateLabelClass[] = [
   pack("sos-salsa-branza-300g", "Sos salsa cu brânză, 300 g", "kg", 0.3,
     ["sos", "salsa", "branza"],
     [...BIO, "guacamole", "picant", "condimentat", "iute", "taco", "chili"]),
+
+  // ══ BATCH 27 — FOUND BY `propose:class-opportunities`, NOT BY CATEGORY BROWSING ═══════════
+  //
+  // This batch came from a different process than every one above: `npm run
+  // propose:class-opportunities` groups the whole live catalog by head noun + size bucket and
+  // ranks by (merchants × products), surfacing 2,022 candidate groups. Of those, 60 survived
+  // its own mechanical filters (unit-price spread < 2x, not a brand family, not a generic
+  // category word). Reading all 60 found that MOST were still not real classes — a single
+  // brand's flavour assortment (Kit Kat varieties, Ricola drop flavours, Leonsteiner radler
+  // flavours, pest-specific insecticides) scores exactly like a real class on these mechanical
+  // filters, because a flavour range often prices within 2x of itself. Per CLAUDE.md's
+  // "enumerating every flavour is a game you lose", those were left alone.
+  //
+  // The 21 below are what was left after reading: either a genuine cross-BRAND match on one
+  // stated variant (mascarpone, linguine — plain, no flavour claim at all), or a same-BRAND,
+  // same-FLAVOUR product whose name was spelled differently enough across merchants that the
+  // ordinary matcher didn't merge it (the "parfum" and "untul" pairs below are almost certainly
+  // the identical product with the brand name dropped by one scraper — a near-miss on identity
+  // matching, not really a cross-brand equivalence, but a class is the safe way to reunite it).
+
+  pack("chefir-3-3-900g", "Chefir 3,3% grăsime, 900 g", "kg", 0.9,
+    ["chefir", "3 3"],
+    [...BIO, "usor", "light"]),
+
+  pack("mascarpone-500g", "Mascarpone, 500 g", "kg", 0.5,
+    ["mascarpone"],
+    [...BIO]),
+
+  // Mangalița is a named pork breed/cure, not a generic "ham" — kept to its own class rather
+  // than folded into "jambon" generally, same reasoning as the Serrano/Taranesc members this
+  // batch declined to merge.
+  pack("jambon-mangalita-100g", "Jambon Mangalița, 100 g", "kg", 0.1,
+    ["jambon", "mangalita"],
+    [...BIO]),
+
+  pack("vinete-1buc", "Vinete, bucată", "buc", 1,
+    ["vinete"],
+    [...BIO, "graffiti"]),
+
+  pack("grisine-cu-sare-250g", "Grisine cu sare, 250 g", "kg", 0.25,
+    ["grisine", "sare"],
+    [...BIO]),
+
+  // "Izvorul Alb" (Dorna) still water, spelled two different ways across merchants — one
+  // scraper kept the "Dorna" brand and the full "apă minerală necarbogazoasă" description, the
+  // other shortened it to "Izvorul alb Apă plată". "Izvorul Minunilor" is a DIFFERENT, unrelated
+  // product (carbonated) and lacks "alb", so it is excluded by the require list alone.
+  pack("izvorul-alb-plata-500ml", "Izvorul Alb apă plată, 500 ml", "l", 0.5,
+    ["izvorul", "alb"],
+    [...BIO]),
+
+  pack("coacaze-rosii-125g", "Coacăze roșii, 125 g", "kg", 0.125,
+    ["coacaze", "rosii"],
+    [...BIO]),
+
+  pack("linguine-500g", "Linguine, 500 g", "kg", 0.5,
+    ["linguine"],
+    [...BIO]),
+
+  // The two real recipes found inside the generic "blat" bucket: Boromir and Firesco each sell
+  // both a plain base and a cocoa one, and the plain/cocoa split is what actually distinguishes
+  // them — not the brand.
+  pack("blat-tort-simplu-400g", "Blat de tort simplu, 400 g", "kg", 0.4,
+    ["blat", "simplu"],
+    [...BIO, "cacao"]),
+
+  pack("blat-tort-cacao-400g", "Blat de tort cu cacao, 400 g", "kg", 0.4,
+    ["blat", "cacao"],
+    [...BIO, "simplu"]),
+
+  // "Plasă" (net bag) excluded deliberately: Penny's "Lamâi Plasă" at 4,79 lei is very likely
+  // priced for the bag, not the single lemon the other three rows price — the name does not say
+  // how many are inside, and folding it in would compare one lemon's price with a bag's.
+  pack("lamai-1buc", "Lămâie, bucată", "buc", 1,
+    ["lamai"],
+    [...BIO, "plasa"]),
+
+  pack("somon-sashimi-300g", "Somon pentru sashimi, 300 g", "kg", 0.3,
+    ["somon", "sashimi"],
+    [...BIO]),
+
+  pack("couscous-500g", "Couscous, 500 g", "kg", 0.5,
+    ["couscous"],
+    [...BIO, "semi complet", "integral"]),
+
+  pack("inalbitor-clasic-1l", "Înălbitor clasic, 1 l", "l", 1,
+    ["inalbitor", "clasic|regular"],
+    [...BIO, "gel", "lavanda", "parfum"]),
+
+  pack("soia-felii-100g", "Soia felii, 100 g", "kg", 0.1,
+    ["soia", "felii"],
+    [...BIO]),
+
+  // Same brand (Herbarium Drops), same scent, spelled with and without the brand name across
+  // two merchants — not a cross-brand claim, a reunification of one near-miss.
+  pack("parfum-rufe-pisica-neagra-200ml", "Parfum de rufe Pisica Neagră, 200 ml", "l", 0.2,
+    ["parfum", "rufe", "pisica neagra"],
+    [...BIO]),
+
+  pack("parfum-rufe-portocal-narcisa-200ml", "Parfum de rufe Floare de Portocal & Narcisă, 200 ml", "l", 0.2,
+    ["parfum", "rufe", "portocal", "narcis"],
+    [...BIO]),
+
+  pack("baclava-visine-250g", "Baclava cu vișine, 250 g", "kg", 0.25,
+    ["baclava", "visine"],
+    [...BIO, "ciocolata"]),
+
+  pack("baclava-nuca-250g", "Baclava cu nucă, 250 g", "kg", 0.25,
+    ["baclava", "nuca"],
+    [...BIO, "ciocolata", "sarailie"]),
+
+  // Laptaria cu caimac's "Untul cel ___" line, brand dropped by one scraper on some rows —
+  // same reunification pattern as the "parfum" pair above.
+  pack("untul-cel-laptos-150g", "Untul cel laptos, 80% grăsime, 150 g", "kg", 0.15,
+    ["untul", "laptos"],
+    [...BIO, "sarat", "afumat", "gingas"]),
+
+  pack("untul-cel-sarat-afumat-150g", "Untul cel sărat-afumat, 80% grăsime, 150 g", "kg", 0.15,
+    ["untul", "sarat", "afumat"],
+    [...BIO, "laptos", "gingas"]),
 ];
