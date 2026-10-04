@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
 
   const [merchants, ctx, channelRows] = await Promise.all([
     loadMerchants(),
-    loadUserContext((await getCurrentUser())?.id ?? null, {}),
+    loadUserContext((await getCurrentUser())?.id ?? null, { hasLoyaltyCards: body.hasLoyaltyCards === true }),
     prisma.merchant.findMany({ where: { active: true }, select: { slug: true, priceChannel: true } }),
   ]);
   const channelBySlug = new Map(channelRows.map((r) => [r.slug, r.priceChannel]));

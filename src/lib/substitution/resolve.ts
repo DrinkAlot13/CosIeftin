@@ -89,7 +89,7 @@ export type ResolutionReason = {
   chosenUnitPriceBani?: Bani;
   savingPerUnitBani?: Bani;
   /** why candidates were dropped, for the review UI */
-  excluded?: { blocked: number; stale: number; expired: number; anomaly: number };
+  excluded?: { blocked: number; stale: number; expired: number; anomaly: number; loyalty: number };
   /** set when the plan uses several packs */
   packs?: number;
 };
@@ -141,6 +141,13 @@ export function isBuyable(o: OfferLike, ctx: UserContext, now: Date): { ok: bool
   if (o.isStale) return { ok: false, why: "stale" };
   if (o.isExpired || (o.promoValidTo && o.promoValidTo.getTime() < now.getTime())) return { ok: false, why: "expired" };
   if (o.availability !== "in stock") return { ok: false, why: "stale" };
+  // A card-only price is not a price this shopper can actually pay unless they told us they
+  // carry the card. `hasLoyaltyCards` was threaded through UserContext for sessions but never
+  // actually read anywhere — every shopper was shown every card price as if they could get it,
+  // which is the exact thing CLAUDE.md's loyalty section says a card price must never do
+  // silently. Coarse today (any card vs none, not per-merchant); still correct in the direction
+  // that matters, since showing an unreachable price is worse than hiding a reachable one.
+  if (o.requiresLoyaltyCard && !ctx.hasLoyaltyCards) return { ok: false, why: "loyalty" };
   return { ok: true };
 }
 
@@ -208,7 +215,7 @@ export function resolveLine(line: ListLine, merchantId: number, ctx: UserContext
     : (requested?.packQuantity ?? 1) * line.qty;
 
   const { offers: raw, tier } = candidatesFor(line, requested, mine);
-  const excluded = { blocked: 0, stale: 0, expired: 0, anomaly: 0 };
+  const excluded = { blocked: 0, stale: 0, expired: 0, anomaly: 0, loyalty: 0 };
   const buyable: OfferLike[] = [];
   for (const o of raw) {
     const v = isBuyable(o, ctx, now);

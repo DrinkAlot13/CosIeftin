@@ -21,6 +21,7 @@ import {
 } from "@/lib/carts";
 import { getPreferred, PREF_EVENT } from "@/lib/stores-pref";
 import { basketTrend, snapshotBasket } from "@/lib/basket-trend";
+import { getCards, WALLET_EVENT } from "@/lib/cards-wallet";
 import { StorePrefs } from "@/components/StorePrefs";
 import { StoreTypeBadge } from "@/components/StoreTypeBadge";
 import { formatRON } from "@/lib/format";
@@ -87,6 +88,20 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
   const [pref, setPref] = useState<string[]>([]);
   const [strict, setStrict] = useState<"same-brand" | "equivalent">("equivalent");
   const [alts, setAlts] = useState<Record<string, { slug: string; name: string; brand: string | null; lowest: number; store: string | null } | null>>({});
+  // Whether the shopper has ANY loyalty card saved in their wallet — coarse (not per-merchant
+  // yet), but real: without this, every card-only price was shown as if anyone could pay it.
+  const [hasLoyaltyCards, setHasLoyaltyCards] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setHasLoyaltyCards(getCards().length > 0);
+    sync();
+    window.addEventListener(WALLET_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(WALLET_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   useEffect(() => {
     const sync = () => setPref(getPreferred());
@@ -132,6 +147,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
         items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
         includeDeliveryPlatform: withGlovo,
         mode: strict,
+        hasLoyaltyCards,
       }),
     })
       .then((r) => r.json())
@@ -158,7 +174,7 @@ export function ListBuilder({ stores = [] }: { stores?: Store[] }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemsKey, withGlovo, strict]);
+  }, [itemsKey, withGlovo, strict, hasLoyaltyCards]);
 
   // Suggestions for the add box.
   useEffect(() => {

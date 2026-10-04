@@ -128,6 +128,18 @@ describe("resolver — exclusions a shopper cannot buy through", () => {
     expect(r.offer!.product.id).toBe(501);
     expect(r.reason.excluded!.blocked).toBe(1);
   });
+  // A card-only price is not one every shopper can pay. `hasLoyaltyCards` used to be threaded
+  // through UserContext and never read anywhere, so every shopper saw every card price as if
+  // they could get it — the exact thing a card price must never do silently.
+  it("a card-only offer is excluded when the shopper has no loyalty cards", () => {
+    const r = resolveLine({ productId: 500, qty: 1, substitutionMode: "EXACT" }, 1, ctx({ hasLoyaltyCards: false }), [offer({ ...base, requiresLoyaltyCard: true })]);
+    expect(r.status).toBe("UNAVAILABLE");
+    expect(r.reason.excluded!.loyalty).toBe(1);
+  });
+  it("a card-only offer is usable once the shopper says they carry a card", () => {
+    const r = resolveLine({ productId: 500, qty: 1, substitutionMode: "EXACT" }, 1, ctx({ hasLoyaltyCards: true }), [offer({ ...base, requiresLoyaltyCard: true })]);
+    expect(r.status).toBe("EXACT");
+  });
 });
 
 describe("resolver — quantity plans and bulk tiers", () => {

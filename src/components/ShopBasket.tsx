@@ -16,6 +16,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { CART_EVENT, getActive } from "@/lib/carts";
+import { getCards, WALLET_EVENT } from "@/lib/cards-wallet";
 
 type Line = {
   slug: string;
@@ -66,6 +67,7 @@ export function ShopBasket({ shopSlug }: { shopSlug: string }) {
         body: JSON.stringify({
           merchantSlug: shopSlug,
           items: cart.items.map((i) => ({ slug: i.slug, qty: i.qty, mode: pins.has(i.slug) ? "EXACT" : "EQUIVALENT" })),
+          hasLoyaltyCards: getCards().length > 0,
         }),
       });
       const j = await r.json();
@@ -82,7 +84,11 @@ export function ShopBasket({ shopSlug }: { shopSlug: string }) {
     void run(pinned);
     const sync = () => void run(pinned);
     window.addEventListener(CART_EVENT, sync);
-    return () => window.removeEventListener(CART_EVENT, sync);
+    window.addEventListener(WALLET_EVENT, sync);
+    return () => {
+      window.removeEventListener(CART_EVENT, sync);
+      window.removeEventListener(WALLET_EVENT, sync);
+    };
   }, [run, pinned]);
 
   function pinOriginal(slug: string) {
