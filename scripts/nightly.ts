@@ -40,6 +40,12 @@ if (stepsExit !== 0) {
 // Always. This is the whole point of the file.
 const logExit = run("soak log", "soak:log", { SOAK_STEPS_EXIT: String(stepsExit) });
 
+// Always, and only AFTER soak:log — it compares tonight's just-written record against the
+// previous one. A check that was passing and is now failing is news; a check that has been red
+// for weeks is not (see notify-regression.ts). No destination configured is not a failure of
+// this step — it still prints to this same log either way.
+run("regression check", "notify:regression");
+
 // The nightly's own exit code reflects the SCRAPE, not the logging: a red audit is information,
 // not a failure of the job, and a cron that mails on non-zero should not mail every night just
 // because two invariants are red on purpose.

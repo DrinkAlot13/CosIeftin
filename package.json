@@ -66,6 +66,7 @@
     "review:product-reports": "tsx scripts/review-product-reports.ts",
     "backfill:expired-offers": "tsx scripts/backfill-expired-offers.ts",
     "backfill:brand": "tsx scripts/backfill-brand.ts",
+    "notify:regression": "tsx scripts/notify-regression.ts",
     "migrate:money": "tsx scripts/migrate-money-bani.ts",
     "propose:equivalence": "tsx scripts/propose-equivalence.ts",
     "tune:bands": "tsx scripts/tune-bands.ts",
