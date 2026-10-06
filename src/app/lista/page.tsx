@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ListBuilder } from "@/components/ListBuilder";
+import { BudgetBar } from "@/components/BudgetBar";
 import { getStoreList } from "@/lib/queries";
 import { versionedSeries, changeWithin } from "@/lib/index-series-v2";
 
@@ -25,6 +26,7 @@ export default async function ListaPage() {
           </p>
         )}
       </div>
+      <div className="container"><BudgetBar /></div>
       <ListBuilder stores={stores} />
       <div style={{ height: 32 }} />
     </div>

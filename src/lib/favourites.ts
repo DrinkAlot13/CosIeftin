@@ -15,6 +15,7 @@
 // shopper: "l-ai adăugat de 4 ori".
 
 import { prisma } from "./db";
+import { recordSavingsEvent } from "./savings";
 
 /** Adds before a product becomes an inferred favourite. */
 export const INFERRED_AFTER_ADDS = 3;
@@ -84,6 +85,11 @@ export async function toggleFavourite(userId: number, productId: number): Promis
  * EXPLICIT favourite is never overwritten by an INFERRED one.
  */
 export async function recordAdd(userId: number, productId: number, at = new Date()): Promise<{ count: number; days: number | null; promoted: boolean }> {
+  // Fire-and-forget, same posture as the caller's own two fetches (AddToList.tsx's
+  // recordAdd comment): the "saved this month" counter must never be able to block or fail an
+  // add, so it is not awaited into the critical path, only scheduled.
+  void recordSavingsEvent(userId, productId, at);
+
   const today = utcDay(at);
   const before = await prisma.userProductAdd.findUnique({
     where: { userId_productId: { userId, productId } },
