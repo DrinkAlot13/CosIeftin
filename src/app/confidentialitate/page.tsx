@@ -10,13 +10,14 @@
 //   · No analytics, no ad tracking, no third-party scripts. Grepped for the fifteen usual
 //     suspects; the only hits were the English word "plausible" in comments.
 //   · Exactly ONE cookie exists: `pm_session`.
-//   · Accounts do not collect an e-mail address at all (renamed `email` -> `username`,
-//     2026-09-30) — there is NO e-mail verification and NO password reset to begin with. That
-//     is why the rights section explains how identity is checked instead of saying "reply from
-//     the address on file": anyone can register with any username, so the name alone proves
-//     nothing, and answering an access request from it alone could hand person A's data to
-//     whoever asked. GDPR Article 12(6) explicitly allows asking for more information — and
-//     refusing.
+//   · UPDATED 2026-10-07: accounts can now OPTIONALLY add an e-mail address (reversing the
+//     2026-09-30 "no email is ever collected" decision — see `User.email`'s schema comment —
+//     done to make password reset and a weekly savings digest possible). It is never required:
+//     the comparator and the account both work without one. Used for exactly two things —
+//     sending a password-reset link, and the digest if the shopper has not turned it off — and
+//     for nothing else. The identity-verification section below is UNCHANGED for any account
+//     with no e-mail on file: username still proves nothing about who someone is, so the same
+//     "ask for more, then refuse if we can't confirm" process still applies to those accounts.
 //   · 89.9% of product images are hotlinked from 18 third-party hosts. The proxy was never
 //     built, so that section is generated FROM THE DATABASE and is true on the day it renders.
 //   · `UserBlocklist` and `GroceryList` are declared in the schema and written by NOTHING.
@@ -62,28 +63,34 @@ export default async function ConfidentialitatePage() {
       </div>
 
       <h1>Politica de confidențialitate</h1>
-      <p className="lead">Ultima actualizare: 10 septembrie 2026</p>
+      <p className="lead">Ultima actualizare: 7 octombrie 2026</p>
 
       <p>
         Pe scurt: poți folosi tot comparatorul fără cont și fără să ne spui cine ești. Dacă îți
-        faci cont, nu îți cerem un e-mail — alegi un nume de utilizator, iar noi păstrăm acel
-        nume și ce ai salvat. Nu vindem date, nu avem reclame și nu urmărim vizitatorii între
-        site-uri.
+        faci cont, nu trebuie să ne dai un e-mail — alegi un nume de utilizator, iar noi păstrăm
+        acel nume și ce ai salvat. Poți adăuga opțional o adresă de e-mail, doar dacă vrei
+        resetarea parolei sau un rezumat săptămânal al economiilor — fără ea, contul funcționează
+        identic. Nu vindem date, nu avem reclame și nu urmărim vizitatorii între site-uri.
       </p>
 
       <h2>Ce păstrăm pe serverul nostru</h2>
       <p>Numai dacă îți faci cont:</p>
       <ul className="legal-list">
         <li>
-          <b>Numele de utilizator</b> ales de tine și o formă criptată a parolei (scrypt cu sare aleatoare — parola în clar nu este stocată și nu o putem citi). Nu cerem și nu stocăm o adresă de e-mail.
+          <b>Numele de utilizator</b> ales de tine și o formă criptată a parolei (scrypt cu sare aleatoare — parola în clar nu este stocată și nu o putem citi).
           {" "}Numele de utilizator devine <b>public</b> dacă propui o echivalență confirmată sau
           semnalezi un preț greșit rezolvat — apare pe{" "}
           <Link href="/contribuitori" style={{ color: "var(--primary)" }}>pagina contribuitorilor</Link>.
           {" "}La fel dacă trimiți o rețetă pe <Link href="/retete" style={{ color: "var(--primary)" }}>pagina de rețete</Link> —
           apare lângă rețetă, pentru toată lumea. Altfel rămâne privat.
         </li>
+        <li>
+          <b>Adresa de e-mail</b>, doar dacă o adaugi tu — opțional, niciodată publică. O folosim
+          exclusiv pentru linkul de resetare a parolei și, dacă nu renunți, rezumatul săptămânal
+          al economiilor. Nu o vindem și nu o folosim pentru nimic altceva.
+        </li>
         <li><b>Produsele marcate ca favorite</b>, fie pentru că ai apăsat inima, fie pentru că le-ai adăugat de mai multe ori.</li>
-        <li><b>De câte ori ai adăugat un produs în listă</b> și în câte zile diferite — de aici deducem „produsele tale obișnuite”.</li>
+        <li><b>De câte ori ai adăugat un produs în listă</b> și în câte zile diferite — de aici deducem „produsele tale obișnuite”, și la ce diferență de preț (dacă exista una) l-ai adăugat, ca să îți putem arăta cât ai economisit comparând.</li>
       </ul>
       <p>
         Separat de conturi, dacă activezi o alertă de preț prin Telegram, păstrăm{" "}
@@ -205,9 +212,10 @@ export default async function ConfidentialitatePage() {
       </ul>
       <h3>Cum verificăm că ești tu</h3>
       <p>
-        Nu avem o adresă de e-mail pe cont, deci <b>nu putem verifica cine ești după adresa de la
-        care ne scrii</b> — oricine își poate alege orice nume de utilizator, inclusiv al altcuiva.
-        Ca să nu trimitem datele unei persoane către altcineva:
+        E-mailul fiind opțional, multe conturi tot nu au unul — pentru acelea,{" "}
+        <b>nu putem verifica cine ești după adresa de la care ne scrii</b>, pentru că nu există
+        una pe cont. Oricine își poate alege orice nume de utilizator, inclusiv al altcuiva. Ca
+        să nu trimitem datele unei persoane către altcineva:
       </p>
       <ul className="legal-list">
         <li>
@@ -215,8 +223,12 @@ export default async function ConfidentialitatePage() {
           în cont, controlezi parola.
         </li>
         <li>
-          Dacă nu poți intra în cont, îți vom cere informații suplimentare care să confirme că
-          este contul tău (de exemplu, aproximativ când l-ai creat sau ce ai salvat în el).
+          Dacă ai adăugat un e-mail pe cont și ne scrii de la acea adresă, o considerăm o
+          confirmare rezonabilă — este adresa la care am trimis deja linkul de resetare a parolei.
+        </li>
+        <li>
+          Altfel, îți vom cere informații suplimentare care să confirme că este contul tău (de
+          exemplu, aproximativ când l-ai creat sau ce ai salvat în el).
         </li>
         <li>
           Dacă tot nu putem confirma cine ești, <b>refuzăm cererea</b> și îți explicăm de ce.
@@ -224,9 +236,10 @@ export default async function ConfidentialitatePage() {
         </li>
       </ul>
       <p>
-        Momentan nu există un buton de ștergere în cont și nici resetare de parolă: cererea se
-        face pe e-mail, iar ștergerea o facem noi, manual. Preferăm să spunem asta decât să
-        promitem butoane care nu există.
+        Resetarea parolei o poți face singur din pagina de autentificare, dacă ai adăugat un
+        e-mail pe cont. Momentan nu există un buton de ștergere a contului în interfață: cererea
+        de ștergere se face prin e-mail la noi, iar ștergerea o facem manual. Preferăm să spunem
+        asta decât să promitem un buton care nu există.
       </p>
       <p>
         Dacă nu ești mulțumit de răspunsul nostru, te poți adresa{" "}

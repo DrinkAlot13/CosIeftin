@@ -95,10 +95,31 @@ export function clearSession() {
   cookies().delete(COOKIE);
 }
 
+// ── PASSWORD RESET TOKENS ───────────────────────────────────────────────────────────────────
+//
+// A sha256 hash is fine here — unlike a password, a reset token is already high-entropy random
+// bytes (32 bytes = 256 bits), not something a human chose, so there is nothing for scrypt's
+// deliberate slowness to protect against. What matters is never storing the raw token (the
+// email link and the one redeem request are the only places it exists in full) and comparing
+// in constant time, same as every other secret-equality check in this file.
+
+const RESET_TOKEN_BYTES = 32;
+export const RESET_TOKEN_TTL_MS = 60 * 60_000; // 1 hour
+
+/** A fresh raw token (goes in the email link) plus the hash to store. */
+export function createResetToken(): { raw: string; hash: string } {
+  const raw = crypto.randomBytes(RESET_TOKEN_BYTES).toString("base64url");
+  return { raw, hash: hashResetToken(raw) };
+}
+
+export function hashResetToken(raw: string): string {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
 export async function getCurrentUser() {
   const token = cookies().get(COOKIE)?.value;
   if (!token) return null;
   const id = verify(token);
   if (id == null) return null;
-  return prisma.user.findUnique({ where: { id }, select: { id: true, username: true, isAdmin: true } });
+  return prisma.user.findUnique({ where: { id }, select: { id: true, username: true, email: true, isAdmin: true } });
 }

@@ -43,14 +43,14 @@ model Category {
 
 /// A grocery chain (national price in this MVP).
 model Merchant {
-  id         Int      @id @default(autoincrement())
-  slug       String   @unique
-  name       String
-  websiteUrl String @db.Text
+  id               Int             @id @default(autoincrement())
+  slug             String          @unique
+  name             String
+  websiteUrl       String @db.Text
   /// hex color for the per-store chart legend
-  color      String?
+  color            String?
   /// "online" | "hybrid" | "physical" — how you can buy from this store
-  storeType  String   @default("hybrid")
+  storeType        String          @default("hybrid")
   /// HOW this store's prices reach us: "shelf" | "delivery" | "aggregator".
   ///
   /// Renamed from `priceSource`, which is what `Offer.priceSource` is also called — and the
@@ -60,52 +60,53 @@ model Merchant {
   ///
   /// The two fields answer different questions. This one: how did the price get to us. The
   /// offer one: what kind of price is it. They must not share a name again.
-  priceChannel String @default("shelf")
-  active     Boolean  @default(true)
+  priceChannel     String          @default("shelf")
+  active           Boolean         @default(true)
   /// delivery cost in lei (online/hybrid stores) — a "cheapest basket" that ignores a
   /// 20-lei delivery fee is simply wrong, so the optimizer must know it
-  deliveryFee    Float?
+  deliveryFee      Float?
   /// order value above which delivery is free
   freeDeliveryOver Float?
   /// minimum order value the store accepts
-  minOrder       Float?
+  minOrder         Float?
   /// offer count from the last successful scrape — powers the "run dropped >40%" guard
-  anomalies  PriceAnomaly[]
-  lastOfferCount Int   @default(0)
-  lastScrapeAt DateTime?
-  offers     Offer[]
-  overrides  MatchOverride[]
-  runs       ScraperRun[]
-  pendingMatches PendingMatch[]
-  feeds      FeedSource[]
-  createdAt  DateTime @default(now())
+  anomalies        PriceAnomaly[]
+  lastOfferCount   Int             @default(0)
+  lastScrapeAt     DateTime?
+  offers           Offer[]
+  overrides        MatchOverride[]
+  runs             ScraperRun[]
+  pendingMatches   PendingMatch[]
+  feeds            FeedSource[]
+  createdAt        DateTime        @default(now())
 }
 
 /// A canonical pre-set grocery item. Scraped offers match onto one Product.
 model Product {
-  addCount      ProductAddCount?
-  id         Int               @id @default(autoincrement())
-  slug       String            @unique
-  name       String
+  addCount           ProductAddCount?
+  savingsEvents      SavingsEvent[]
+  id                 Int                     @id @default(autoincrement())
+  slug               String                  @unique
+  name               String
   /// normalized (diacritic-folded, lowercased) name+brand for accent-insensitive search
-  nameNorm   String?
-  brand      String?
-  ean        String?           @unique
+  nameNorm           String?
+  brand              String?
+  ean                String?                 @unique
   /// which storefront section this belongs to: "grocery" | "alcohol"
-  section    String            @default("grocery")
+  section            String                  @default("grocery")
   /// base unit for price normalization: "kg" | "l" | "buc"
-  unit       String            @default("buc")
+  unit               String                  @default("buc")
   /// amount per pack in base units (e.g. 1.0 L, 0.5 kg, 10 buc)
-  unitSize   Float             @default(1)
-  image      String? @db.Text
-  categoryId Int?
-  category   Category?         @relation(fields: [categoryId], references: [id])
-  offers     Offer[]
-  listItems  GroceryListItem[]
-  overrides  MatchOverride[]
-  alerts     PriceAlert[]
+  unitSize           Float                   @default(1)
+  image              String? @db.Text
+  categoryId         Int?
+  category           Category?               @relation(fields: [categoryId], references: [id])
+  offers             Offer[]
+  listItems          GroceryListItem[]
+  overrides          MatchOverride[]
+  alerts             PriceAlert[]
   equivalenceClassId Int?
-  equivalenceClass   EquivalenceClass? @relation(fields: [equivalenceClassId], references: [id])
+  equivalenceClass   EquivalenceClass?       @relation(fields: [equivalenceClassId], references: [id])
   /// A semantic-similarity vector (BGE-M3, 1024 float32s, raw bytes) for the substitution
   /// engine's SEMANTIC fallback tier — used only when a product has no curated equivalence
   /// class AND no structural (head-noun) candidate at a given merchant. Never read as a
@@ -115,23 +116,23 @@ model Product {
   /// "crema depilatoare" scored HIGHER against "crema de mâini" than two genuine coffee-bean
   /// matches scored against each other — see structural-equivalence docs in queries.ts).
   embedding          Bytes?
-  attributes ProductAttribute[]
-  favorites  UserFavorite[]
-  productAdds UserProductAdd[]
-  blocked    UserBlocklist[]
-  packChanges ProductPackChange[]
-  pendingMatches PendingMatch[]
-  suggestedAsA EquivalenceSuggestion[] @relation("SuggestionProductA")
-  suggestedAsB EquivalenceSuggestion[] @relation("SuggestionProductB")
-  reports      ProductReport[]
+  attributes         ProductAttribute[]
+  favorites          UserFavorite[]
+  productAdds        UserProductAdd[]
+  blocked            UserBlocklist[]
+  packChanges        ProductPackChange[]
+  pendingMatches     PendingMatch[]
+  suggestedAsA       EquivalenceSuggestion[] @relation("SuggestionProductA")
+  suggestedAsB       EquivalenceSuggestion[] @relation("SuggestionProductB")
+  reports            ProductReport[]
   /// How far this product's daily-low price has fallen from its recent peak, in percent.
   ///
   /// PRECOMPUTED, because deriving it on request meant loading every grocery product with
   /// every offer and every price-history row — 97,630 rows and 4.4 seconds to render fourteen
   /// items. Prices change once a night, so this is recomputed when the scrape finishes rather
   /// than on a timer or, worse, per request.
-  dropPct     Float?
-  dropComputedAt DateTime?
+  dropPct            Float?
+  dropComputedAt     DateTime?
 
   /// ── THE REST OF THE PRECOMPUTED SHELF SIGNALS. Same reason as dropPct above, same job.
   ///
@@ -148,11 +149,11 @@ model Product {
 
   /// Between-store spread as a percentage of the highest live price. 0 when a product has one
   /// live offer: one shop is not a comparison.
-  spreadPct   Float?
+  spreadPct      Float?
   /// max(spreadPct, dropPct) - the single column /oferte orders by. Two columns cannot be
   /// sorted by their maximum in SQL, and sorting in JavaScript means loading everything first,
   /// which is the bug being fixed.
-  dealScore   Float?
+  dealScore      Float?
   /// How many merchants show a price a shopper can act on RIGHT NOW. Offer is unique on
   /// (productId, merchantId), so this is both the offer count and the merchant count.
   liveOfferCount Int?
@@ -166,10 +167,10 @@ model Product {
   /// True when the current lowest price is at or within 2% of `observedLowBani`, AND the price
   /// has actually moved over a fortnight or more. Precomputed because the alternative is loading
   /// every price-history row to render a category page, which is the bug `dealScore` exists for.
-  atObservedLow Boolean?
+  atObservedLow   Boolean?
 
-  specs       ProductSpec[]
-  createdAt  DateTime          @default(now())
+  specs     ProductSpec[]
+  createdAt DateTime      @default(now())
 
   @@index([section])
   @@index([nameNorm])
@@ -185,17 +186,16 @@ model Product {
   @@index([section, categoryId])
 }
 
-
 /// One chain's price for one item.
 model Offer {
-  id           Int            @id @default(autoincrement())
-  productId    Int
-  product      Product        @relation(fields: [productId], references: [id])
-  merchantId   Int
-  merchant     Merchant       @relation(fields: [merchantId], references: [id])
-  price        Float
+  id               Int       @id @default(autoincrement())
+  productId        Int
+  product          Product   @relation(fields: [productId], references: [id])
+  merchantId       Int
+  merchant         Merchant  @relation(fields: [merchantId], references: [id])
+  price            Float
   /// price / unitSize (lei per kg / L / buc) — the fair-comparison number
-  pricePerUnit Float          @default(0)
+  pricePerUnit     Float     @default(0)
   /// ── integer money (bani). Added alongside the Float columns; the floats are dropped
   ///    only after reads move over and the verification passes. The Bani suffix exists so
   ///    a float can never be assigned to one by accident.
@@ -203,33 +203,33 @@ model Offer {
   pricePerUnitBani Int?
   oldPriceBani     Int?
   loyaltyPriceBani Int?
-  packLabel    String?
-  currency     String         @default("RON")
-  availability String         @default("in stock")
-  url          String @db.Text
+  packLabel        String?
+  currency         String    @default("RON")
+  availability     String    @default("in stock")
+  url              String @db.Text
   /// JSON [{qty,price}] — quantity discount tiers (DCNeu "buy more = cheaper")
-  bulkTiers    String? @db.Text
+  bulkTiers        String? @db.Text
   /// "SHELF" | "ONLINE" | "DELIVERY_PLATFORM" | "FLYER" — delivery platforms mark up, and
   /// a flyer price is a time-boxed promo, not a standing shelf price.
-  priceSource  String         @default("SHELF")
+  priceSource      String    @default("SHELF")
   /// promo window (weekly flyer offers) — null for a normal shelf price
-  validFrom    DateTime?
-  validTo      DateTime?
+  validFrom        DateTime?
+  validTo          DateTime?
   /// the pre-promo price, when the store advertises one
-  oldPrice     Float?
+  oldPrice         Float?
   /// loyalty-card price when it differs from the shelf price (Kaufland Card, Mega card…)
-  loyaltyPrice Float?
+  loyaltyPrice     Float?
   /// THE exact source string this price was parsed from, verbatim. Without it no parser
   /// change can be verified against history — that is why the strikethrough diff could
   /// not be run. Persist it on every write.
-  rawPriceText String? @db.Text
+  rawPriceText     String? @db.Text
   /// the raw structured record where the source provides one (Kaufland SSR entry, JSON
   /// API row). Bounded — truncate to 4 KB on write.
-  rawSourceBlob String? @db.Text
+  rawSourceBlob    String? @db.Text
   /// Deep link to THIS product at this merchant. NULLABLE on purpose: flyer sources
   /// genuinely have none, and CLAUDE.md requires deep-linking, so an absent link must be
   /// visibly null rather than silently pointing at a generic page.
-  productUrl   String? @db.Text
+  productUrl       String? @db.Text
   /// ── THE OFFER'S OWN IDENTITY, as the merchant states it.
   ///
   /// Missing until now, and its absence made a whole class of bug unverifiable: the unit price
@@ -240,9 +240,9 @@ model Offer {
   ///
   /// With these, "recompute the unit price from the offer's own size and compare" is a query
   /// rather than a re-scrape.
-  storeName    String?
-  ownUnit      String?
-  ownUnitSize  Float?
+  storeName        String?
+  ownUnit          String?
+  ownUnitSize      Float?
 
   /// ── SOLD BY WEIGHT, PRICED PER KILO, HANDED OVER AS A PIECE.
   ///
@@ -264,7 +264,7 @@ model Offer {
   /// NULL MEANS NOT RECORDED, never zero. A merchant that does not publish a per-kilo figure
   /// genuinely has none, and inventing one from price ÷ weight would re-derive the number this
   /// column exists to stop us guessing.
-  isVariableWeight    Boolean @default(false)
+  isVariableWeight    Boolean        @default(false)
   /// The merchant's OWN price per canonical unit, in bani. The comparable number.
   quotedUnitPriceBani Int?
   /// The approximate pack weight the merchant states, in the offer's own unit.
@@ -273,62 +273,62 @@ model Offer {
   /// WHO IS ACTUALLY SELLING THIS. An eMAG marketplace listing is a third-party seller, not
   /// eMAG, and showing its price as "eMAG price" is a lie the shopper discovers at checkout.
   /// Required whenever isMarketplace is true — the validator refuses the row otherwise.
-  sellerName   String?
-  isMarketplace Boolean @default(false)
+  sellerName          String?
+  isMarketplace       Boolean        @default(false)
   /// "NEW" | "RESIGILAT" | "REFURBISHED". Open-box is a large part of the Romanian
   /// electronics market and is NOT price-comparable with new stock: a resigilat price may
   /// never win a comparison against new, and the two are sorted separately.
-  condition    String   @default("NEW")
+  condition           String         @default("NEW")
   /// A resigilat item with 24 months of warranty and one with 3 are not the same offer.
-  warrantyMonths Int?
+  warrantyMonths      Int?
   /// we stopped seeing this offer in the store's feed
-  isStale      Boolean        @default(false)
+  isStale             Boolean        @default(false)
   /// we KNOW its promo window has passed (different from stale, different user copy)
-  isExpired    Boolean        @default(false)
+  isExpired           Boolean        @default(false)
   /// "PROMO" | "BULK" | "LOYALTY" | null
-  promoType    String?
-  promoValidFrom DateTime?
-  promoValidTo   DateTime?
-  requiresLoyaltyCard Boolean @default(false)
+  promoType           String?
+  promoValidFrom      DateTime?
+  promoValidTo        DateTime?
+  requiresLoyaltyCard Boolean        @default(false)
   /// the advertised "was"/30-day-low price in BANI (integer money starts here)
-  referencePriceBani Int?
+  referencePriceBani  Int?
   /// "OMNIBUS_30D" | "STRIKETHROUGH" | null
-  referencePriceKind String?
+  referencePriceKind  String?
   /// ── VAT. Romania: 21% standard, 11% basic food (Legea 141/2025, from 2025-08-01).
   ///    The 9% and 5% rates no longer exist. Stored as BASIS POINTS (2100 / 1100).
   ///    NULL means we could not derive it — never guess a rate.
-  vatRateBp    Int?
+  vatRateBp           Int?
   /// "WITH_VAT" | "WITHOUT_VAT" — a price whose basis is unknown must not be stored
-  vatBasis     String         @default("WITH_VAT")
+  vatBasis            String         @default("WITH_VAT")
   /// "IN_STOCK" | "OUT_OF_STOCK" | "LIMITED" | "UNKNOWN"
   /// Out of stock is a THIRD exclusion reason, distinct from stale and expired.
-  stockStatus  String         @default("UNKNOWN")
+  stockStatus         String         @default("UNKNOWN")
   /// the affiliate/tracking URL — for feed-sourced offers this IS the outbound link, which
   /// is both the monetization and a clean answer to the deep-link guardrail
-  affiliateUrl String?
+  affiliateUrl        String?
   /// merchant's own product code
-  sku          String?
+  sku                 String?
   /// units per carton/box, where a cash & carry states it
-  cartonQty    Int?
+  cartonQty           Int?
   /// SGR container deposit for ONE container, in bani. 50 under the scheme; read from the
   /// merchant where it publishes the figure (Auchan does), derived otherwise. Null means the
   /// product is not in the scheme — deliberately distinct from a deposit of zero.
-  depositBani  Int?
+  depositBani         Int?
   /// containers in the pack: a 6-pack is 6, a single bottle is 1. The deposit scales with
   /// this, not with volume, which is exactly why a 6x0.33 and a 2 l differ at the till.
-  containerCount Int?
+  containerCount      Int?
   /// the merchant hides add-to-cart behind a login
-  loginGated   Boolean        @default(false)
+  loginGated          Boolean        @default(false)
   /// slash-joined category path from the merchant's own breadcrumb
-  categoryPath String?
-  tiers        BulkTier[]
+  categoryPath        String?
+  tiers               BulkTier[]
   /// "ean" | "fuzzy" | "override" | "new"
-  matchedBy    String         @default("fuzzy")
+  matchedBy           String         @default("fuzzy")
   /// 0..1 confidence of the product↔offer match (1 = EAN/override, lower = fuzzy)
-  matchScore   Float?
+  matchScore          Float?
   /// true when a sanity gate tripped (implausible price jump, low-confidence match)
-  flagged      Boolean        @default(false)
-  flagReason   String? @db.Text
+  flagged             Boolean        @default(false)
+  flagReason          String? @db.Text
   /// WHEN THIS OFFER WAS LAST ACTUALLY OBSERVED IN A FEED. Nullable on purpose: an offer we
   /// did not observe has no observation date, and inventing one is the harm.
   ///
@@ -341,9 +341,9 @@ model Offer {
   ///
   /// NEVER write this from a merchant-level job. It is set by the scrape, on the rows the
   /// scrape actually saw, and nowhere else. An audit invariant checks the claim.
-  lastObservedAt DateTime?
-  history      PriceHistory[]
-  anomalies    PriceAnomaly[]
+  lastObservedAt      DateTime?
+  history             PriceHistory[]
+  anomalies           PriceAnomaly[]
 
   @@unique([productId, merchantId])
   @@index([isStale, isExpired])
@@ -360,15 +360,15 @@ model Offer {
 /// One rung of a quantity-discount ladder. A table, not JSON, because the optimizer has to
 /// query it ("what does the 6th unit cost?").
 model BulkTier {
-  id             Int      @id @default(autoincrement())
-  offerId        Int
-  offer          Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  offerId       Int
+  offer         Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
   /// buy this many or more to get unitPriceBani
-  minQuantity    Int
-  unitPriceBani  Int
+  minQuantity   Int
+  unitPriceBani Int
   /// discount vs the base price, in basis points (1000 = 10%)
-  discountBp     Int?
-  createdAt      DateTime @default(now())
+  discountBp    Int?
+  createdAt     DateTime @default(now())
 
   @@unique([offerId, minQuantity])
   @@index([offerId])
@@ -394,15 +394,15 @@ model MatchOverride {
 }
 
 model PriceHistory {
-  id         Int      @id @default(autoincrement())
-  offerId    Int
-  offer      Offer    @relation(fields: [offerId], references: [id])
-  price      Float
+  id                 Int      @id @default(autoincrement())
+  offerId            Int
+  offer              Offer    @relation(fields: [offerId], references: [id])
+  price              Float
   /// integer money (bani) — see the note on Offer
-  priceBani  Int?
+  priceBani          Int?
   /// the advertised reference price at the time of this observation, in bani
   referencePriceBani Int?
-  recordedAt DateTime @default(now())
+  recordedAt         DateTime @default(now())
 
   @@index([offerId, recordedAt])
 }
@@ -410,21 +410,21 @@ model PriceHistory {
 /// A server-side price watch. Unlike the in-app localStorage tracker, this one can notify
 /// the shopper when they're not on the site (Telegram — far better reach in RO than email).
 model PriceAlert {
-  id            Int      @id @default(autoincrement())
-  productId     Int
-  product       Product  @relation(fields: [productId], references: [id])
+  id              Int       @id @default(autoincrement())
+  productId       Int
+  product         Product   @relation(fields: [productId], references: [id])
   /// Telegram chat id (the user links it once via the bot)
-  chatId        String
+  chatId          String
   /// notify when the lowest price is at or below this; null = notify on any drop
-  targetPrice   Float?
+  targetPrice     Float?
   /// the lowest price when the watch was created / last notified — the drop reference
-  basePrice     Float
+  basePrice       Float
   /// integer money (bani) — see the note on Offer
   targetPriceBani Int?
   basePriceBani   Int?
-  active        Boolean  @default(true)
-  lastNotifiedAt DateTime?
-  createdAt     DateTime @default(now())
+  active          Boolean   @default(true)
+  lastNotifiedAt  DateTime?
+  createdAt       DateTime  @default(now())
 
   @@unique([chatId, productId])
   @@index([active])
@@ -434,29 +434,29 @@ model PriceAlert {
 /// so "the run found fewer products" and "the run could not READ the products" stop
 /// looking identical in hindsight.
 model ScraperRun {
-  id                Int       @id @default(autoincrement())
-  merchantId        Int
-  merchant          Merchant  @relation(fields: [merchantId], references: [id])
-  startedAt         DateTime  @default(now())
-  finishedAt        DateTime?
+  id               Int       @id @default(autoincrement())
+  merchantId       Int
+  merchant         Merchant  @relation(fields: [merchantId], references: [id])
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
   /// price parses attempted
-  offersAttempted   Int       @default(0)
+  offersAttempted  Int       @default(0)
   /// parses that produced a value
-  offersParsed      Int       @default(0)
+  offersParsed     Int       @default(0)
   /// parses that returned null (unreadable)
-  offersNull        Int       @default(0)
+  offersNull       Int       @default(0)
   /// written offers rejected by a sanity gate
-  offersRejected    Int       @default(0)
+  offersRejected   Int       @default(0)
   /// OFFER ROWS ACTUALLY WRITTEN by this run — counted at the write, not reported by the
   /// scraper. `offersParsed` counts pool items that had a readable price, which is a
   /// completely different thing: a DCNeu run recorded offersParsed=6044 and wrote nothing,
   /// and every check that read offersParsed called it a success.
-  offersWritten     Int       @default(0)
-  previousRunCount  Int       @default(0)
-  aborted           Boolean   @default(false)
-  abortReason       String?
+  offersWritten    Int       @default(0)
+  previousRunCount Int       @default(0)
+  aborted          Boolean   @default(false)
+  abortReason      String?
   /// JSON array of up to 20 raw strings that failed to parse
-  nullSamples       String?
+  nullSamples      String?
   /// PRODUCTS THIS RUN CREATED, as opposed to matched onto the existing catalog.
   ///
   /// The distinction is why Auchan looked large and Mega Image looked small for months: Auchan
@@ -466,7 +466,7 @@ model ScraperRun {
   ///
   /// Recorded from 2026-09-08. Runs before that date have 0 because the column did not exist —
   /// not because they created nothing.
-  productsCreated   Int       @default(0)
+  productsCreated  Int       @default(0)
 
   /// HOW MANY ITEMS THIS RUN DISCOVERED, before any matching or writing.
   ///
@@ -479,7 +479,7 @@ model ScraperRun {
   /// 0, which means a run that genuinely found nothing. The pool guard treats null as unknown
   /// and falls back to `offersAttempted`, which is the closest pool-shaped number those rows
   /// carry.
-  poolSize          Int?
+  poolSize Int?
 
   /// WHICH CATALOG THIS RUN COVERED — "grocery", "alcohol", "farmacie", …
   ///
@@ -496,13 +496,13 @@ model ScraperRun {
   ///
   /// NULL means NOT RECORDED — every run before 2026-09-08 — and such runs are excluded from
   /// peer comparison rather than assumed to be grocery.
-  section           String?
+  section String?
 
   /// JSON census of THIS merchant's offers immediately after the run: how many ended up
   /// live, and how many landed in each non-live bucket. Recorded per run so a future drop
   /// can be attributed on the spot instead of reconstructed from a backup weeks later —
   /// which is exactly what a 32k-to-24k scare cost to answer once.
-  censusJson        String?
+  censusJson String?
 
   @@index([merchantId, startedAt])
 }
@@ -517,11 +517,11 @@ model ScraperRun {
 /// have refused the correction and kept the anomaly. So no gate may discard — it defers, and
 /// what it deferred is recorded here for a human to arbitrate.
 model PriceAnomaly {
-  id                Int      @id @default(autoincrement())
+  id                Int       @id @default(autoincrement())
   /// Null when the value was refused BEFORE it could become an offer — an unparseable price
   /// or a pool item with no price at all. Those used to vanish with no record of any kind.
   offerId           Int?
-  offer             Offer?   @relation(fields: [offerId], references: [id])
+  offer             Offer?    @relation(fields: [offerId], references: [id])
   /// Which store the refused value came from. Set even when there is no offer.
   merchantId        Int?
   merchant          Merchant? @relation(fields: [merchantId], references: [id])
@@ -535,8 +535,8 @@ model PriceAnomaly {
   /// The exact source string. Without it no parser change can be checked against the refusal.
   rawPriceText      String? @db.Text
   reason            String @db.Text
-  detectedAt        DateTime @default(now())
-  resolved          Boolean  @default(false)
+  detectedAt        DateTime  @default(now())
+  resolved          Boolean   @default(false)
 
   @@index([resolved, detectedAt])
   @@index([merchantId, detectedAt])
@@ -546,27 +546,27 @@ model PriceAnomaly {
 /// A detected pack-size reduction. NOTHING here is published without a human look —
 /// `reviewed` gates it — because a false accusation is worse than a missed detection.
 model ProductPackChange {
-  id                   Int      @id @default(autoincrement())
-  productId            Int
-  product              Product  @relation(fields: [productId], references: [id])
-  merchantId           Int?
-  oldPackSize          Float
-  newPackSize          Float
-  unit                 String
-  oldPricePerUnitBani  Int
-  newPricePerUnitBani  Int
-  oldPriceBani         Int
-  newPriceBani         Int
+  id                  Int      @id @default(autoincrement())
+  productId           Int
+  product             Product  @relation(fields: [productId], references: [id])
+  merchantId          Int?
+  oldPackSize         Float
+  newPackSize         Float
+  unit                String
+  oldPricePerUnitBani Int
+  newPricePerUnitBani Int
+  oldPriceBani        Int
+  newPriceBani        Int
   /// how much the per-unit price rose / the pack shrank, in basis points
-  unitPriceRiseBp      Int
-  packShrinkBp         Int
+  unitPriceRiseBp     Int
+  packShrinkBp        Int
   /// how many consecutive observations confirmed the smaller pack
-  confirmations        Int      @default(0)
-  firstSeenSmallerAt   DateTime
-  detectedAt           DateTime @default(now())
+  confirmations       Int      @default(0)
+  firstSeenSmallerAt  DateTime
+  detectedAt          DateTime @default(now())
   /// a human has checked it; only reviewed rows are shown publicly
-  reviewed             Boolean  @default(false)
-  dismissed            Boolean  @default(false)
+  reviewed            Boolean  @default(false)
+  dismissed           Boolean  @default(false)
 
   @@unique([productId, oldPackSize, newPackSize])
   @@index([reviewed, detectedAt])
@@ -603,17 +603,17 @@ model FeedSource {
 
 /// One fetch of one feed — the telemetry that makes staleness visible.
 model FeedRun {
-  id            Int        @id @default(autoincrement())
-  sourceId      Int
-  source        FeedSource @relation(fields: [sourceId], references: [id])
-  startedAt     DateTime   @default(now())
-  finishedAt    DateTime?
-  rowsFetched   Int        @default(0)
-  rowsValid     Int        @default(0)
-  rowsRejected  Int        @default(0)
-  productsUpserted Int     @default(0)
-  ok            Boolean    @default(false)
-  error         String? @db.Text
+  id               Int        @id @default(autoincrement())
+  sourceId         Int
+  source           FeedSource @relation(fields: [sourceId], references: [id])
+  startedAt        DateTime   @default(now())
+  finishedAt       DateTime?
+  rowsFetched      Int        @default(0)
+  rowsValid        Int        @default(0)
+  rowsRejected     Int        @default(0)
+  productsUpserted Int        @default(0)
+  ok               Boolean    @default(false)
+  error            String? @db.Text
 
   @@index([sourceId, startedAt])
 }
@@ -635,18 +635,18 @@ model ProductSpec {
 /// Daily value of the fixed "Indexul CosIeftin" basket — the public inflation series.
 /// One row per day; the JSON keeps the per-line breakdown that produced the total.
 model IndexSnapshot {
-  id        Int      @id @default(autoincrement())
+  id      Int    @id @default(autoincrement())
   /// YYYY-MM-DD. Unique per (day, version), NOT per day.
   ///
   /// A single `@unique` on `day` meant computing v2 on the switch-over day would OVERWRITE that
   /// day's v1 row — silently destroying a day of the history the brief says to keep. The two
   /// versions are different measurements of the same date and both are allowed to exist.
-  day       String
-  total     Float
-  covered   Int
-  ofItems   Int
+  day     String
+  total   Float
+  covered Int
+  ofItems Int
   /// JSON [{key,label,price,storeName}] — what each line cost that day
-  lines     String
+  lines   String
 
   /// WHICH BASKET THIS DAY PRICED. 1 = forty pinned products; 2 = forty equivalence classes.
   ///
@@ -657,11 +657,11 @@ model IndexSnapshot {
   ///
   /// Days recorded before the column existed are v1: that is a fact about when they were
   /// written, not a default. Backfilled explicitly rather than left to `@default`.
-  version   Int      @default(1)
+  version Int @default(1)
 
   /// JSON [{merchantSlug,found,of,totalBani}] — what the basket cost AT EACH SHOP. v2 only;
   /// null for v1, where the per-shop question had no answer worth storing.
-  perShop   String?
+  perShop String?
 
   createdAt DateTime @default(now())
 
@@ -685,23 +685,81 @@ model IndexSnapshot {
 ///
 /// `tests/erasure-cascade.test.ts` fails the build on any model carrying `userId` without it.
 model User {
-  id           Int           @id @default(autoincrement())
-  /// A free-form handle, not an email — no email is ever collected. This app sends no mail (no
-  /// verification, no password reset), so an "email" field would have named a capability that
-  /// does not exist. Renamed from `email` 2026-09-30; the 3 existing rows (none production)
-  /// were backfilled from their old email values, not reset.
-  username     String        @unique
-  passwordHash String
-  isAdmin      Boolean       @default(false)
-  createdAt    DateTime      @default(now())
-  lists        GroceryList[]
-  favorites    UserFavorite[]
-  blocklist    UserBlocklist[]
-  productAdds  UserProductAdd[]
-  equivalenceSuggestions EquivalenceSuggestion[]
+  id                         Int                         @id @default(autoincrement())
+  /// A free-form handle — kept even now that email exists, because deleting it would break
+  /// every public byline (contributors page, recipe authorship) that already reads it, and an
+  /// account still does not NEED an email (see `email`'s own comment for what changed and why).
+  username                   String                      @unique
+  /// REVERSES a deliberate 2026-09-30 decision ("no email is ever collected"), done on explicit
+  /// request so password reset and a weekly digest could exist. NULLABLE, not required: every
+  /// account created before this field existed has none, the comparator still works without an
+  /// account at all, and an account still does not need one — email only unlocks password
+  /// reset and the digest. Never log this value (see `scripts/send-digest.ts` / `lib/email.ts`
+  /// for the same "unconfigured = no-op" posture `lib/telegram.ts` already uses).
+  email                      String?                     @unique
+  passwordHash               String
+  isAdmin                    Boolean                     @default(false)
+  createdAt                  DateTime                    @default(now())
+  lists                      GroceryList[]
+  favorites                  UserFavorite[]
+  blocklist                  UserBlocklist[]
+  productAdds                UserProductAdd[]
+  equivalenceSuggestions     EquivalenceSuggestion[]
   equivalenceSuggestionVotes EquivalenceSuggestionVote[]
-  productReports ProductReport[]
-  userRecipes UserRecipe[]
+  productReports             ProductReport[]
+  userRecipes                UserRecipe[]
+  passwordResetTokens        PasswordResetToken[]
+  savingsEvents              SavingsEvent[]
+  budget                     Budget?
+}
+
+/// A single-use, time-limited password-reset token. `tokenHash` (never the raw token) is what
+/// gets stored — the raw token only ever exists in the email link and the one request that
+/// redeems it, the same "never store what you can hash" shape `passwordHash` already uses.
+/// `usedAt` makes a token single-use WITHOUT deleting the row, so a replay attempt after use has
+/// evidence to check against rather than a 404 that looks identical to "never existed".
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// A SNAPSHOT, not a recomputation. "How much did comparing save you" can only be answered
+/// honestly by recording the live spread (highest live price minus lowest) AT THE MOMENT a
+/// shopper added the product to a list — recomputing it later from TODAY's prices would be
+/// exactly the "default presented as an observation" shape this project has hit before:
+/// today's spread is not the spread that existed when the add happened, and presenting one as
+/// the other fabricates a number that looks like a measurement.
+model SavingsEvent {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  /// highest live price minus lowest live price, in bani, at occurredAt — NOT a markup vs one
+  /// store, and never negative (a single-offer product has nothing to compare, so no event is
+  /// written for it at all; see lib/savings.ts).
+  amountBani Int
+  occurredAt DateTime @default(now())
+
+  @@index([userId, occurredAt])
+}
+
+/// One optional monthly grocery budget per account. Nullable relation on User (not a required
+/// one-to-one row created at signup) because most accounts will never set one — the comparator
+/// works without it, same as every other account feature here.
+model Budget {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyLimitBani Int
+  updatedAt        DateTime @updatedAt
 }
 
 /// A SHOPPER'S claim that two products are the same purchase — "X is the same as Y" — queued for
@@ -716,25 +774,25 @@ model User {
 /// of the data", and a false equivalence is worse than a missing one. A suggestion only becomes
 /// real when `scripts/review-equivalence-suggestions.ts --apply` confirms it.
 model EquivalenceSuggestion {
-  id          Int      @id @default(autoincrement())
-  productAId  Int
-  productA    Product  @relation("SuggestionProductA", fields: [productAId], references: [id])
-  productBId  Int
-  productB    Product  @relation("SuggestionProductB", fields: [productBId], references: [id])
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  note        String?
+  id             Int                         @id @default(autoincrement())
+  productAId     Int
+  productA       Product                     @relation("SuggestionProductA", fields: [productAId], references: [id])
+  productBId     Int
+  productB       Product                     @relation("SuggestionProductB", fields: [productBId], references: [id])
+  userId         Int
+  user           User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note           String?
   /// "PENDING" | "CONFIRMED" | "REJECTED"
-  status      String   @default("PENDING")
-  reviewedAt  DateTime?
-  reviewNote  String?
-  createdAt   DateTime @default(now())
+  status         String                      @default("PENDING")
+  reviewedAt     DateTime?
+  reviewNote     String?
+  createdAt      DateTime                    @default(now())
   /// How many DISTINCT shoppers have made this exact claim. Starts at 1 (the submitter); a
   /// second person submitting the same unordered pair increments this instead of being told
   /// "already exists" and discarded — a claim three people independently made is real evidence
   /// a reviewer should weigh, not noise to dedupe away.
-  corroborations Int    @default(1)
-  votes       EquivalenceSuggestionVote[]
+  corroborations Int                         @default(1)
+  votes          EquivalenceSuggestionVote[]
 
   // Unordered pair: (A, B) and (B, A) are the same claim, enforced at the write site
   // (src/app/api/equivalence-suggestions/route.ts) by always storing the lower product id
@@ -766,19 +824,19 @@ model EquivalenceSuggestionVote {
 /// `userId` is nullable — because requiring an account here would suppress most of the reports
 /// this exists to collect.
 model ProductReport {
-  id         Int      @id @default(autoincrement())
-  productId  Int
-  product    Product  @relation(fields: [productId], references: [id])
-  userId     Int?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          Int       @id @default(autoincrement())
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  userId      Int?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// "wrong_price" | "wrong_product" | "other"
-  kind       String
-  note       String?
+  kind        String
+  note        String?
   /// "OPEN" | "RESOLVED" | "DISMISSED"
-  status     String   @default("OPEN")
-  resolvedAt DateTime?
+  status      String    @default("OPEN")
+  resolvedAt  DateTime?
   resolveNote String?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([status])
   @@index([productId])
@@ -828,17 +886,17 @@ model GroceryList {
 }
 
 model GroceryListItem {
-  id        Int         @id @default(autoincrement())
-  listId    Int
-  list      GroceryList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  productId Int
-  product   Product     @relation(fields: [productId], references: [id])
-  qty       Int         @default(1)
+  id                Int         @id @default(autoincrement())
+  listId            Int
+  list              GroceryList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  productId         Int
+  product           Product     @relation(fields: [productId], references: [id])
+  qty               Int         @default(1)
   /// How far we may substitute for this line:
   /// EXACT (only this product) | SAME_BRAND | EQUIVALENT (same need) | CHEAPEST
-  substitutionMode String @default("EQUIVALENT")
+  substitutionMode  String      @default("EQUIVALENT")
   /// when EXACT, the product the shopper pinned
-  pinnedProductId  Int?
+  pinnedProductId   Int?
   /// what they actually want, which may differ from the pinned product's pack
   requestedQuantity Float?
   requestedUnit     String?
@@ -851,19 +909,19 @@ model GroceryListItem {
 /// A canonical shopper NEED rather than a product: "ouă mărimea L, 10 buc".
 /// Two products in the same class are interchangeable for someone who wants that need met.
 model EquivalenceClass {
-  id        Int       @id @default(autoincrement())
-  slug      String    @unique
+  id         Int       @id @default(autoincrement())
+  slug       String    @unique
   /// Romanian label shown to shoppers
-  label     String
-  section   String    @default("grocery")
+  label      String
+  section    String    @default("grocery")
   /// canonical unit + size for the class ("buc"/10, "l"/1, "kg"/0.5)
-  unit      String    @default("buc")
-  unitSize  Float     @default(1)
+  unit       String    @default("buc")
+  unitSize   Float     @default(1)
   /// JSON of the attributes that actually DISTINGUISH variants within this need,
   /// e.g. { "size": "L", "type": "oua de gaina" } — not a description, a discriminator
   attributes String?
-  products  Product[]
-  createdAt DateTime  @default(now())
+  products   Product[]
+  createdAt  DateTime  @default(now())
 
   @@index([section])
 }
@@ -952,26 +1010,26 @@ model PendingMatch {
   section    String   @default("grocery")
 
   /// enough of the store product to decide without re-scraping or opening the merchant
-  storeName  String
-  storeBrand String?
+  storeName      String
+  storeBrand     String?
   storePriceBani Int
-  storeUrl   String?
-  storeImage String?
+  storeUrl       String?
+  storeImage     String?
 
   /// 0..1 from the matcher, and the rule that produced it ("low-overlap", "mutually-distinct")
-  score      Float
-  reason     String
+  score  Float
+  reason String
 
   /// resolved rows are kept, not deleted: a rejected pairing is evidence about the matcher
-  resolved   Boolean  @default(false)
-  decision   String?
-  decidedAt  DateTime?
+  resolved          Boolean   @default(false)
+  decision          String?
+  decidedAt         DateTime?
   /// Where this sat in the ranked queue when it was decided (1 = top).
   ///
   /// Recorded because confirm rate is only interpretable against position: if the top 100 by
   /// value confirm at 30% and the tail confirms at 3%, the queue is worth working through in
   /// order and abandoning early. Without the rank, a single blended rate hides that entirely.
-  rankAtDecision Int?
+  rankAtDecision    Int?
   /// Snapshot of the ranking inputs at decision time, so a later change to rankValue cannot
   /// silently rewrite the history that judged it.
   createdComparison Boolean?
@@ -996,13 +1054,13 @@ model PendingMatch {
 /// Carts live in localStorage, so this is written by an explicit API call on add rather than
 /// derived from GroceryListItem — which only exists for saved, server-side lists.
 model UserProductAdd {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId Int
-  product   Product  @relation(fields: [productId], references: [id])
-  count     Int      @default(1)
-  lastAddedAt DateTime @default(now())
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product   @relation(fields: [productId], references: [id])
+  count        Int       @default(1)
+  lastAddedAt  DateTime  @default(now())
   /// NULL for rows written before this column existed — same "not recorded, never guessed"
   /// posture as distinctDays below. Needed to compute a real repurchase INTERVAL
   /// (lastAddedAt - firstAddedAt) / (distinctDays - 1); without it there is a count and a most

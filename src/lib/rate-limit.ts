@@ -74,6 +74,10 @@ export const LIMITS = {
   /** Account creation. One person needs one; twenty an hour is already generous for a site
    *  with no signups yet, and the cost of being wrong is a table full of junk accounts. */
   register: { max: 5, windowMs: 60 * 60_000, sharedMax: 20 },
+  /** Password-reset requests. As tight as login — an unbounded "forgot password" endpoint is
+   *  an email-enumeration oracle (does this address have an account?) even if it never reveals
+   *  the answer directly, because response TIMING and rate differ once an account is created. */
+  passwordReset: { max: 5, windowMs: 15 * 60_000, sharedMax: 30 },
   /** Anonymous list-add pings. A real shopper fills a basket in bursts, and the per-caller
    *  cap in `lib/list-adds.ts` is what actually protects the ranking. */
   listAdd: { max: 120, windowMs: 60_000, sharedMax: 2_400 },
