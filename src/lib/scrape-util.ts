@@ -1210,12 +1210,33 @@ export async function matchPoolToCatalog(
   // property of the MERCHANT (2 of 16 today), not a hand-picked slug list. Widening this past
   // physical-only merchants is a separate decision, needing a way to tell the two causes above
   // apart first; it is not made here.
-  const isPhysicalOnlyMerchant = merchant?.storeType === "physical";
+  //
+  // ── WINEMAG IS THE FIRST NAMED EXCEPTION, AND IT IS A HAND-PICKED SLUG — DELIBERATELY, FOR A
+  // MEASURED REASON THE PHYSICAL-ONLY RULE CANNOT EXPRESS.
+  //
+  // audit:db's fan-out check went red the first night WineMag's full 22-category catalog
+  // landed: Auchan hit max 9 (a pre-existing, unrelated "Paste Di Bari" pasta-shape cluster —
+  // see withhold-auchan-paste-di-bari.ts) and WineMag hit max 16. Measured per CLAUDE.md's own
+  // rule rather than assumed: grouping WineMag's own live offers by productUrl, 337 of its
+  // ~6,950 distinct store items (772 of ~7,400 offers, ~10%) clear decide()'s gate against 2+
+  // DIFFERENT real catalog products — "Purcari 1827 Chardonnay" scoring as a plausible match for
+  // "Purcari Nocturne Chardonnay" AND "Purcari Sapiens Chardonnay" too, because a producer's own
+  // product LINE name ("1827", "Nocturne", "Sapiens") is exactly a CATALOG DUPLICATE in shape
+  // (same brand + head noun + size) while being semantically a real variant, the same blindness
+  // the comment above names for "L'Oreal Casting Creme 500 vs 613".
+  //
+  // This is the TRUE-fan-out case the rule exists for, not the catalog-duplicate case it must
+  // leave alone — and extending the rule here is safe in a way catalog-wide was measured NOT to
+  // be: WineMag's own cross-merchant match rate is ~0.4-0.7% of its pool (most of its catalog is
+  // `addNew`, standalone), so withholding its ambiguous matches costs almost none of the
+  // comparability the catalog-wide measurement found too expensive to give up.
+  const FANOUT_WITHHOLD_SLUGS = new Set(["winemag"]);
+  const withholdFanoutForThisMerchant = merchant?.storeType === "physical" || (merchant?.slug != null && FANOUT_WITHHOLD_SLUGS.has(merchant.slug));
   let fanoutGroups = 0;
   let fanoutOffersWithheld = 0;
   for (const [c, oks] of okByStoreItem) {
     for (const { d } of oks) coverage.record(d);
-    if (oks.length > 1 && isPhysicalOnlyMerchant) {
+    if (oks.length > 1 && withholdFanoutForThisMerchant) {
       fanoutGroups++;
       fanoutOffersWithheld += oks.length;
       fanoutRefusedItems.add(c);
