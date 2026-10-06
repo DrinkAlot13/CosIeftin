@@ -448,7 +448,24 @@ export async function runAdapter(ad: Adapter): Promise<void> {
     await installEsbuildShim(page);
   }
 
+  // SET ONCE THE BROWSER ITSELF IS GONE, NOT JUST ONE NAVIGATION. A dead browser makes every
+  // remaining route's page.goto throw the same way a genuinely-empty category would (`items`
+  // stays [], the per-route loop `break`s, the route prints "+0"), and the run otherwise reads
+  // that as "these 18 categories happen to have nothing" instead of "the scraper stopped
+  // reading halfway through". Measured on WineMag's first run: headless Chromium disconnected
+  // after ~194 navigations over ~20 minutes, every category from that point on silently wrote
+  // "+0 (pool unchanged)", and the run still finished with exit 0 and 4,576 real-looking offers
+  // — missing 18 of 22 categories entirely, with nothing anywhere saying so.
+  let browserDied = false;
+  // Recycle the page periodically rather than running hundreds of navigations on one Page
+  // object. Measured cause, not a guess: WineMag's crash landed at navigation ~194 of a
+  // single long-lived page, and Playwright's own guidance is that a Page accumulates listeners
+  // and frame state across navigations that `goto` alone does not release.
+  let navCount = 0;
+  const RECYCLE_EVERY = 40;
+
   for (const route of routes) {
+    if (browserDied) break;
     let added = 0;
     for (let pg = 1; pg <= maxPages; pg++) {
       const url = pageUrl(route.url, pg, ad.pageSize);
@@ -471,7 +488,21 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           // rolled over the URL began returning a 322 KB 404 page that renders perfectly and
           // contains no product tiles. The run reported "0 products" — true, and completely
           // uninformative about why. Six days of that read the same as a quiet week.
-          const resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          // ONE RETRY ON A SLOW/TIMED-OUT NAVIGATION, before the per-browser-death check below
+          // ever sees it. WineMag's `whisky` category lost pages 4-30 to a single 45s timeout
+          // on page 4 — the browser was still alive (every later category read normally), so
+          // this was a one-off slow response, not the systemic failure `browserDied` exists to
+          // catch. Without a retry, that one slow page truncated a real category (706 items to
+          // 72) exactly as invisibly as a dead browser would have, just for a different reason.
+          let resp;
+          try {
+            resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          } catch (navErr) {
+            if (browser && !browser.isConnected()) throw navErr; // let the outer catch handle it
+            console.log(`  ${url.slice(0, 55)} nav error: ${(navErr as Error).message.slice(0, 40)} (retrying once)`);
+            await sleep(3000);
+            resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          }
           const status = resp?.status() ?? 0;
           if (status >= 400) {
             console.log(`  ${url.slice(0, 60)} → HTTP ${status} (route is gone, not empty)`);
@@ -482,9 +513,20 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           await page!.waitForTimeout(pg === 1 ? 3500 : 2000);
           if (process.env.FIXTURE_SAVE) saveFixture(ad.slug, `${(route.cat ?? "r")}-p${pg}`, await page!.content());
           items = await parseDom(page!, ad.dom!, route, ad, tally, coverage);
+          navCount++;
+          if (navCount % RECYCLE_EVERY === 0 && browser) {
+            await page!.close().catch(() => {});
+            const ctx = await browser.newContext({ userAgent: UA, locale: "ro-RO", viewport: { width: 1366, height: 900 } });
+            page = await ctx.newPage();
+            await installEsbuildShim(page);
+          }
         }
       } catch (e) {
         console.log(`  ${url.slice(0, 55)} error: ${(e as Error).message.slice(0, 50)}`);
+        if (browser && !browser.isConnected()) {
+          browserDied = true;
+          routeErrors.push(`browser disconnected at ${route.cat ?? route.url} page ${pg}`);
+        }
         break;
       }
       if (items.length === 0) break;
@@ -508,6 +550,28 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   coverage.report(ad.slug);
   tally.reportAndRaise();
   console.log(`Pooled ${pool.length} ${ad.name} products.`);
+
+  // THE SAME REFUSAL AS `pool.length === 0`, FOR A DIFFERENT REASON: a non-empty pool from a
+  // run whose browser died partway through is not "fewer products", it is "the categories read
+  // after the crash were never actually checked". Writing it would look identical to a clean,
+  // complete run — a 4,576-offer WineMag with 18 of 22 categories silently missing passed every
+  // existing check, because every check that reads `pool`/`offersWritten` only sees what the
+  // crash left behind, never what it skipped.
+  if (browserDied) {
+    const dead = await prisma.merchant.findUnique({ where: { slug: ad.slug }, select: { id: true, lastOfferCount: true } });
+    if (dead) {
+      await recordScraperRun({
+        merchantId: dead.id, startedAt, aborted: true,
+        abortReason: `browser died mid-run — ${pool.length} products pooled before the crash is incomplete, not final (${routeErrors.slice(0, 2).join("; ")})`,
+        previousRunCount: dead.lastOfferCount ?? 0,
+      });
+    }
+    if (browser) await browser.close().catch(() => {});
+    console.error(`[${ad.slug}] browser died mid-run — refusing to write a partial catalog as if it were complete (run recorded as aborted).`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+
   if (pool.length === 0) {
     // REFUSING TO WRITE OFFERS IS RIGHT. REFUSING TO RECORD THE FAILURE IS NOT.
     //

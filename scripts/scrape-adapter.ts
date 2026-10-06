@@ -5,9 +5,10 @@ import { auchan } from "./adapters/auchan";
 import { penny } from "./adapters/penny";
 import { selgros } from "./adapters/selgros";
 import { dm } from "./adapters/dm";
+import { winemag } from "./adapters/winemag";
 import type { Adapter } from "./adapters/types";
 
-const ALL: Record<string, Adapter> = { auchan, penny, selgros, dm };
+const ALL: Record<string, Adapter> = { auchan, penny, selgros, dm, winemag };
 
 async function main() {
   const name = process.argv[2];

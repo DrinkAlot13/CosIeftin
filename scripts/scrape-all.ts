@@ -31,7 +31,18 @@ import { ensureBackup } from "../src/lib/ensure-backup";
 // `dm` JOINED after the `cosmetice` section was found to have exactly one merchant (Farmacia
 // Tei) — see `scripts/adapters/dm.ts` for why Dr. Max/Sensiblu/Catena were investigated and
 // ruled out first. ~11,000 products via a clean JSON batch API, no anti-bot wall.
-const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "selgros", "platform", "dm"];
+//
+// `winemag` JOINED for the same reason on the `alcohol` side: FineStore and Le Manoir are real
+// but small (284 and 92 live offers), so most comparisons there were really "Carrefour vs
+// nothing". See `scripts/adapters/winemag.ts` — 22 category routes, 5s between requests
+// (its own robots.txt crawl-delay), so this one step alone takes ~25-30 minutes.
+//
+// `king` JOINED alongside it as a second, DIFFERENT alcohol catalog (premium/curated, not a
+// duplicate of WineMag's broader one) — see `scripts/scrape-king.ts`. It is NOT run through
+// `scripts/scrape-adapter.ts` because its data doesn't fit either declarative `mode`: it's a
+// schema.org Product array embedded as one JSON-LD blob per HTML page, not a bare JSON body
+// and not DOM tiles.
+const AFTER_AUCHAN = ["freshful", "megaimage", "carrefour", "metro", "sezamo", "finestore", "lemanoir", "carrefour-alcohol", "dcneu", "farmaciatei", "kaufland", "penny", "selgros", "platform", "dm", "winemag", "king"];
 
 function run(script: string): boolean {
   const r = spawnSync("npm", ["run", script], { stdio: "inherit", shell: true });
