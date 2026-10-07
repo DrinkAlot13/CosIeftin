@@ -18,6 +18,12 @@
 //     for nothing else. The identity-verification section below is UNCHANGED for any account
 //     with no e-mail on file: username still proves nothing about who someone is, so the same
 //     "ask for more, then refuse if we can't confirm" process still applies to those accounts.
+//   · UPDATED 2026-10-07 (same day, second change): access/portability/erasure are now
+//     SELF-SERVE from /cont ("Descarcă datele mele" / "Șterge contul"), not e-mail-only. Both
+//     buttons call the exact same `src/lib/account-gdpr.ts` functions the admin CLI scripts
+//     (`export:user` / `erase:user`) call — one implementation, not two that could drift.
+//     Deletion re-asks for the password even though the shopper is already signed in, because
+//     an active session is also what a stolen-but-still-valid session already has.
 //   · 89.9% of product images are hotlinked from 18 third-party hosts. The proxy was never
 //     built, so that section is generated FROM THE DATABASE and is true on the day it renders.
 //   · `UserBlocklist` and `GroceryList` are declared in the schema and written by NOTHING.
@@ -200,17 +206,30 @@ export default async function ConfidentialitatePage() {
 
       <h2>Drepturile tale</h2>
       <p>
-        Scrie-ne la <a href={`mailto:${CONTACT}?subject=Date%20personale`}>{CONTACT}</a> și
-        răspundem în cel mult 30 de zile. Poți cere:
+        <b>Acces și portabilitate</b> le poți face singur, chiar acum, din{" "}
+        <Link href="/cont" style={{ color: "var(--primary)" }}>pagina de cont</Link>: butonul
+        „Descarcă datele mele" îți dă instant un fișier cu tot ce avem despre contul tău.{" "}
+        <b>Ștergerea</b> contului e tot acolo — e definitivă și nu putem să o anulăm, de-aia îți
+        cerem parola din nou înainte să o confirmăm.
+      </p>
+      <p>
+        Pentru restul, scrie-ne la <a href={`mailto:${CONTACT}?subject=Date%20personale`}>{CONTACT}</a>{" "}
+        și răspundem în cel mult 30 de zile. Poți cere:
       </p>
       <ul className="legal-list">
-        <li><b>Acces</b> — ce date avem despre tine.</li>
         <li><b>Rectificare</b> — să corectăm ce este greșit.</li>
-        <li><b>Ștergere</b> — îți ștergem contul și tot ce e legat de el: favorite, liste, contoare. Ștergerea este definitivă și nu putem să o anulăm.</li>
-        <li><b>Portabilitate</b> — îți trimitem datele într-un fișier pe care îl poți lua cu tine.</li>
         <li><b>Opoziție</b> — să nu mai prelucrăm datele tale.</li>
+        <li>
+          <b>Acces, portabilitate sau ștergere pe e-mail</b> — dacă preferi să nu folosești
+          butoanele din cont, sau nu mai poți intra în cont.
+        </li>
       </ul>
       <h3>Cum verificăm că ești tu</h3>
+      <p>
+        Dacă folosești butoanele din pagina de cont, identitatea e deja verificată — ești
+        autentificat, și ștergerea îți cere parola din nou. Întrebarea de mai jos se pune doar
+        pentru o cerere făcută pe e-mail, de cineva care nu (mai) poate intra în cont.
+      </p>
       <p>
         E-mailul fiind opțional, multe conturi tot nu au unul — pentru acelea,{" "}
         <b>nu putem verifica cine ești după adresa de la care ne scrii</b>, pentru că nu există
@@ -237,9 +256,7 @@ export default async function ConfidentialitatePage() {
       </ul>
       <p>
         Resetarea parolei o poți face singur din pagina de autentificare, dacă ai adăugat un
-        e-mail pe cont. Momentan nu există un buton de ștergere a contului în interfață: cererea
-        de ștergere se face prin e-mail la noi, iar ștergerea o facem manual. Preferăm să spunem
-        asta decât să promitem un buton care nu există.
+        e-mail pe cont.
       </p>
       <p>
         Dacă nu ești mulțumit de răspunsul nostru, te poți adresa{" "}

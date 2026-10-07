@@ -74,19 +74,26 @@ describe("erasure — the schema, not just the tool, has to be able to delete a 
 
   // ── THE REGISTER OF WHAT ERASURE COVERS, kept honest from the other side.
   //
-  // `erase:user` names the models it clears. If a new one gains `userId` and the schema
-  // cascades it, the database will erase it — but the operator's report would silently stop
-  // matching what was deleted, and a person told "we erased 4 things" while 5 went is being
-  // told something false. So the tool has to mention every one of them.
-  it("erase:user mentions every model that holds a userId", () => {
-    const tool = readFileSync(join(process.cwd(), "scripts", "erase-user.ts"), "utf8");
+  // `eraseUserAccount`/`eraseUserAccountDryRun` (src/lib/account-gdpr.ts) name the models they
+  // clear. If a new one gains `userId` and the schema cascades it, the database will erase it —
+  // but the report a person receives would silently stop matching what was deleted, and "we
+  // erased 4 things" while 5 went is being told something false. So the real implementation has
+  // to mention every one of them.
+  //
+  // Checks `account-gdpr.ts`, NOT `erase-user.ts` — the CLI script is now a thin wrapper (its
+  // own self-serve sibling, `POST /api/account/delete`, calls the exact same function) and no
+  // longer lists the models itself. Checking the wrapper's prose would have let this register
+  // go stale the moment the real logic moved, same shape as `audit:sitemap`'s copy of a
+  // predicate going stale the moment the thing it copied was fixed (CLAUDE.md).
+  it("account-gdpr.ts mentions every model that holds a userId", () => {
+    const lib = readFileSync(join(process.cwd(), "src", "lib", "account-gdpr.ts"), "utf8");
     const missing = ALL
       .filter((m) => m.name !== "User" && /^\s*userId\s/m.test(m.body))
       .map((m) => m.name)
-      .filter((name) => !tool.includes(name));
+      .filter((name) => !lib.includes(name));
     if (missing.length) {
       throw new Error(
-        `scripts/erase-user.ts does not mention: ${missing.join(", ")}. The database will ` +
+        `src/lib/account-gdpr.ts does not mention: ${missing.join(", ")}. The database will ` +
         `cascade them, but the report a person receives would not account for them.`,
       );
     }

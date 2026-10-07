@@ -6,6 +6,7 @@ import { BlocklistManager } from "@/components/BlocklistManager";
 import { SavingsCounter } from "@/components/SavingsCounter";
 import { BudgetSettings } from "@/components/BudgetSettings";
 import { PushSubscribe } from "@/components/PushSubscribe";
+import { DeleteAccount } from "@/components/DeleteAccount";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contul meu" };
@@ -68,6 +69,18 @@ export default async function ContPage({ searchParams }: { searchParams: { e?: s
       <section className="section">
         <div className="section-head"><h2 style={{ fontSize: 18 }}>Ce nu vreau să mi se sugereze</h2></div>
         <BlocklistManager />
+      </section>
+      <section className="section">
+        <div className="section-head"><h2 style={{ fontSize: 18 }}>Datele tale</h2></div>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Poți descărca tot ce avem despre contul tău, sau îl poți șterge definitiv — vezi{" "}
+          <Link href="/confidentialitate" style={{ color: "var(--primary)" }}>politica de confidențialitate</Link>{" "}
+          pentru detalii despre fiecare.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <a href="/api/account/export" className="btn btn-outline" download>⬇️ Descarcă datele mele</a>
+          <DeleteAccount />
+        </div>
       </section>
       <div style={{ height: 32 }} />
     </div>

@@ -1,54 +1,16 @@
 // ── ERASE ONE PERSON'S ACCOUNT AND EVERYTHING ATTACHED TO IT. GDPR Article 17.
 //
-// ── WHY THIS EXISTS AT ALL: `prisma.user.delete()` DOES NOT WORK.
-//
-// Measured, not assumed. A throwaway user with a favourite, a list, an add-counter row and a
-// blocklist entry was created and deleted:
-//
-//     prisma.user.delete({ where: { id } })
-//       → Foreign key constraint violated: `foreign key`
-//
-// None of the child relations declare `onDelete: Cascade`, so the delete is refused and the
-// account survives. Deleting the dependents first, in order, works — that is what this does.
-//
-// The privacy policy says we erase an account on request. Before this file, that promise was
-// backed by nothing: there was no delete endpoint, no admin action, and the obvious one-liner
-// fails. A policy promising erasure a codebase cannot perform is worse than no policy, so the
-// promise and the mechanism ship together.
-//
-// ── WHAT IS DELETED, and what deliberately is not.
-//
-//   User               the account: username and password hash
-//   GroceryList(Item)  saved lists tied to that user
-//   UserFavorite       hearted and inferred favourites
-//   UserBlocklist      things they never want suggested
-//   UserProductAdd     the per-person add counter that drives inferred favourites
-//   EquivalenceSuggestion  "this product is the same as that one" claims they submitted
-//   ProductReport      "this price/product is wrong" reports they submitted while signed in
-//   EquivalenceSuggestionVote  corroborations of OTHER shoppers' equivalence suggestions
-//   UserRecipe         recipes they submitted publicly
-//   PasswordResetToken reset links issued for this account, used or not
-//   SavingsEvent       the per-add savings snapshots behind the "saved this month" counter
-//   Budget             their monthly grocery budget, if they set one
-//   PushSubscription   browsers they enabled push notifications on
-//
-// NOT deleted: `ProductAddCount`. It is one row per PRODUCT holding a total, with no user, no
-// session and no timestamps per event — nothing in it refers to a person, and subtracting a
-// share of a counter would require knowing whose adds they were, which is exactly the data the
-// aggregate was designed not to keep.
-//
-// NOT deleted: `PriceAlert`. It is keyed by Telegram `chatId`, not by user id — the two are
-// never linked, so this script cannot find a person's alerts and must not guess. Erasing those
-// is `--telegram <chatId>`, run separately, because the identifier comes from a different
-// system and the operator has to supply it.
+// A THIN CLI WRAPPER over `src/lib/account-gdpr.ts`'s `eraseUserAccount` — the self-serve
+// `POST /api/account/delete` route calls the exact same function, so an admin erasing an
+// account by hand and a shopper deleting their own account can never disagree about what gets
+// deleted. See that file for what is and is not included, and why.
 //
 //   npm run erase:user -- --username someone          report only
 //   npm run erase:user -- --username someone --write
 //   npm run erase:user -- --telegram 123456789 --write
 
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/lib/db";
+import { eraseUserAccount, eraseUserAccountDryRun } from "../src/lib/account-gdpr";
 
 async function eraseAccount(username: string, write: boolean): Promise<void> {
   const user = await prisma.user.findUnique({ where: { username }, select: { id: true, username: true, createdAt: true, isAdmin: true } });
@@ -57,70 +19,19 @@ async function eraseAccount(username: string, write: boolean): Promise<void> {
     return;
   }
 
-  const lists = await prisma.groceryList.findMany({ where: { userId: user.id }, select: { id: true } });
-  const listIds = lists.map((l) => l.id);
-  const counts = {
-    lists: lists.length,
-    listItems: listIds.length ? await prisma.groceryListItem.count({ where: { listId: { in: listIds } } }) : 0,
-    favorites: await prisma.userFavorite.count({ where: { userId: user.id } }),
-    blocklist: await prisma.userBlocklist.count({ where: { userId: user.id } }),
-    productAdds: await prisma.userProductAdd.count({ where: { userId: user.id } }),
-    equivalenceSuggestions: await prisma.equivalenceSuggestion.count({ where: { userId: user.id } }),
-    productReports: await prisma.productReport.count({ where: { userId: user.id } }),
-    equivalenceSuggestionVotes: await prisma.equivalenceSuggestionVote.count({ where: { userId: user.id } }),
-    userRecipes: await prisma.userRecipe.count({ where: { userId: user.id } }),
-    passwordResetTokens: await prisma.passwordResetToken.count({ where: { userId: user.id } }),
-    savingsEvents: await prisma.savingsEvent.count({ where: { userId: user.id } }),
-    budget: await prisma.budget.count({ where: { userId: user.id } }),
-    pushSubscriptions: await prisma.pushSubscription.count({ where: { userId: user.id } }),
-  };
-
-  console.log(`  account   #${user.id}  ${user.username}  created ${user.createdAt.toISOString().slice(0, 10)}${user.isAdmin ? "  [ADMIN]" : ""}`);
-  for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(12)} ${v}`);
-
   if (!write) {
+    const counts = await eraseUserAccountDryRun(user.id);
+    console.log(`  account   #${user.id}  ${user.username}  created ${user.createdAt.toISOString().slice(0, 10)}${user.isAdmin ? "  [ADMIN]" : ""}`);
+    for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(12)} ${v}`);
     console.log(`\n  DRY RUN — nothing deleted. Re-run with --write.`);
     return;
   }
 
-  // ── ORDER IS THE WHOLE POINT. Children before parents, or the FK refuses the delete.
-  // Wrapped in a transaction so a half-erased account cannot exist: a person who asked to be
-  // forgotten and had four of five tables cleared is in a worse state than before they asked.
-  await prisma.$transaction(async (tx) => {
-    if (listIds.length) await tx.groceryListItem.deleteMany({ where: { listId: { in: listIds } } });
-    await tx.groceryList.deleteMany({ where: { userId: user.id } });
-    await tx.userFavorite.deleteMany({ where: { userId: user.id } });
-    await tx.userBlocklist.deleteMany({ where: { userId: user.id } });
-    await tx.userProductAdd.deleteMany({ where: { userId: user.id } });
-    await tx.equivalenceSuggestion.deleteMany({ where: { userId: user.id } });
-    await tx.productReport.deleteMany({ where: { userId: user.id } });
-    await tx.equivalenceSuggestionVote.deleteMany({ where: { userId: user.id } });
-    await tx.userRecipe.deleteMany({ where: { userId: user.id } });
-    await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
-    await tx.savingsEvent.deleteMany({ where: { userId: user.id } });
-    await tx.budget.deleteMany({ where: { userId: user.id } });
-    await tx.pushSubscription.deleteMany({ where: { userId: user.id } });
-    await tx.user.delete({ where: { id: user.id } });
-  });
-
-  // Verify from OUTSIDE the transaction: the account is gone only if a fresh read says so.
-  const left = await prisma.user.count({ where: { username } });
-  const orphans =
-    (await prisma.userFavorite.count({ where: { userId: user.id } })) +
-    (await prisma.userBlocklist.count({ where: { userId: user.id } })) +
-    (await prisma.userProductAdd.count({ where: { userId: user.id } })) +
-    (await prisma.equivalenceSuggestion.count({ where: { userId: user.id } })) +
-    (await prisma.productReport.count({ where: { userId: user.id } })) +
-    (await prisma.equivalenceSuggestionVote.count({ where: { userId: user.id } })) +
-    (await prisma.userRecipe.count({ where: { userId: user.id } })) +
-    (await prisma.groceryList.count({ where: { userId: user.id } })) +
-    (await prisma.passwordResetToken.count({ where: { userId: user.id } })) +
-    (await prisma.savingsEvent.count({ where: { userId: user.id } })) +
-    (await prisma.budget.count({ where: { userId: user.id } })) +
-    (await prisma.pushSubscription.count({ where: { userId: user.id } }));
-
-  console.log(`\n  ERASED. account rows remaining: ${left}, dependent rows remaining: ${orphans}`);
-  if (left > 0 || orphans > 0) {
+  const result = await eraseUserAccount(user.id);
+  console.log(`  account   #${user.id}  ${user.username}  created ${user.createdAt.toISOString().slice(0, 10)}${user.isAdmin ? "  [ADMIN]" : ""}`);
+  for (const [k, v] of Object.entries(result.counts)) console.log(`  ${k.padEnd(12)} ${v}`);
+  console.log(`\n  ERASED. account rows remaining: ${result.left}, dependent rows remaining: ${result.orphans}`);
+  if (result.left > 0 || result.orphans > 0) {
     console.error(`  ✗ SOMETHING SURVIVED. Do not report this account as erased.`);
     process.exitCode = 1;
   }
