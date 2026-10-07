@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { BlocklistManager } from "@/components/BlocklistManager";
 import { SavingsCounter } from "@/components/SavingsCounter";
 import { BudgetSettings } from "@/components/BudgetSettings";
+import { PushSubscribe } from "@/components/PushSubscribe";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contul meu" };
@@ -55,6 +56,10 @@ export default async function ContPage({ searchParams }: { searchParams: { e?: s
           <input type="email" name="email" defaultValue={user.email ?? ""} placeholder="adresa@exemplu.ro" aria-label="Adresa de e-mail" />
           <button className="btn btn-outline" type="submit">{user.email ? "Actualizează" : "Adaugă e-mail"}</button>
         </form>
+      </section>
+      <section className="section">
+        <div className="section-head"><h2 style={{ fontSize: 18 }}>Notificări</h2></div>
+        <PushSubscribe />
       </section>
       <section className="section">
         <div className="section-head"><h2 style={{ fontSize: 18 }}>Buget lunar</h2></div>

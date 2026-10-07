@@ -689,6 +689,28 @@ model User {
   passwordResetTokens        PasswordResetToken[]
   savingsEvents              SavingsEvent[]
   budget                     Budget?
+  pushSubscriptions          PushSubscription[]
+}
+
+/// One row per BROWSER the shopper enabled push on, not one per account — a person can (and
+/// does) have the site open on a phone and a laptop, and each is its own subscription with its
+/// own endpoint from the browser's push service (Chrome/Firefox's own servers, not ours). All
+/// three fields (`endpoint`, `p256dh`, `auth`) come from the browser's PushSubscription object
+/// verbatim; none of them are secrets we invented, and none of them identify a person on their
+/// own without the account they are attached to.
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The browser's own push-service URL for this subscription. Unique because re-subscribing
+  /// the SAME browser (e.g. after clearing permission and re-granting it) must update the row
+  /// rather than accumulate a dead duplicate nothing ever prunes.
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// A single-use, time-limited password-reset token. `tokenHash` (never the raw token) is what
@@ -924,14 +946,21 @@ model ProductAttribute {
 
 /// A product the shopper wants kept — explicitly hearted, or inferred from repeat buying.
 model UserFavorite {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId Int
-  product   Product  @relation(fields: [productId], references: [id])
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId           Int
+  product             Product  @relation(fields: [productId], references: [id])
   /// "EXPLICIT" (they hearted it) | "INFERRED" (bought 3+ times)
-  source    String   @default("EXPLICIT")
-  addedAt   DateTime @default(now())
+  source              String   @default("EXPLICIT")
+  addedAt             DateTime @default(now())
+  /// The lowest live price we already PUSHED a notification about for this favourite, in bani.
+  /// Null means never notified. Without this, the nightly push job would re-fire on the same
+  /// drop every single night it stays dropped — the same "a de-dup/throttle will eventually
+  /// hide the needed repeat" tradeoff is avoided here in the other direction: we WANT to
+  /// suppress repeats of the SAME drop, and only re-notify when the price falls FURTHER below
+  /// this reference, not merely remains below it.
+  lastPushedPriceBani Int?
 
   @@unique([userId, productId])
   @@index([userId])

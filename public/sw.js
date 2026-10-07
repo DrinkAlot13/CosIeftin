@@ -17,8 +17,12 @@
 //   • navigations  → network-first; cached page, then offline page, ONLY when actually offline.
 //   • static assets → cache-first (they're content-hashed by Next).
 //   • API/POST      → never cached; a stale basket total would be worse than an error.
+//
+// v4 adds push notifications — "a favourite just dropped", sent from scripts/notify-push.ts.
+// The payload is plain JSON (title/body/url); this worker's only job is to show it and open the
+// right page on click. No new caching behaviour.
 
-const VERSION = "cosmic-v3";
+const VERSION = "cosmic-v4";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const OFFLINE_URL = "/offline.html";
@@ -149,4 +153,43 @@ self.addEventListener("fetch", (event) => {
       })(),
     );
   }
+});
+
+// ── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────────────────────
+//
+// The payload is plain JSON, not the Push API's binary form — `event.data.json()` handles that.
+// A malformed or missing payload must not throw inside the handler (an uncaught error here
+// kills the whole event, not just the notification), so it falls back to a generic message
+// rather than showing nothing.
+self.addEventListener("push", (event) => {
+  let data = { title: "CosIeftin", body: "Ai o actualizare.", url: "/" };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    /* keep the fallback rather than show nothing */
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url },
+    }),
+  );
+});
+
+// Clicking the notification focuses an already-open tab on the right page rather than always
+// opening a new one — a shopper who already has the site open should not end up with two tabs.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/";
+  event.waitUntil(
+    (async () => {
+      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clientsList) {
+        if (client.url.includes(url) && "focus" in client) return client.focus();
+      }
+      return self.clients.openWindow(url);
+    })(),
+  );
 });

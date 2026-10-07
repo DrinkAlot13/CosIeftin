@@ -44,8 +44,9 @@
     "refresh": "npm run setup && npm run scrape:all",
     "nightly": "tsx scripts/nightly.ts",
     "nightly:logged": "sh scripts/nightly.sh",
-    "nightly:steps": "npm run backup && npm run scrape:all && npm run backfill:expired-offers -- --write && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run compute:home && npm run revalidate && npm run notify:alerts && npm run notify:digest",
+    "nightly:steps": "npm run backup && npm run scrape:all && npm run backfill:expired-offers -- --write && npm run set-store-economics && npm run scrape:dcneu-tiers && npm run backfill:namenorm && npm run index:compute && npm run compute:home && npm run revalidate && npm run notify:alerts && npm run notify:digest && npm run notify:push",
     "notify:digest": "tsx scripts/notify-digest.ts",
+    "notify:push": "tsx scripts/notify-push.ts",
     "soak:log": "tsx scripts/soak-log.ts",
     "soak:report": "tsx scripts/soak-report.ts",
     "backfill:namenorm": "tsx scripts/backfill-namenorm.ts",
@@ -228,13 +229,15 @@
     "next": "14.2.35",
     "nodemailer": "^10.0.15",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/web-push": "^3.6.4",
     "playwright": "^1.62.1",
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
