@@ -28,7 +28,7 @@ async function main() {
 
   const users = await prisma.user.findMany({
     where: { email: { not: null } },
-    select: { id: true, username: true, email: true },
+    select: { id: true, username: true, email: true, pushSubscriptions: { select: { id: true }, take: 1 } },
   });
   console.log(`[digest] ${users.length} account(s) with an e-mail on file.`);
 
@@ -39,6 +39,10 @@ async function main() {
 
     const [favourites, monthBani] = await Promise.all([listFavourites(u.id), monthlySavingsBani(u.id)]);
     const dropped = favourites.filter((f) => (f.dropPct ?? 0) > 0).slice(0, 5);
+    // Cross-promote push ONLY to someone who does not already have it — a shopper who already
+    // enabled push does not need to be told to go enable the thing they already enabled, every
+    // single week.
+    const hasPush = u.pushSubscriptions.length > 0;
 
     // NOTHING TO SAY IS A REASON TO STAY QUIET, NOT TO SEND AN EMPTY EMAIL. A digest with zero
     // drops and zero savings this month would train the recipient to stop opening it.
@@ -52,12 +56,14 @@ async function main() {
       ${monthBani > 0 ? `<p>Ai economisit <b>${(monthBani / 100).toFixed(2)} lei</b> luna asta comparând prețurile.</p>` : ""}
       ${dropped.length > 0 ? `<p>Produse favorite care s-au ieftinit:</p><ul>${rows}</ul>` : ""}
       <p><a href="${absoluteUrl("/lista")}">Vezi lista mea</a></p>
+      ${!hasPush ? `<p style="color:#666;font-size:13px;">Vrei să afli mai rapid, chiar în ziua în care se ieftinește? <a href="${absoluteUrl("/cont")}">Activează notificările</a> din pagina de cont.</p>` : ""}
     `);
     const text = [
       `Salut, ${u.username}!`,
       monthBani > 0 ? `Ai economisit ${(monthBani / 100).toFixed(2)} lei luna asta comparând prețurile.` : "",
       dropped.length > 0 ? `Produse favorite care s-au ieftinit:\n${dropped.map((f) => `- ${f.name} (-${f.dropPct!.toFixed(0)}%)`).join("\n")}` : "",
       absoluteUrl("/lista"),
+      !hasPush ? `Vrei să afli mai rapid? Activează notificările din pagina de cont: ${absoluteUrl("/cont")}` : "",
     ].filter(Boolean).join("\n\n");
 
     const ok = await sendEmail({ to: u.email, subject: "Rezumatul tău săptămânal — CosIeftin", html, text });
