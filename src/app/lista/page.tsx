@@ -16,8 +16,13 @@ export default async function ListaPage() {
   return (
     <div className="container">
       <div className="section" style={{ paddingBottom: 8 }}>
-        <h1 style={{ fontSize: 26 }}>🛒 Listele mele de cumpărături</h1>
-        <p className="muted">Ține mai multe liste, alege magazinele tale și îți spunem unde e cel mai ieftin — într-un magazin sau împărțit.</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: 26 }}>🛒 Listele mele de cumpărături</h1>
+            <p className="muted">Ține mai multe liste, alege magazinele tale și îți spunem unde e cel mai ieftin — într-un magazin sau împărțit.</p>
+          </div>
+          <Link href="/scanare" className="btn btn-outline" style={{ fontSize: 14, whiteSpace: "nowrap" }}>📷 Scanează</Link>
+        </div>
         {indexMonth && Math.abs(indexMonth.pct) >= 0.5 && (
           <p className="muted" style={{ fontSize: 13 }}>
             {indexMonth.pct > 0 ? "📈" : "📉"} Coșul de bază CosIeftin e cu <b>{Math.abs(indexMonth.pct).toFixed(1)}%</b>{" "}

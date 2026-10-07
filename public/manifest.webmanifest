@@ -18,6 +18,7 @@
   ],
   "shortcuts": [
     { "name": "Lista mea", "short_name": "Lista", "url": "/lista", "description": "Lista de cumpărături și unde e mai ieftină" },
-    { "name": "Mod magazin", "short_name": "În magazin", "url": "/lista/in-magazin", "description": "Ecranul pentru cât ești în magazin" }
+    { "name": "Mod magazin", "short_name": "În magazin", "url": "/lista/in-magazin", "description": "Ecranul pentru cât ești în magazin" },
+    { "name": "Scanează un produs", "short_name": "Scanează", "url": "/scanare", "description": "Scanează un cod de bare pentru a compara prețul" }
   ]
 }

@@ -67,6 +67,9 @@ export default async function HomePage() {
               <button type="submit">Caută</button>
             </form>
           </div>
+          <div style={{ marginTop: 8 }}>
+            <Link href="/scanare" className="btn btn-outline" style={{ fontSize: 14 }}>📷 Scanează un cod de bare</Link>
+          </div>
 
           <HomeBasket staples={basketStaples} />
 
