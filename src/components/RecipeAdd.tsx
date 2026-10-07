@@ -32,17 +32,22 @@ export function RecipeAdd({ slug, name, count }: { slug: string; name: string; c
   // No recipe here declares a base serving count, so this scales the recipe's own quantities
   // by a plain multiplier rather than claiming "for N people" — a number we do not actually have.
   const [multiplier, setMultiplier] = useState(1);
+  const [costMinimize, setCostMinimize] = useState(false);
+  const [totalPriceBani, setTotalPriceBani] = useState(0);
 
-  async function resolve() {
+  async function resolve(costMinimizeOverride?: boolean) {
+    const wantCheapest = costMinimizeOverride ?? costMinimize;
     setState("loading");
+    setCostMinimize(wantCheapest);
     try {
       const r = await fetch("/api/recipe/resolve", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug, multiplier }),
+        body: JSON.stringify({ slug, multiplier, costMinimize: wantCheapest }),
       });
-      const j = (await r.json()) as { lines?: Line[] };
+      const j = (await r.json()) as { lines?: Line[]; totalPriceBani?: number };
       setLines(j.lines ?? []);
+      setTotalPriceBani(j.totalPriceBani ?? 0);
       setState("preview");
     } catch {
       setState("idle");
@@ -104,10 +109,20 @@ export function RecipeAdd({ slug, name, count }: { slug: string; name: string; c
             altceva în loc.
           </p>
         )}
+        {totalPriceBani > 0 && (
+          <p style={{ fontSize: 14, fontWeight: 700, margin: "8px 0 0" }}>
+            Total {costMinimize ? "(cea mai ieftină variantă)" : ""}: {lei(totalPriceBani)}
+          </p>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-accent" onClick={commit}>
             Adaugă {lines.length - missing.length} în coș
           </button>
+          {!costMinimize && (
+            <button type="button" className="btn btn-outline" onClick={() => void resolve(true)}>
+              💰 Arată cea mai ieftină variantă
+            </button>
+          )}
           <button type="button" className="btn btn-outline" onClick={() => setState("idle")}>Renunță</button>
         </div>
       </div>
@@ -125,7 +140,7 @@ export function RecipeAdd({ slug, name, count }: { slug: string; name: string; c
           <option value={3}>3</option>
         </select>
       </label>
-      <button type="button" className="btn btn-outline" onClick={resolve} disabled={state === "loading"}>
+      <button type="button" className="btn btn-outline" onClick={() => void resolve()} disabled={state === "loading"}>
         {state === "loading" ? "Se caută…" : `🛒 Vezi ce alegem (${count})`}
       </button>
     </div>

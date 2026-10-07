@@ -123,7 +123,7 @@ export async function loadOfferExtras(offerIds: number[]): Promise<Map<number, O
 /** The shopper's own preferences. Anonymous callers get an empty, permissive context. */
 export async function loadUserContext(
   userId: number | null,
-  opts: { preferPrivateLabel?: boolean; hasLoyaltyCards?: boolean } = {},
+  opts: { preferPrivateLabel?: boolean; hasLoyaltyCards?: boolean; ignoreFavourites?: boolean } = {},
 ): Promise<UserContext> {
   const base: UserContext = {
     favouriteProductIds: new Set(),
@@ -136,8 +136,15 @@ export async function loadUserContext(
   };
   if (userId == null) return base;
 
+  // `ignoreFavourites` still loads the blocklist — a "cheapest possible" mode must still never
+  // suggest something the shopper explicitly blocked (an allergen, a brand they refuse), which
+  // is a safety/preference matter, not a ranking preference. Only favourites are a ranking
+  // preference, and `rank()` (resolve.ts) already degenerates to pure cheapest-first the moment
+  // both favourite sets are empty — no change needed there, only in what gets loaded here.
   const [favs, blocks] = await Promise.all([
-    prisma.userFavorite.findMany({ where: { userId }, select: { productId: true, source: true } }),
+    opts.ignoreFavourites
+      ? Promise.resolve([])
+      : prisma.userFavorite.findMany({ where: { userId }, select: { productId: true, source: true } }),
     prisma.userBlocklist.findMany({ where: { userId }, select: { productId: true, brand: true, attributeTag: true } }),
   ]);
   for (const f of favs) {

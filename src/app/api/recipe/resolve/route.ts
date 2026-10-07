@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const limited = guard("write", req);
   if (limited) return limited;
-  const body = (await req.json().catch(() => null)) as { slug?: unknown; preferPrivateLabel?: unknown; multiplier?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { slug?: unknown; preferPrivateLabel?: unknown; multiplier?: unknown; costMinimize?: unknown } | null;
   const slug = typeof body?.slug === "string" ? body.slug : "";
   const recipe = RECIPES.find((r) => r.slug === slug);
   if (!recipe) return NextResponse.json({ error: "Rețetă necunoscută." }, { status: 404 });
@@ -42,9 +42,17 @@ export async function POST(req: NextRequest) {
   });
   const bySlug = new Map(classes.map((c) => [c.slug, c]));
 
+  // "Cea mai ieftină variantă": ignore favourite/private-label ranking and let rank() (resolve.ts)
+  // degenerate to pure cheapest-per-unit, the same resolver every other mode uses — not a
+  // separate cost-minimization code path, which would be a second place this logic could drift
+  // from the first. The blocklist (allergens, refused brands) still applies either way.
+  const costMinimize = body?.costMinimize === true;
   const user = await getCurrentUser();
   const [ctx, offers] = await Promise.all([
-    loadUserContext(user?.id ?? null, { preferPrivateLabel: body?.preferPrivateLabel === true }),
+    loadUserContext(user?.id ?? null, {
+      preferPrivateLabel: !costMinimize && body?.preferPrivateLabel === true,
+      ignoreFavourites: costMinimize,
+    }),
     loadOffers({ classIds: classes.map((c) => c.id) }),
   ]);
 
@@ -90,11 +98,15 @@ export async function POST(req: NextRequest) {
     };
   });
 
+  const totalPriceBani = lines.reduce((sum, l) => sum + (l.chosen?.priceBani ?? 0), 0);
+
   return NextResponse.json({
     recipe: { slug: recipe.slug, name: recipe.name },
     signedIn: Boolean(user),
+    costMinimize,
     lines,
     resolved: lines.filter((l) => !l.unavailable).length,
     total: lines.length,
+    totalPriceBani,
   });
 }
