@@ -8,8 +8,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Chromium (with browser deps) is preinstalled here by the base image:
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Install ALL deps (build + scrapers need devDeps: tsx, prisma, playwright, typescript)
+# Install ALL deps (build + scrapers need devDeps: tsx, prisma, playwright, typescript).
+# `npm ci` runs the `postinstall: prisma generate` script, which needs prisma/schema.prisma
+# to exist already — copy it before package*.json's `npm ci`, not with the rest of the source.
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 # App source + build
