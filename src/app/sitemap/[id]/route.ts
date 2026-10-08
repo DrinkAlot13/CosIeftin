@@ -26,10 +26,23 @@ import { CHUNK, liveOfferWhere, sitemapCategoryWhere, sitemapChunkCount } from "
 
 export const revalidate = 3600;
 
-/** Pre-render every chunk at build time, as `generateSitemaps` used to. */
+/**
+ * Pre-render every chunk at build time, as `generateSitemaps` used to.
+ *
+ * The Docker build has no database — `DATABASE_URL` points at a runtime volume that does not
+ * exist until the container starts — so this query fails during `next build` in CI. Returning
+ * `[]` on that failure defers every chunk to on-demand generation at first request instead of
+ * failing the build; `dynamicParams` defaults to true, and `revalidate = 3600` above caches the
+ * result exactly as if it had been built ahead of time. A real local dev DB still gets this
+ * pre-rendered normally.
+ */
 export async function generateStaticParams(): Promise<{ id: string }[]> {
-  const n = await sitemapChunkCount();
-  return Array.from({ length: n }, (_, i) => ({ id: `${i}.xml` }));
+  try {
+    const n = await sitemapChunkCount();
+    return Array.from({ length: n }, (_, i) => ({ id: `${i}.xml` }));
+  } catch {
+    return [];
+  }
 }
 
 type Entry = { url: string; lastModified?: Date; changeFrequency: string; priority: number };

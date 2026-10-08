@@ -15,9 +15,23 @@ COPY package*.json ./
 COPY prisma ./prisma
 RUN npm ci
 
-# App source + build
+# App source + build. `next build` prerenders /_not-found, which reaches siteUrl() — and
+# siteUrl() deliberately throws rather than guess an origin outside development (see
+# src/lib/config/siteUrl.ts). SITE_URL must therefore be real at BUILD time too, not just at
+# container start; pass the actual production origin as a build arg, never a placeholder.
+ARG SITE_URL
+ENV SITE_URL=$SITE_URL
 COPY . .
-RUN npx prisma generate && npm run build
+
+# The homepage, /categorii and others query the database during static generation, and there
+# are no Prisma migrations (schema is applied with `prisma db push`) — so a build with no
+# DATABASE_URL at all fails outright, not just for the pages that can tolerate an empty catalog.
+# Push the real schema to a throwaway SQLite file so those queries hit a real, empty, correctly
+# shaped database — the same state a freshly deployed site is in before its first scrape — then
+# build against it. The runtime DATABASE_URL below (the mounted volume) replaces this entirely;
+# this file never leaves the build layer.
+ENV DATABASE_URL=file:/tmp/build.db
+RUN npx prisma generate && npx prisma db push --skip-generate && npm run build
 
 # Runtime
 ENV NODE_ENV=production

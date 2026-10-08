@@ -8,5 +8,6 @@ prisma/dev.db-journal
 data
 public/product-images
 *.md
+.env
 .env.local
 .DS_Store

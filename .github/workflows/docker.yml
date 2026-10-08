@@ -32,5 +32,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner }}/cosmic:latest
+          build-args: |
+            SITE_URL=https://cosieftin.ro
           cache-from: type=gha
           cache-to: type=gha,mode=max
