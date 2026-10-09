@@ -57,6 +57,18 @@ export const SOURCE_CAPABILITIES: Record<string, SourceCapabilities> = {
     hasProductUrls: false,
     note: "category tiles carry no <a>; using the category URL tripped the fabrication guard at 71.7%",
   },
+  // Same adapter (scripts/adapters/glovo.ts) as glovo-kaufland, same reason: category tiles
+  // carry no <a>, and pointing productUrl at the category page would trip the same fabrication
+  // guard. Missing here — not a measurement, an oversight — is exactly the "undeclared merchant"
+  // gap probe:links exists to surface rather than silently skip.
+  "glovo-penny": {
+    hasProductUrls: false,
+    note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
+  },
+  "glovo-profi": {
+    hasProductUrls: false,
+    note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
+  },
 };
 
 /** True when a null `productUrl` for this merchant is expected rather than a defect. */

@@ -49,7 +49,7 @@ const TIMEOUT_MS = 20_000;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CosMicLinkCheck/1.0 (+https://cosieftin.ro)";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Outcome = "ok" | "redirected-ok" | "not-found" | "soft-404" | "server-error" | "network";
+type Outcome = "ok" | "redirected-ok" | "not-found" | "soft-404" | "server-error" | "rate-limited" | "network";
 
 type Row = { url: string; status: number; finalUrl: string; outcome: Outcome };
 
@@ -64,6 +64,12 @@ function classify(status: number, requested: string, final: string): Outcome {
   if (status === 0) return "network";
   if (status === 404 || status === 410) return "not-found";
   if (status >= 500) return "server-error";
+  // A 429 is US sending requests too fast, not the link being wrong — the exact same reasoning
+  // this file already applies to a 5xx. King.ro's own scraper already honors Retry-After for
+  // this reason; this probe fired 50 requests at 250ms apart with no backoff and got 10 of them
+  // rate-limited, which then reported as "20% dead" — a merchant whose links are fine, flagged
+  // BROKEN because of how fast WE asked, not because of anything wrong with the URL.
+  if (status === 429) return "rate-limited";
   if (status >= 400) return "not-found";
   const reqPath = safePath(requested);
   const finPath = safePath(final);
@@ -131,7 +137,7 @@ async function main(): Promise<void> {
   console.log("═".repeat(104));
   console.log(`STORED PRODUCT LINKS, CHECKED AGAINST THE WORLD — ${sample} per merchant, rotating by date`);
   console.log("═".repeat(104));
-  console.log(`  ${"merchant".padEnd(16)} ${"live".padStart(7)} ${"checked".padStart(8)} ${"ok".padStart(5)} ${"redir".padStart(6)} ${"404".padStart(5)} ${"soft".padStart(5)} ${"5xx".padStart(4)} ${"net".padStart(4)} ${"dead%".padStart(7)}  verdict`);
+  console.log(`  ${"merchant".padEnd(16)} ${"live".padStart(7)} ${"checked".padStart(8)} ${"ok".padStart(5)} ${"redir".padStart(6)} ${"404".padStart(5)} ${"soft".padStart(5)} ${"5xx".padStart(4)} ${"429".padStart(4)} ${"net".padStart(4)} ${"dead%".padStart(7)}  verdict`);
 
   const perMerchant: Record<string, unknown>[] = [];
   const broken: string[] = [];
@@ -173,15 +179,17 @@ async function main(): Promise<void> {
 
     const count = (o: Outcome) => results.filter((x) => x.outcome === o).length;
     const ok = count("ok"), redir = count("redirected-ok"), nf = count("not-found");
-    const soft = count("soft-404"), srv = count("server-error"), net = count("network");
-    // A 5xx is the shop having a bad minute, not our link being wrong. Counted, not blamed.
+    const soft = count("soft-404"), srv = count("server-error"), rl = count("rate-limited"), net = count("network");
+    // A 5xx is the shop having a bad minute, not our link being wrong — and so is a 429: it is
+    // OUR request rate, not the link, so it is reported but never counted toward "dead".
     const dead = nf + soft;
     const rate = results.length ? dead / results.length : 0;
     const verdict = results.length < MIN_FOR_VERDICT
       ? `${results.length} checked — too few for a rate`
-      : rate > FAIL_RATE ? `BROKEN — ${(rate * 100).toFixed(0)}% of sampled links do not resolve` : "";
+      : rate > FAIL_RATE ? `BROKEN — ${(rate * 100).toFixed(0)}% of sampled links do not resolve`
+      : rl / results.length > 0.3 ? `rate-limited by the shop (${rl}/${results.length}) — re-run later, not a verdict on the links` : "";
 
-    console.log(`  ${m.slug.padEnd(16)} ${String(total).padStart(7)} ${String(results.length).padStart(8)} ${String(ok).padStart(5)} ${String(redir).padStart(6)} ${String(nf).padStart(5)} ${String(soft).padStart(5)} ${String(srv).padStart(4)} ${String(net).padStart(4)} ${(rate * 100).toFixed(1).padStart(6)}%  ${verdict}`);
+    console.log(`  ${m.slug.padEnd(16)} ${String(total).padStart(7)} ${String(results.length).padStart(8)} ${String(ok).padStart(5)} ${String(redir).padStart(6)} ${String(nf).padStart(5)} ${String(soft).padStart(5)} ${String(srv).padStart(4)} ${String(rl).padStart(4)} ${String(net).padStart(4)} ${(rate * 100).toFixed(1).padStart(6)}%  ${verdict}`);
 
     if (dead > 0) {
       for (const r of results.filter((x) => x.outcome === "not-found" || x.outcome === "soft-404").slice(0, 3)) {
@@ -192,7 +200,7 @@ async function main(): Promise<void> {
 
     perMerchant.push({
       merchant: m.slug, live: total, checked: results.length,
-      ok, redirected: redir, notFound: nf, soft404: soft, serverError: srv, network: net,
+      ok, redirected: redir, notFound: nf, soft404: soft, serverError: srv, rateLimited: rl, network: net,
       deadRate: Number(rate.toFixed(4)),
       samples: results.filter((x) => x.outcome === "not-found" || x.outcome === "soft-404").slice(0, 5).map((r) => ({ url: r.url, status: r.status, finalUrl: r.finalUrl })),
     });

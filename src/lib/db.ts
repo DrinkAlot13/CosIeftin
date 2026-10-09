@@ -48,7 +48,12 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 // case of two writers overlapping (e.g. a scrape run and an admin action): retry for 5s instead
 // of failing immediately. Guarded to sqlite only, so this stays harmless if DATABASE_URL is ever
 // switched to the postgres variant (schema.postgres.prisma) without this file being updated.
+// $queryRaw, not $executeRaw: SQLite's `PRAGMA x=value` form returns the new value as a result
+// row, and $executeRaw rejects any statement that returns rows ("Execute returned results,
+// which is not allowed in SQLite") — confirmed directly: $executeRawUnsafe threw that error for
+// both pragmas below while silently leaving the mode unchanged, and the try/catch here hid it
+// completely. $queryRawUnsafe is the correct call for a pragma whether or not it returns a row.
 if ((process.env.DATABASE_URL ?? "").startsWith("file:")) {
-  prisma.$executeRawUnsafe("PRAGMA journal_mode=WAL").catch((e) => console.error("[db] failed to enable WAL mode:", (e as Error).message));
-  prisma.$executeRawUnsafe("PRAGMA busy_timeout=5000").catch((e) => console.error("[db] failed to set busy_timeout:", (e as Error).message));
+  prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL").catch((e) => console.error("[db] failed to enable WAL mode:", (e as Error).message));
+  prisma.$queryRawUnsafe("PRAGMA busy_timeout=5000").catch((e) => console.error("[db] failed to set busy_timeout:", (e as Error).message));
 }
