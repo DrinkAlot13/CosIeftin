@@ -488,20 +488,30 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           // rolled over the URL began returning a 322 KB 404 page that renders perfectly and
           // contains no product tiles. The run reported "0 products" — true, and completely
           // uninformative about why. Six days of that read the same as a quiet week.
-          // ONE RETRY ON A SLOW/TIMED-OUT NAVIGATION, before the per-browser-death check below
-          // ever sees it. WineMag's `whisky` category lost pages 4-30 to a single 45s timeout
-          // on page 4 — the browser was still alive (every later category read normally), so
-          // this was a one-off slow response, not the systemic failure `browserDied` exists to
-          // catch. Without a retry, that one slow page truncated a real category (706 items to
-          // 72) exactly as invisibly as a dead browser would have, just for a different reason.
+          // RETRY ON A SLOW/TIMED-OUT NAVIGATION, before the per-browser-death check below ever
+          // sees it. WineMag's `whisky` category once lost pages 4-30 to a single 45s timeout on
+          // page 4 — the browser was still alive (every later category read normally), so that
+          // was a one-off slow response, not the systemic failure `browserDied` exists to catch.
+          // A single retry fixed that case, but on 2026-10-07/08 the site was slow enough —
+          // verified live, 17-19s for a page that used to load in a couple of seconds, one
+          // connection reset outright — that it burned through one retry too and collapsed the
+          // whole night's pool to 53%/43% of normal, correctly tripping the <60% abort. Three
+          // attempts with growing backoff gives a genuinely slow server room to recover without
+          // weakening that abort guard at all: it still refuses to write a collapsed pool, this
+          // only changes how often collecting the real pool actually succeeds.
           let resp;
-          try {
-            resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-          } catch (navErr) {
-            if (browser && !browser.isConnected()) throw navErr; // let the outer catch handle it
-            console.log(`  ${url.slice(0, 55)} nav error: ${(navErr as Error).message.slice(0, 40)} (retrying once)`);
-            await sleep(3000);
-            resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          let navAttempt = 0;
+          for (;;) {
+            try {
+              resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+              break;
+            } catch (navErr) {
+              if (browser && !browser.isConnected()) throw navErr; // let the outer catch handle it
+              navAttempt++;
+              if (navAttempt >= 3) throw navErr;
+              console.log(`  ${url.slice(0, 55)} nav error: ${(navErr as Error).message.slice(0, 40)} (retry ${navAttempt}/2)`);
+              await sleep(3000 * navAttempt);
+            }
           }
           const status = resp?.status() ?? 0;
           if (status >= 400) {
