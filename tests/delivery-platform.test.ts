@@ -108,13 +108,16 @@ describe("delivery-platform prices are hidden by default", () => {
 });
 
 describe("storefronts are config rows", () => {
-  // THESE PIN A DECISION, NOT A FACT, and the decision changed on 2026-09-09: Phase 2 measured
-  // merchant overlap as the binding constraint on comparability, so Penny and Profi were
-  // enabled. Updated deliberately rather than loosened — an assertion that reads
-  // `>= 1` would stop noticing a storefront enabled by accident, which is the whole job here.
-  it("exactly the three chosen storefronts are enabled", () => {
-    expect(enabledStorefronts().map((s) => s.storeSlug).sort())
-      .toEqual(["kaufland-buc", "penny-buc", "profi-buc"]);
+  // THESE PIN A DECISION, NOT A FACT. It changed twice: Penny and Profi were enabled on
+  // 2026-09-09 after Phase 2 measured merchant overlap as the binding constraint on
+  // comparability, and the remaining 4 (left disabled for "the owner decides whether to
+  // extend") were enabled on 2026-10-14 when the owner asked for every available source to be
+  // scraped. Updated deliberately rather than loosened — an assertion that reads `>= 1` would
+  // stop noticing a storefront enabled by accident, which is the whole job here.
+  it("exactly the seven discovered storefronts are enabled", () => {
+    expect(enabledStorefronts().map((s) => s.storeSlug).sort()).toEqual(
+      ["carrefour-buc", "carrefour-supermarket-buc", "freshful-buc", "kaufland-buc", "mega-image-buc", "penny-buc", "profi-buc"],
+    );
   });
 
   it("every discovered storefront is recorded, enabled or not", () => {

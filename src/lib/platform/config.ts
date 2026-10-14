@@ -63,11 +63,12 @@ export const STOREFRONTS: StorefrontConfig[] = [
   // renders "Această pagină nu există", which is why the suffix is not optional.
   { key: "glovo-profi-buc", platform: "glovo", merchantSlug: "glovo-profi", merchantName: "Profi (Glovo)", city: "bucharest", storeSlug: "profi-buc", section: "grocery", enabled: true },
 
-  // Discovered, deliberately NOT enabled. The owner decides whether to extend.
-  { key: "glovo-carrefour-buc", platform: "glovo", merchantSlug: "glovo-carrefour", merchantName: "Carrefour (Glovo)", city: "bucharest", storeSlug: "carrefour-buc", section: "grocery", enabled: false },
-  { key: "glovo-mega-buc", platform: "glovo", merchantSlug: "glovo-mega-image", merchantName: "Mega Image (Glovo)", city: "bucharest", storeSlug: "mega-image-buc", section: "grocery", enabled: false },
-  { key: "glovo-freshful-buc", platform: "glovo", merchantSlug: "glovo-freshful", merchantName: "Freshful (Glovo)", city: "bucharest", storeSlug: "freshful-buc", section: "grocery", enabled: false },
-  { key: "glovo-carrefour-sm-buc", platform: "glovo", merchantSlug: "glovo-carrefour-sm", merchantName: "Carrefour Supermarket (Glovo)", city: "bucharest", storeSlug: "carrefour-supermarket-buc", section: "grocery", enabled: false },
+  // Discovered, left disabled for "the owner decides whether to extend" until 2026-10-14,
+  // when the owner asked for every available source to be scraped. Enabled on that basis.
+  { key: "glovo-carrefour-buc", platform: "glovo", merchantSlug: "glovo-carrefour", merchantName: "Carrefour (Glovo)", city: "bucharest", storeSlug: "carrefour-buc", section: "grocery", enabled: true },
+  { key: "glovo-mega-buc", platform: "glovo", merchantSlug: "glovo-mega-image", merchantName: "Mega Image (Glovo)", city: "bucharest", storeSlug: "mega-image-buc", section: "grocery", enabled: true },
+  { key: "glovo-freshful-buc", platform: "glovo", merchantSlug: "glovo-freshful", merchantName: "Freshful (Glovo)", city: "bucharest", storeSlug: "freshful-buc", section: "grocery", enabled: true },
+  { key: "glovo-carrefour-sm-buc", platform: "glovo", merchantSlug: "glovo-carrefour-sm", merchantName: "Carrefour Supermarket (Glovo)", city: "bucharest", storeSlug: "carrefour-supermarket-buc", section: "grocery", enabled: true },
 ];
 
 export function enabledStorefronts(): StorefrontConfig[] {
