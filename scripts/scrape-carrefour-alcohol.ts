@@ -14,7 +14,11 @@ import { pickImageUrl } from "../src/lib/image-src";
 
 const BASE = "https://carrefour.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-const MAX_PAGES = 8;
+// Raised as a precaution after the main Carrefour scraper's own categories turned out to run
+// well past 8 pages (one stopped only once ?p=N started wrapping back to page 1 — see
+// scrape-carrefour.ts). The loop already stops early when a page adds nothing new, so this
+// costs nothing for a genuinely-short category.
+const MAX_PAGES = 30;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const CATS: { path: string; cat: string }[] = [
@@ -29,6 +33,10 @@ const CATS: { path: string; cat: string }[] = [
   { path: "bacanie-carrefour/bauturi-alcoolice/tequila", cat: "spirtoase" },
   { path: "bacanie-carrefour/bauturi-alcoolice/cognac", cat: "spirtoase" },
   { path: "bacanie-carrefour/bauturi-alcoolice/lichior-si-crema-de-whisky", cat: "lichior" },
+  // Missing until 2026-10-14: checked live against the "bauturi-alcoolice" nav. WineMag
+  // already tracks "bere" (scripts/adapters/winemag.ts), so this is a real cross-store
+  // comparison opportunity, not an orphan category.
+  { path: "bacanie-carrefour/bauturi-alcoolice/bere-artizanala", cat: "bere" },
 ];
 
 // Prices go through the ONE parser (CLAUDE.md → Prices).
@@ -75,25 +83,41 @@ async function main() {
     let catAdded = 0;
     for (let p = 1; p <= MAX_PAGES; p++) {
       if (p === MAX_PAGES) notePageCap(`${__filename.split(/[\/]/).pop()} page loop`, p, MAX_PAGES);
-      try {
-        await page.goto(`${BASE}/${c.path}${p > 1 ? `?p=${p}` : ""}`, { waitUntil: "domcontentloaded", timeout: 45000 });
-        await page.waitForTimeout(p === 1 ? 6000 : 3500);
-        const raw = await scrapePage();
-        if (raw.length === 0) break;
-        let pageAdded = 0;
-        for (const r of raw) {
-          const key = String(r.id ?? r.name);
-          if (!r.name || seen.has(key)) continue;
-          seen.add(key);
-          pool.push({ name: normVol(r.name), brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: pickImageUrl(r.imgAttrs, BASE), category: c.cat, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: c.path });
-          pageAdded++;
-          catAdded++;
+      // RETRY ON AN EMPTY PAGE, before trusting it. Confirmed on the sibling
+      // scrape-finestore.ts (same Playwright-through-Cloudflare shape): a real category
+      // returned 0 cards in a live scrape run while an isolated fresh check of the same URL,
+      // seconds later, found real cards. Confirmed NOT deterministic either — replaying the
+      // same navigation sequence succeeded — so a single retry is not reliable; 3 attempts
+      // with growing backoff, same shape as runner.ts's WineMag fix.
+      let raw: Awaited<ReturnType<typeof scrapePage>> = [];
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await page.goto(`${BASE}/${c.path}${p > 1 ? `?p=${p}` : ""}`, { waitUntil: "domcontentloaded", timeout: 45000 });
+          await page.waitForTimeout(p === 1 ? 6000 : 3500);
+          raw = await scrapePage();
+        } catch {
+          raw = [];
         }
-        if (pageAdded === 0) break;
-      } catch (e) {
-        console.log(`  ${c.path} p${p} eroare: ${(e as Error).message.slice(0, 40)}`);
-        break;
+        // Checking a USABLE price, not just a non-empty card list: the sibling
+        // scrape-finestore.ts fix found that its retry never fired because the cards WERE
+        // present with an empty price (staggered per-card hydration), so `raw.length > 0`
+        // alone is not a reliable signal here either.
+        const anyPriced = raw.some((r) => r.priceText && parsePriceLei(r.priceText) != null);
+        if (anyPriced || attempt === 3) break;
+        console.log(`  ${c.path} p${p} returned ${raw.length} card(s), none with a usable price — retrying (attempt ${attempt + 1}/3)`);
+        await page.waitForTimeout(2500 * attempt);
       }
+      if (raw.length === 0) break;
+      let pageAdded = 0;
+      for (const r of raw) {
+        const key = String(r.id ?? r.name);
+        if (!r.name || seen.has(key)) continue;
+        seen.add(key);
+        pool.push({ name: normVol(r.name), brand: r.brand, price: parsePriceLei(r.priceText) ?? 0, rawPriceText: r.priceText, productUrl: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, referencePriceBani: parsePriceDetailed(r.priceText).referencePriceBani ?? null, referencePriceKind: parsePriceDetailed(r.priceText).referencePriceKind ?? null, available: r.available, url: r.link ? (r.link.startsWith("http") ? r.link : BASE + r.link) : BASE, image: pickImageUrl(r.imgAttrs, BASE), category: c.cat, rawSourceBlob: JSON.stringify(r).slice(0, 4096), categoryPath: c.path });
+        pageAdded++;
+        catAdded++;
+      }
+      if (pageAdded === 0) break;
     }
     console.log(`  ${c.path.split("/").pop()!.padEnd(24)} +${catAdded} (pool ${pool.length})`);
     await sleep(1500);
