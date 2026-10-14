@@ -507,14 +507,31 @@ export async function runAdapter(ad: Adapter): Promise<void> {
           for (;;) {
             try {
               resp = await page!.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-              break;
             } catch (navErr) {
               if (browser && !browser.isConnected()) throw navErr; // let the outer catch handle it
               navAttempt++;
               if (navAttempt >= 3) throw navErr;
               console.log(`  ${url.slice(0, 55)} nav error: ${(navErr as Error).message.slice(0, 40)} (retry ${navAttempt}/2)`);
               await sleep(3000 * navAttempt);
+              continue;
             }
+            // A 429 IS NOT "THE ROUTE IS GONE" — it is the site saying we are going too fast,
+            // which `goto` resolves normally rather than throwing, so this never hit the
+            // navigation retry above at all. Confirmed live on 2026-10-14: a WineMag run under
+            // rate-limiting hit 429 on 9 of 25 categories, each one immediately abandoned by the
+            // `status >= 400` check below treating it the same as a real 404, and the whole
+            // night's pool collapsed to 56% of normal — correctly tripping the abort guard, but
+            // for a reason a retry could have fixed. Honor Retry-After when the site sends one.
+            if (resp?.status() === 429) {
+              navAttempt++;
+              if (navAttempt >= 3) break; // fall through to the status check below and give up
+              const retryAfter = Number(resp.headers()["retry-after"]);
+              const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 5000 * navAttempt;
+              console.log(`  ${url.slice(0, 55)} → HTTP 429, waiting ${Math.round(waitMs / 1000)}s (retry ${navAttempt}/2)`);
+              await sleep(waitMs);
+              continue;
+            }
+            break;
           }
           const status = resp?.status() ?? 0;
           if (status >= 400) {
