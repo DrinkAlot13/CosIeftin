@@ -25,12 +25,49 @@ const BASE = "https://produse.metro.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const STORE = "00036";
 const ROWS = 100; // search rows per page
-const MAX_PAGES = 45; // up to 4500 products/category
+// Raised from 45 after checking "alimentare"'s own totalPages (97) — but that cap turned out
+// not to be the real ceiling. See CATS below: Metro's search API itself refuses page 31 of any
+// single filter outright (`{"code":"page-too-high", "description":"The page number was too
+// high."}`), confirmed by paging one filter sequentially 1..40 — pages 1-30 all correctly
+// reported totalPages:97, then page 31 hard-errored. 150 stays as headroom for the narrower
+// per-subcategory filters below, none of which come close to it.
+const MAX_PAGES = 150;
 const BATCH = 20; // betty-variants ids per request
 
-// Broad category filters (category:<urlCategoryPath>). "alimentare" covers all food
-// incl. fresh; plus household + cosmetics for menaj matching.
-const CATS = ["alimentare", "nealimentare/produse-pentru-curatenie", "nealimentare/cosmetice"];
+// Broad category filters (category:<urlCategoryPath>).
+//
+// "alimentare" USED TO BE ONE FILTER for all food. Its own totalPages (97) is a real count, but
+// Metro's API will not actually SERVE past page 30 of any one filter — querying "alimentare"
+// sequentially always silently stopped at page 30 (3,000 of ~9,700 real products), no matter
+// how high MAX_PAGES was set. The fix is the same shape as Auchan's subcategory split: split
+// the one too-large filter into real subcategories, each comfortably under the 30-page ceiling
+// (checked live on 2026-10-14: the largest, dulciuri-snacks, is 14 pages). Household + cosmetics
+// stay as their own broad filters below — neither is anywhere near the ceiling.
+//
+// bauturi-alcoolice-vinuri-bere (alcohol), tutun-accesorii-si-tigari-electronice (tobacco) and
+// hrana-ingrijire-animale (pet food) are DELIBERATELY excluded: alcohol already has its own
+// scrapers for this section, tobacco is never scraped anywhere in this project, and no other
+// grocery merchant here sells pet products — scraping it would only add single-shop products
+// with nothing to ever compare them against.
+const CATS = [
+  "alimentare/bacanie",
+  "alimentare/bauturi-nealcoolice",
+  "alimentare/cafea-ceai-bauturi-instant",
+  "alimentare/carne",
+  "alimentare/cofetarie-patiserie",
+  "alimentare/congelate",
+  "alimentare/conserve",
+  "alimentare/dulciuri-snacks",
+  "alimentare/fructe-legume",
+  "alimentare/lactate",
+  "alimentare/mezeluri",
+  "alimentare/oua",
+  "alimentare/panificatie-sandwich-uri",
+  "alimentare/peste",
+  "alimentare/ready-meals",
+  "nealimentare/produse-pentru-curatenie",
+  "nealimentare/cosmetice",
+];
 
 // The pool IS the contract — no local shape, so no re-map at the matcher call.
 type Cand = StoreProduct;

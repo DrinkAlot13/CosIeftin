@@ -13,6 +13,7 @@ import { toPriceSource } from "../../src/lib/price-source";
 import { parsePriceLei, parsePriceDetailed, baniToLei } from "../../src/lib/price/parsePrice";
 import { ParseTally } from "../../src/lib/price/parseTally";
 import { parseEan } from "../../src/lib/product/ean";
+import { notePageCap } from "../../src/lib/truncation";
 import type { Adapter, DomMap, JsonMap, Route } from "./types";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
@@ -467,7 +468,9 @@ export async function runAdapter(ad: Adapter): Promise<void> {
   for (const route of routes) {
     if (browserDied) break;
     let added = 0;
+    let pagesRead = 0;
     for (let pg = 1; pg <= maxPages; pg++) {
+      pagesRead = pg;
       const url = pageUrl(route.url, pg, ad.pageSize);
       if (pg > 1 && !PAGED.test(route.url)) break;
       let items: StoreProduct[] = [];
@@ -552,6 +555,12 @@ export async function runAdapter(ad: Adapter): Promise<void> {
       await sleep(delay);
     }
     console.log(`  ${(route.cat ?? route.url.slice(-28)).padEnd(26)} +${added} (pool ${pool.length})`);
+    // THIS LOOP HAD NO INSTRUMENTATION AT ALL before this was added. Confirmed live against
+    // Auchan's own VTEX API: `maxPages: 8` (400 items/subcategory) was silently cutting 11 of
+    // 43 subcategories, one of them by 83% (2,349 real items, 400 read). A route that reads
+    // every page up to its cap without running dry is the only signal available that it might
+    // have more — see lib/truncation.ts.
+    notePageCap(`${ad.slug}:${route.cat ?? route.url}`, pagesRead, maxPages);
   }
   if (browser) await browser.close();
 

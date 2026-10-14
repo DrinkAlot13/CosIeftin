@@ -68,7 +68,14 @@ export const auchan: Adapter = {
   section: "grocery",
   addNew: true,
   mode: "json",
-  maxPages: 8,          // 8 × 50 = 400 products per subcategory; the runner stops on an empty page
+  // 8 × 50 = 400 products per subcategory was far too low: checked live against VTEX's own
+  // `resources: N-M/total` header for all 43 routes, 11 subcategories exceed 400 (one has
+  // 2,349), and nothing instrumented the runner to say so — it just looked like a smaller,
+  // valid catalog. Real max observed is 2,349 (47 pages); set well above it for growth. The
+  // runner still stops on an empty page, so this costs nothing for the categories that are
+  // genuinely small.
+  maxPages: 60,
+
   pageSize: PAGE_SIZE,
   delayMs: 700,
   routes: CATS.map(([id, cat]) => categoryRoute(id, cat)),
