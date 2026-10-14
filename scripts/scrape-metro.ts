@@ -67,7 +67,14 @@ const CATS = [
   "alimentare/ready-meals",
   "nealimentare/produse-pentru-curatenie",
   "nealimentare/cosmetice",
+  // Checked live on 2026-10-14: ~1,500 real products (15 pages, well under the 30-page API
+  // ceiling that forced the split above). King.ro, WineMag, Carrefour alcohol, FineStore and
+  // Le Manoir already feed the "alcohol" section, so this is a real cross-store comparison
+  // opportunity, not an orphan addition — split into its own matchPoolToCatalog call below
+  // with section: "alcohol" rather than mixed into the grocery pool.
+  "alimentare/bauturi-alcoolice-vinuri-bere",
 ];
+const ALCOHOL_CAT = CATS[CATS.length - 1];
 
 // The pool IS the contract — no local shape, so no re-map at the matcher call.
 type Cand = StoreProduct;
@@ -229,8 +236,12 @@ async function main() {
   });
   // Unmapped. The map that stood here listed the fields by hand, which is exactly how
   // productUrl and rawPriceText went missing the first time — the pool had them.
-  const r = await matchPoolToCatalog(merchant.id, pool, { addNew: true, label: "metro" });
-  console.log(`\nMetro: ${r.offers} offers (${r.created} new products) from pool ${pool.length}.`);
+  const alcoholPool = pool.filter((p) => p.categoryPath === ALCOHOL_CAT);
+  const groceryPool = pool.filter((p) => p.categoryPath !== ALCOHOL_CAT);
+  const r = await matchPoolToCatalog(merchant.id, groceryPool, { addNew: true, label: "metro" });
+  const ra = await matchPoolToCatalog(merchant.id, alcoholPool, { addNew: true, label: "metro-alcohol", section: "alcohol" });
+  console.log(`Metro alcohol: ${ra.offers} offers (${ra.created} new) from pool ${alcoholPool.length}.`);
+  console.log(`\nMetro: ${r.offers} offers (${r.created} new products) from pool ${groceryPool.length}.`);
   await prisma.$disconnect();
 }
 
