@@ -14,9 +14,18 @@ import { notePageCap } from "../src/lib/truncation";
 
 const BASE = "https://www.finestore.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-const MAX_PAGES = 12;
+// Checked live on 2026-10-14 after "whisky" hit this cap: real end is page 14 (34 cards),
+// 2 past the old cap. The loop already stops early on an empty page, so raising this is free.
+const MAX_PAGES = 25;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Checked live on 2026-10-14 against the homepage nav: 6 real category pages (21-57 products
+// each, not the stray product-detail/region-facet pages that nav also links) were missing —
+// calvados and armagnac (distinct spirits, not a subset of brandy/coniac), lambrusco/cava/
+// franciacorta (sparkling wines, same bucket as prosecco/sampanie), and apa-tonica (tonic water
+// — not alcoholic itself, but this is a dedicated spirits shop selling it as a cocktail mixer
+// alongside gin, the same reasoning as "bauturi-miniatura" already being in King.ro's list
+// despite being a format rather than a spirit type).
 const CATS = [
   { path: "whisky", cat: "whisky" },
   { path: "vin-rosu", cat: "vin" },
@@ -28,6 +37,8 @@ const CATS = [
   { path: "tequila", cat: "spirtoase" },
   { path: "coniac", cat: "spirtoase" },
   { path: "brandy", cat: "spirtoase" },
+  { path: "calvados", cat: "spirtoase" },
+  { path: "armagnac", cat: "spirtoase" },
   { path: "vermut-aperitiv", cat: "spirtoase" },
   { path: "traditionale-palinca", cat: "spirtoase" },
   { path: "traditionale-rachiu", cat: "spirtoase" },
@@ -36,6 +47,10 @@ const CATS = [
   { path: "sampanie", cat: "sampanie" },
   { path: "prosecco", cat: "sampanie" },
   { path: "vin-spumant", cat: "sampanie" },
+  { path: "lambrusco", cat: "sampanie" },
+  { path: "cava", cat: "sampanie" },
+  { path: "franciacorta", cat: "sampanie" },
+  { path: "apa-tonica", cat: "mixere" },
 ];
 
 /** "75cl" -> "750 ml" so parseSize can read the volume for cross-store matching. */
@@ -72,7 +87,15 @@ async function main() {
             // US-format, "2,033.39", and a naive parseFloat stops at the comma).
             const priceText = cart?.getAttribute("data-price") || "";
             const sku = cart?.getAttribute("data-sku") || "";
-            const links = [...card.querySelectorAll('a[href*=".html"]')];
+            // THE SITE MIXES TWO URL SHAPES. `a[href*=".html"]` matched whisky's product links
+            // but not vin-rosu's — confirmed live on 2026-10-14 by dumping a real card's HTML:
+            // its anchor is `/200-gallons-double-cask-reserva-alicante-bouschet-075l`, no
+            // extension at all. Filtering by ".html" silently dropped every card on any
+            // category using the other shape — not a timing issue, a wrong selector; the card
+            // always had price+sku, just never a name or href, so it read as "no usable price"
+            // for the wrong reason until this was traced. `.hmmcf_name a` is the theme's own
+            // dedicated name element and carries the product link regardless of its URL shape.
+            const links = [...card.querySelectorAll(".hmmcf_name a[href], .hmmcf_thumb a[href]")];
             let name = "";
             let href = "";
             for (const l of links) {
@@ -96,16 +119,32 @@ async function main() {
             return { priceText, sku, name, href, imgAttrs };
           }),
         );
-      try {
-        await page.goto(`${BASE}/${c.path}${p > 1 ? `?p=${p}` : ""}`, { waitUntil: "domcontentloaded", timeout: 45000 });
-        // Wait until product cards actually render (Cloudflare re-render / hydration can
-        // be slow and varies per page) rather than a fixed sleep.
-        const appeared = await page.waitForSelector(".fshr_inner .hmmcf_addtocart[data-price]", { timeout: 18000 }).then(() => true).catch(() => false);
-        await page.waitForTimeout(appeared ? 800 : 3000);
-        raw = await grab();
-      } catch (e) {
-        console.log(`  ${c.path} p${p} eroare: ${(e as Error).message.slice(0, 40)}`);
-        break;
+      // RETRY ON A PAGE WITH NO USABLE PRICE, before trusting it. Confirmed live on
+      // 2026-10-14: vin-rosu/vin-alb/vin-rose read `raw.length > 0` — the `.fshr_inner` cards
+      // ARE in the DOM — but every one still had an EMPTY price attribute, because Magento
+      // hydrates the `.hmmcf_addtocart[data-price]` widget inside each card independently and
+      // staggered, so `waitForSelector` seeing ONE card's widget appear does not mean every
+      // card's has. That made the original `raw.length > 0` retry condition wrong: it never
+      // fired, because there WAS a non-empty card list, just one with nothing parseable on it —
+      // a silent "every row fails its own price check" is exactly the shape CLAUDE.md's
+      // Prices section warns about. The real test is whether at least one card came back with
+      // a usable price. 3 attempts with growing backoff, same shape as runner.ts's WineMag fix.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await page.goto(`${BASE}/${c.path}${p > 1 ? `?p=${p}` : ""}`, { waitUntil: "domcontentloaded", timeout: 45000 });
+          // Wait until product cards actually render (Cloudflare re-render / hydration can
+          // be slow and varies per page) rather than a fixed sleep.
+          const appeared = await page.waitForSelector(".fshr_inner .hmmcf_addtocart[data-price]", { timeout: 18000 }).then(() => true).catch(() => false);
+          await page.waitForTimeout(appeared ? 800 : 3000);
+          raw = await grab();
+        } catch (e) {
+          console.log(`  ${c.path} p${p} eroare: ${(e as Error).message.slice(0, 40)}`);
+          raw = [];
+        }
+        const anyPriced = raw.some((r) => r.priceText && parsePriceLei(r.priceText) != null);
+        if (anyPriced || attempt === 3) break;
+        console.log(`  ${c.path} p${p} returned ${raw.length} card(s), none with a usable price — retrying (attempt ${attempt + 1}/3)`);
+        await page.waitForTimeout(2500 * attempt);
       }
       if (raw.length === 0) break;
       let pageAdded = 0;
