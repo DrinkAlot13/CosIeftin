@@ -33,6 +33,17 @@ const CATEGORIES: { slug: string; cat: string }[] = [
   { slug: "vinuri-rosii", cat: "vin-rosu" },
   { slug: "vinuri-roze", cat: "vin-roze" },
   { slug: "vinuri-spumante", cat: "vin-spumant" },
+  // Checked live on 2026-10-14 against the site's own llms.txt, which lists several categories
+  // never in this file: vinuri-bag-in-box (347 items — substantial, a real wine format, not a
+  // subset of the colour categories above) and vinuri-ecologice (34 — organic wines, may
+  // partially overlap the colour categories but the runner dedupes by url+name, so the only
+  // cost of any overlap is a few extra requests). cidru (cider, 1 item) is trivial but free.
+  // vinuri-import, vinuri-magnum, miniaturi, spirits, cafea, ceai, bauturi-fara-alcool and
+  // alimente were NOT verified — hit WineMag's own rate limiting (its anti-bot "Checking your
+  // browser" page) partway through checking these and backed off rather than push through it.
+  { slug: "vinuri-bag-in-box", cat: "vin" },
+  { slug: "vinuri-ecologice", cat: "vin" },
+  { slug: "cidru", cat: "cidru" },
   // Spirits — no shared parent category exists for these, so each is its own route.
   { slug: "coniac-2", cat: "coniac" },
   { slug: "rom", cat: "rom" },
