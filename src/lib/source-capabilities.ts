@@ -47,6 +47,7 @@ export const SOURCE_CAPABILITIES: Record<string, SourceCapabilities> = {
   penny: { hasProductUrls: true, note: "each card links to its own product page" },
   finestore: { hasProductUrls: true, note: "each card links to its own product page" },
   lemanoir: { hasProductUrls: true, note: "each card links to its own product page" },
+  selgros: { hasProductUrls: true, note: "own product sitemap, one real page per product" },
 
   // ── The two that legitimately have none. Both nulls are correct and deliberate.
   kaufland: {
@@ -69,6 +70,24 @@ export const SOURCE_CAPABILITIES: Record<string, SourceCapabilities> = {
     hasProductUrls: false,
     note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
   },
+  // The 4 storefronts enabled 2026-10-14 (src/lib/platform/config.ts) — same adapter, same
+  // category-tile shape, same reason.
+  "glovo-carrefour": {
+    hasProductUrls: false,
+    note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
+  },
+  "glovo-mega-image": {
+    hasProductUrls: false,
+    note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
+  },
+  "glovo-freshful": {
+    hasProductUrls: false,
+    note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
+  },
+  "glovo-carrefour-sm": {
+    hasProductUrls: false,
+    note: "category tiles carry no <a>; same fabrication-guard risk as glovo-kaufland",
+  },
 };
 
 /** True when a null `productUrl` for this merchant is expected rather than a defect. */
@@ -80,20 +99,25 @@ export function nullProductUrlIsExpected(merchantSlug: string): boolean {
  * ── A SECOND KIND OF "LESS THAN YOU'D EXPECT", AND IT ALSO NEEDS A DECLARATION.
  *
  * A low item count for a merchant reads as a broken scraper. For most merchants it is. For
- * these two it is the actual size of what the source publishes: Penny and Selgros have no
- * browsable online catalog, only a homepage deals/flyer carousel — documented in their own
- * adapters (`scripts/adapters/penny.ts`, `scripts/adapters/selgros.ts`) after someone already
- * checked for a fuller route and found none. A shopper comparing a 20-item cart against ~30-60
- * products sees "1/20" and reasonably reads it as this site being broken, when the honest
- * reading is "this store only ever shows up for a handful of items, by design of their own
- * website, not ours."
+ * this one it is the actual size of what the source publishes: Penny has no browsable online
+ * catalog, only a homepage deals carousel — documented in its own adapter
+ * (`scripts/adapters/penny.ts`) after someone already checked for a fuller route and found
+ * none. A shopper comparing a 20-item cart against ~30 products sees "1/20" and reasonably
+ * reads it as this site being broken, when the honest reading is "this store only ever shows up
+ * for a handful of items, by design of their own website, not ours."
+ *
+ * SELGROS WAS WRONGLY IN THIS LIST until 2026-10-14. The claim — "catalogul complet există doar
+ * cu cont de cumpărător en-gros" — was true of ORDERING in bulk, not of BROWSING the catalog,
+ * and got generalised from one to the other without anyone checking the public route directly.
+ * `/exploreaza-sortimentul-selgros` is a real, public, unauthenticated catalog of 16,755
+ * products with its own sitemap — see `scripts/scrape-selgros.ts`, which replaced the old
+ * homepage-carousel adapter entirely.
  *
  * Declared here rather than left in the adapter comments for the same reason as
  * `SOURCE_CAPABILITIES` above: a comment in a scraper file cannot reach a UI component.
  */
 export const LIMITED_CATALOG_MERCHANTS: Record<string, string> = {
   penny: "Penny nu publică un catalog online — doar oferta săptămânii curente (în jur de 30 de produse). Un coș complet aici e puțin probabil.",
-  selgros: "Selgros nu publică un catalog online public — doar vitrina de oferte de pe prima pagină (în jur de 50-60 de produse). Catalogul complet există doar cu cont de cumpărător en-gros.",
 };
 
 /** The honest-limitation note for this merchant, or null when it publishes a real catalog. */

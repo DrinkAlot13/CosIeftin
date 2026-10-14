@@ -1,3 +1,10 @@
+// SUPERSEDED 2026-10-14 by scripts/scrape-selgros.ts. This read only the homepage's ~64-card
+// "oferte" carousel because that was believed to be the whole public catalog — it is not: Selgros
+// publishes a real 16,755-product catalog with its own sitemap at `/exploreaza-sortimentul-
+// selgros`, no login required (see src/lib/source-capabilities.ts for the full story). Kept here,
+// not deleted, because the per-kg/per-piece price-unit reasoning below is real and may still be
+// relevant if the new scraper's product-page JSON-LD source ever needs a DOM fallback.
+//
 // Selgros România — cash&carry, server-rendered cards, and a price that is not a string.
 //
 // ── WHY THIS ADAPTER POOLED ZERO PRODUCTS, established by `npm run probe:selgros` rather than
