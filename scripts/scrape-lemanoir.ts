@@ -21,6 +21,14 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const MAX_PAGES = 15;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Checked live on 2026-10-14: "spirtoase" (and its two children) all 404 now — the site
+// renamed the whole spirits section to "bauturi-tari" — so this scraper had been getting ZERO
+// spirits data from Le Manoir for as long as that rename has stood, not a smaller catalog. The
+// new section also has 9 real subcategories that never existed under the old one. "sampanii"
+// is a separate top-level category from "vinuri/ampanii-vinuri-spumante" and was never scraped
+// either. gastronomie/produse-bio (cheese, pasta, caviar, truffles, …) are DELIBERATELY left
+// out: this scraper feeds the "alcohol" section, and no other merchant here compares gourmet
+// food products — adding them would only create single-shop orphans.
 const CATS = [
   { path: "vinuri/rosii.html", cat: "vin" },
   { path: "vinuri/albe.html", cat: "vin" },
@@ -28,9 +36,19 @@ const CATS = [
   { path: "vinuri/dulci.html", cat: "vin" },
   { path: "vinuri/ampanii-vinuri-spumante.html", cat: "sampanie" },
   { path: "vinuri/vinuri-de-porto.html", cat: "vin" },
-  { path: "spirtoase.html", cat: "spirtoase" },
-  { path: "spirtoase/whisky.html", cat: "whisky" },
-  { path: "spirtoase/cognac.html", cat: "spirtoase" },
+  { path: "sampanii.html", cat: "sampanie" },
+  { path: "bauturi-tari.html", cat: "spirtoase" },
+  { path: "bauturi-tari/whisky.html", cat: "whisky" },
+  { path: "bauturi-tari/cognac.html", cat: "spirtoase" },
+  { path: "bauturi-tari/gin.html", cat: "spirtoase" },
+  { path: "bauturi-tari/vodka.html", cat: "spirtoase" },
+  { path: "bauturi-tari/rum.html", cat: "spirtoase" },
+  { path: "bauturi-tari/tequila.html", cat: "spirtoase" },
+  { path: "bauturi-tari/calvados.html", cat: "spirtoase" },
+  { path: "bauturi-tari/armagnac.html", cat: "spirtoase" },
+  { path: "bauturi-tari/sake.html", cat: "spirtoase" },
+  { path: "bauturi-tari/liqueur.html", cat: "lichior" },
+  { path: "bauturi-tari/altele.html", cat: "spirtoase" },
 ];
 
 /** Turn "75cl"/"70 cl" into millilitres so parseSize can read the volume. */
