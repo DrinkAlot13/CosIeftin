@@ -35,6 +35,13 @@ const CATS = [
   "bacanie-carrefour/alimente/lapte-si-derivate-lapte-uht",
   "bacanie-carrefour/alimente/cafea/cafea-macinata",
   "bacanie-carrefour/alimente/cafea/cafea-boabe",
+  // Missing until 2026-10-14: found live-checking the "alimente" and "cafea" nav trees against
+  // this list. Coffee capsules/pods are a distinct leaf from ground/bean coffee, not a subset of
+  // either, and the bio tea leaf is a genuinely separate product set from regular tea (same
+  // pattern CLAUDE.md warns about: a curated list only covers what someone saw on the day they
+  // curated it).
+  "bacanie-carrefour/cafea/capsule-cafea",
+  "bacanie-carrefour/alimente/alimente-si-alimente-bio/ceai",
   "bacanie-carrefour/alimente/ceai",
   "bacanie-carrefour/alimente/cereale-si-musli",
   "bacanie-carrefour/alimente/prajituri",
@@ -77,7 +84,13 @@ const CATS = [
   "casa-gradina-si-petshop/produse-curatenie-pentru-casa/servetele-si-produse-din-hartie",
   "casa-gradina-si-petshop/produse-curatenie-pentru-casa/stergatoare-geam",
 ];
-const MAX_PAGES = 13; // ?p=1..13 (24/page); stops early when a page adds nothing new.
+// Checked live on 2026-10-14 after 6 categories hit this cap exactly: `?p=14` and beyond on a
+// 13-page category return the IDENTICAL first three product ids as page 1 — Magento clamps an
+// out-of-range page back to page 1 rather than erroring or emptying out, it does not reveal
+// more data. So those 6 were very likely already complete; the loop's own "pageAdded === 0 ->
+// break" already makes a higher cap free; it costs nothing for a genuinely-short category and
+// only helps if some other category's real last page sits above 13.
+const MAX_PAGES = 40; // ?p=1..40 (24/page); stops early when a page adds nothing new.
 
 // The pool IS a StoreProduct list — using the shared type means provenance fields
 // (rawPriceText, productUrl, reference price) can never be silently dropped here.

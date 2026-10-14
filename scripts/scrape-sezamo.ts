@@ -8,6 +8,7 @@
 
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
+import { notePageCap } from "../src/lib/truncation";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -18,12 +19,27 @@ const REQUEST_TIMEOUT_MS = 20_000;
 const BASE = "https://www.sezamo.ro";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const SIZE = 100; // productIds per listing page
-const MAX_PAGES = 30; // up to ~3000 products/category
+// Raised from 30 after it fired its own PAGE CAP warning on "bacanie": checked live by paging
+// straight through 25-40, the API serves real data with no hard ceiling (unlike Metro's
+// search API) — it just genuinely has ~3,376 items, 376 past the old cap. 60 leaves headroom.
+const MAX_PAGES = 60; // up to ~6000 products/category
 const BATCH = 40; // card ids per request
 const H = { "user-agent": UA, "accept-language": "ro-RO", accept: "application/json", referer: `${BASE}/` };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Top-level food categories (id -> slug), from the site navigation.
+//
+// Checked live on 2026-10-14: the homepage nav lists 19 top-level categories, and only 9 were
+// here. Six real, grocery-relevant categories were missing outright — bauturi (beverages),
+// curatenie-si-detergenti and menaj-si-birou (cleaning/household — matches the "menaj" category
+// other merchants already use), cosmetice, mama-si-copilul (baby, same reasoning as Freshful's
+// and Mega Image's inclusion) and nutritie-speciala — added below.
+//
+// pet-shop (639) is DELIBERATELY excluded: no other merchant here sells pet products, so it
+// would only add single-shop products with nothing to compare them against. Also left out:
+// back-to-school, bbq and an unlabeled collection — these read as seasonal/thematic promo
+// bundles cutting across the real categories above, not a distinct branch of the catalog, so
+// adding them risks only re-fetching products the real categories already reach.
 const CATS = [
   { id: 627, slug: "fructe-si-legume" },
   { id: 626, slug: "brutarie-si-patiserie" },
@@ -33,6 +49,12 @@ const CATS = [
   { id: 630, slug: "ready-to-eat-cook" },
   { id: 632, slug: "bacanie" },
   { id: 633, slug: "produse-congelate" },
+  { id: 634, slug: "bauturi" },
+  { id: 635, slug: "curatenie-si-detergenti" },
+  { id: 636, slug: "cosmetice" },
+  { id: 637, slug: "mama-si-copilul" },
+  { id: 638, slug: "menaj-si-birou" },
+  { id: 2364, slug: "nutritie-speciala" },
   { id: 2621, slug: "plant-based" },
 ];
 
@@ -45,10 +67,12 @@ async function getJson(url: string): Promise<any> {
   return r.json();
 }
 
-async function listCategory(catId: number): Promise<number[]> {
+async function listCategory(catId: number, slug: string): Promise<number[]> {
   const ids: number[] = [];
   const seen = new Set<number>();
+  let pagesRead = 0;
   for (let page = 0; page < MAX_PAGES; page++) {
+    pagesRead = page + 1;
     let data: any;
     try { data = await getJson(`${BASE}/api/v1/categories/normal/${catId}/products?page=${page}&size=${SIZE}&sort=recommended&filter=`); }
     catch { break; }
@@ -58,6 +82,7 @@ async function listCategory(catId: number): Promise<number[]> {
     if (pageIds.length < SIZE || added === 0) break; // last page
     await sleep(250);
   }
+  notePageCap(`sezamo:${slug}`, pagesRead, MAX_PAGES);
   return ids;
 }
 
@@ -118,7 +143,7 @@ async function main() {
   for (const c of CATS) {
     let catAdded = 0;
     try {
-      const ids = await listCategory(c.id);
+      const ids = await listCategory(c.id, c.slug);
       const cs = await cards(ids);
       // THE CATEGORY WE ARE ITERATING IS THE MERCHANT'S OWN ANSWER. Recording it here costs
       // nothing and beats any rule that later tries to infer it from the product name.

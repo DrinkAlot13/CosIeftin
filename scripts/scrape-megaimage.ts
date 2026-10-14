@@ -11,6 +11,7 @@ import { chromium, type Page } from "playwright";
 import { prisma } from "../src/lib/db";
 import { matchPoolToCatalog, type StoreProduct } from "../src/lib/scrape-util";
 import { readVariableWeight } from "../src/lib/price/variable-weight";
+import { notePageCap } from "../src/lib/truncation";
 
 // No request may hang forever. `fetch` waits on a stalled connection indefinitely, and one
 // such socket in the DCNeu detail pass stopped the whole nightly dead at 5,500 of 6,034
@@ -26,17 +27,28 @@ const PAGE_SIZE = 20; // the API rejects pageSize > 20 (HTTP 500), so we page th
 const MAX_PAGES = 65; // safety cap (up to 1300 products/category)
 
 // Top-level category code + URL path (plainChildCategories includes their subcategories).
+//
+// Checked live against the homepage nav on 2026-10-14: it lists 15 top-level categories, and
+// this had 10. Four were missing outright — 004 (frozen foods, a whole department), 010
+// (natural/healthy foods), 011 (baby/mother care) and 015 (seasonal) — added below. 014
+// (Animale-de-companie, pets) is DELIBERATELY left out: no other merchant here sells pet
+// products, so scraping it would only add single-shop products with nothing to ever compare
+// them against, the same reasoning Freshful's pet-shop/home-leisure exclusion uses.
 const CATS = [
   { code: "001", path: "Fructe-si-legume-proaspete" },
   { code: "002", path: "Lactate-si-oua" },
   { code: "003", path: "Mezeluri-carne-si-ready-meal" },
+  { code: "004", path: "Produse-congelate" },
   { code: "005", path: "Paine-cafea-cereale-si-mic-dejun" },
   { code: "006", path: "Dulciuri-si-snacks" },
   { code: "007", path: "Ingrediente-culinare" },
   { code: "008", path: "Apa-si-sucuri" },
   { code: "009", path: "Bauturi-si-tutun" },
+  { code: "010", path: "Natural-and-sanatos" },
+  { code: "011", path: "Mama-si-ingrijire-copil" },
   { code: "012", path: "Cosmetice-si-ingrijire-personala" },
   { code: "013", path: "Curatenie-si-nealimentare" },
+  { code: "015", path: "Produse-sezoniere" },
 ];
 
 // The pool IS the contract — no local shape, so no re-map at the matcher call.
@@ -120,7 +132,9 @@ async function main() {
   for (const c of CATS) {
     let totalPages = 1;
     let catAdded = 0;
+    let pagesRead = 0;
     for (let pn = 0; pn < MAX_PAGES; pn++) {
+      pagesRead = pn + 1;
       const json = await fetchPage(page, c.code, pn);
       if (!json || json.__err) { if (pn === 0) console.log(`  ${c.path.padEnd(38)} err ${json?.__err}`); break; }
       const { added, totalPages: tp } = extract(json, pool, seen, c.path);
@@ -130,6 +144,9 @@ async function main() {
       await sleep(300);
     }
     console.log(`  ${c.path.padEnd(38)} +${catAdded} (pool ${pool.length}, ${totalPages}p)`);
+    // The loop already stops on the site's OWN reported totalPages, so this only fires if a
+    // category genuinely has more than MAX_PAGES * PAGE_SIZE products — see lib/truncation.ts.
+    notePageCap(`mega-image:${c.path}`, pagesRead, MAX_PAGES);
     await sleep(300);
   }
   await browser.close();
