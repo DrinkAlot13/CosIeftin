@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { deliveryPlatformWhere } from "@/lib/platform/visibility";
 import { normalizeText } from "@/lib/matching";
 import { headNoun, overlapTokens, doseTokens } from "@/lib/scrape-util";
@@ -1044,22 +1045,33 @@ export async function countStats() {
   // Two numbers, both labelled. `comparable` only ever moves when a real cross-shop MATCH is
   // made; this one also moves when a class is written. They answer different questions and the
   // homepage prints both.
-  const classSpans = await prisma.equivalenceClass.findMany({
-    select: {
-      id: true,
-      products: {
-        where: { offers: { some: live } },
-        select: { id: true, offers: { where: live, select: { merchantId: true } } },
-      },
-    },
+  // Flat, not `equivalenceClass -> products -> offers` nested two deep — the same N+1 shape
+  // `getBiggestSpreads` had, just doubly nested here. Two flat queries joined in JS instead.
+  const classProducts = await prisma.product.findMany({
+    where: { equivalenceClassId: { not: null } },
+    select: { id: true, equivalenceClassId: true },
   });
+  const classByProduct = new Map(classProducts.map((p) => [p.id, p.equivalenceClassId as number]));
+  const classOffers = await prisma.offer.findMany({
+    where: { ...live, productId: { in: classProducts.map((p) => p.id) } },
+    select: { productId: true, merchantId: true },
+  });
+  const shopsByClass = new Map<number, Set<number>>();
+  const productsByClass = new Map<number, Set<number>>();
+  for (const o of classOffers) {
+    const classId = classByProduct.get(o.productId);
+    if (classId == null) continue;
+    if (!shopsByClass.has(classId)) shopsByClass.set(classId, new Set());
+    shopsByClass.get(classId)!.add(o.merchantId);
+    if (!productsByClass.has(classId)) productsByClass.set(classId, new Set());
+    productsByClass.get(classId)!.add(o.productId);
+  }
   const equivalentIds = new Set<number>();
-  for (const c of classSpans) {
+  for (const [classId, shops] of shopsByClass) {
     // A class earns its keep only if it reaches TWO SHOPS. One shop's products sharing a class
     // is a tidy catalog, not a comparison, and counting it would be the same inflation again.
-    const shops = new Set(c.products.flatMap((p) => p.offers.map((o) => o.merchantId)));
     if (shops.size < 2) continue;
-    for (const p of c.products) equivalentIds.add(p.id);
+    for (const id of productsByClass.get(classId) ?? []) equivalentIds.add(id);
   }
   const comparableIds = new Set(depth.filter((d) => d._count._all >= 2).map((d) => d.productId));
   for (const id of comparableIds) equivalentIds.add(id);
@@ -1070,6 +1082,33 @@ export async function countStats() {
 
 /** Alcohol storefront: products in the "alcohol" section, decorated + sorted, with
  *  optional category filter. Comparison across FineStore / Le Manoir. */
+/**
+ * Products for a whole section, each with its active offers attached — as TWO flat queries
+ * joined in JS, not `product.findMany({ include: { offers: activeInclude } })`.
+ *
+ * That nested form asks Prisma for each product's own filtered relation, which on SQLite comes
+ * back as one query PER PRODUCT rather than a join. Fine at a few thousand rows; at today's
+ * catalog size it is 10,000+ round-trips for one page load — `getAlcoholPage` measured 7s for
+ * /alcool after this session's merchant additions grew that section's catalog. Same fix as
+ * `getBiggestSpreads` above: fetch products and offers flat, group offers by productId in JS.
+ */
+async function productsWithActiveOffers(where: Prisma.ProductWhereInput) {
+  const products = await prisma.product.findMany({ where, include: { category: true } });
+  const ids = products.map((p) => p.id);
+  const offers = ids.length
+    ? await prisma.offer.findMany({
+        where: { productId: { in: ids }, merchant: { active: true } },
+        include: { merchant: true, tiers: { orderBy: { minQuantity: "asc" } } },
+      })
+    : [];
+  const offersByProduct = new Map<number, typeof offers>();
+  for (const o of offers) {
+    const arr = offersByProduct.get(o.productId);
+    if (arr) arr.push(o); else offersByProduct.set(o.productId, [o]);
+  }
+  return products.map((p) => ({ ...p, offers: offersByProduct.get(p.id) ?? [] }));
+}
+
 export async function getAlcoholPage(sort: SortKey = "price-asc", categorySlug?: string) {
   let categoryId: number | undefined;
   if (categorySlug) {
@@ -1077,10 +1116,7 @@ export async function getAlcoholPage(sort: SortKey = "price-asc", categorySlug?:
     if (!cat || cat.section !== "alcohol") return { products: [], categories: await getAlcoholCategories() };
     categoryId = cat.id;
   }
-  const products = await prisma.product.findMany({
-    where: { section: "alcohol", ...(categoryId ? { categoryId } : {}) },
-    include: { offers: activeInclude, category: true },
-  });
+  const products = await productsWithActiveOffers({ section: "alcohol", ...(categoryId ? { categoryId } : {}) });
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
   decorated.sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name, "ro");
@@ -1102,9 +1138,8 @@ export async function getSectionProducts(section: string, sort: SortKey = "price
     const c = await prisma.category.findUnique({ where: { slug: categorySlug } });
     if (c?.section === section) categoryId = c.id;
   }
-  const products = await prisma.product.findMany({
-    where: { section, ...(categoryId ? { categoryId } : {}), ...(q ? { name: { contains: q } } : {}) },
-    include: { offers: activeInclude, category: true },
+  const products = await productsWithActiveOffers({
+    section, ...(categoryId ? { categoryId } : {}), ...(q ? { name: { contains: q } } : {}),
   });
   const decorated = decorate(products).filter((p) => p.summary.offerCount > 0);
   decorated.sort((a, b) => {
@@ -1161,19 +1196,33 @@ export type SpreadRow = {
  */
 export async function getBiggestSpreads(limit = 12): Promise<SpreadRow[]> {
   const live = currentOfferWhere();
+  // ── TWO FLAT QUERIES, NOT ONE NESTED ONE.
+  //
+  // `product.findMany({ ..., select: { offers: { where, select } } })` asks Prisma to attach
+  // each product's own filtered offers — and on SQLite that comes back as one query PER
+  // PRODUCT, not a single join. At today's catalog size (59,378 grocery products with a live
+  // offer, 72,262 live offers) that is 59,378+ round-trips and the homepage hung for 10+
+  // seconds, every request, with zero bytes ever reaching the browser. A flat `offer.findMany`
+  // over the same rows, joined back to products by id in JS, reads the identical 72,262 rows
+  // in ~1.2s. Same filter, same output shape — only the query strategy changed.
+  const offers = await prisma.offer.findMany({
+    where: { ...live, product: { section: "grocery" } },
+    select: { productId: true, price: true, priceBani: true, merchant: { select: { name: true, slug: true } } },
+  });
+  const offersByProduct = new Map<number, typeof offers>();
+  for (const o of offers) {
+    const arr = offersByProduct.get(o.productId);
+    if (arr) arr.push(o); else offersByProduct.set(o.productId, [o]);
+  }
   const rows = await prisma.product.findMany({
-    where: { section: "grocery", offers: { some: live } },
-    select: {
-      id: true, slug: true, name: true, brand: true, image: true, unit: true, unitSize: true,
-      categoryId: true,
-      offers: { where: live, select: { price: true, priceBani: true, merchant: { select: { name: true, slug: true } } } },
-    },
+    where: { id: { in: [...offersByProduct.keys()] } },
+    select: { id: true, slug: true, name: true, brand: true, image: true, unit: true, unitSize: true, categoryId: true },
   });
 
   const out: SpreadRow[] = [];
   for (const p of rows) {
     const byMerchant = new Map<string, { bani: number; name: string }>();
-    for (const o of p.offers) {
+    for (const o of offersByProduct.get(p.id) ?? []) {
       const bani = o.priceBani ?? Math.round(o.price * 100);
       if (!(bani > 0)) continue;
       const prev = byMerchant.get(o.merchant.slug);
