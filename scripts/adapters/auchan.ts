@@ -47,6 +47,22 @@ const CATS: readonly (readonly [number, string])[] = [
   [3060000, "bacanie"], [3070000, "bacanie"], [3170000, "bacanie"], [3210000, "bacanie"],
   [7040000, "menaj"], [7070000, "menaj"], [7080000, "menaj"], [7090000, "menaj"],
   [7050000, "menaj"], [8020000, "menaj"], [8050000, "menaj"], [8070000, "menaj"],
+  // Added 2026-10-15: four ENTIRE top-level VTEX departments were missing from this list —
+  // not truncated, simply never routed at all. `category/tree` (depth 3, fetched live) shows
+  // 13000000 Congelate, 22000000 Ready meals si mezeluri, 24000000 Carne si peste and
+  // 28000000 Dietetic si international alongside the seven departments already covered here
+  // (1/2/3/4/5/7/8-prefixed ids), and none of their subcategories ever appeared in `CATS`.
+  // `resources` totals for the 19 subcategories below sum to ~5,444 real items — frozen food,
+  // fresh meat/fish and cold cuts/ready meals that this scraper has never fetched. The final
+  // Category is reassigned from the product name by `assign-categories.ts` regardless of the
+  // label here, so these are a reasonable department-level hint, not the source of truth.
+  [13010000, "congelate"], [13020000, "congelate"], [13030000, "congelate"],
+  [13040000, "congelate"], [13050000, "congelate"],
+  [22010000, "bacanie"], [22020000, "bacanie"],
+  [22030000, "mezeluri"], [22040000, "mezeluri"], [22050000, "mezeluri"],
+  [24010000, "carne-peste"], [24020000, "carne-peste"], [24030000, "carne-peste"],
+  [24040000, "carne-peste"], [24050000, "carne-peste"], [24060000, "carne-peste"],
+  [28010000, "bacanie"], [28020000, "bacanie"], [28030000, "bacanie"],
 ] as const;
 
 /** fq=C:{parent}/{sub} — the full path, because VTEX refuses the single segment. */
@@ -74,6 +90,10 @@ export const auchan: Adapter = {
   // valid catalog. Real max observed is 2,349 (47 pages); set well above it for growth. The
   // runner still stops on an empty page, so this costs nothing for the categories that are
   // genuinely small.
+  //
+  // Re-checked 2026-10-15 against all 44 routes then live (including the 19 added below):
+  // real max is still 2,351 (bacanie subcategory 3190000), well inside the 3,000-item cap.
+  // No route is currently truncated.
   maxPages: 60,
 
   pageSize: PAGE_SIZE,

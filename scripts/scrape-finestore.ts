@@ -26,11 +26,28 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // — not alcoholic itself, but this is a dedicated spirits shop selling it as a cocktail mixer
 // alongside gin, the same reasoning as "bauturi-miniatura" already being in King.ro's list
 // despite being a format rather than a spirit type).
+//
+// Checked live again on 2026-10-15, this time against the homepage nav as the sitemap stand-in
+// (robots.txt publishes no Sitemap directive for this store, so there is no product sitemap to
+// diff against). 7 more real category pages (18-57 products each) were missing. 5 are spirit
+// TYPES that sit as siblings of traditionale-palinca/rachiu/tuica under "traditionale-" despite
+// the shared prefix also being used for country facets (traditionale-franta etc, correctly left
+// out) — absinth, cachaca (Brazilian sugarcane spirit), grappa, ouzo and sake are each their own
+// spirit, not a subset of any category already listed. The other 2 are wine subtypes distinct
+// from vin-rosu/alb/rose: vin-licoros (fortified/dessert wine, e.g. Port-style) and
+// vin-aromatizat (aromatized wine, e.g. vermouth-wine/pelin). Bare parent pages ("vin",
+// "traditionale") were confirmed to just re-list their children's products and are deliberately
+// left out to avoid double-counting. Also live but deliberately left out as ambiguous/curated
+// rather than a real product TYPE: ready-to-drink, bauturi-aromatizate-baza-vin,
+// cocktail-aromatizat-baza-vin (RTD/cocktail landing pages, likely aggregating products from
+// categories already scraped) and bauturi-evenimente/bauturi-nunta (marketing gift collections).
 const CATS = [
   { path: "whisky", cat: "whisky" },
   { path: "vin-rosu", cat: "vin" },
   { path: "vin-alb", cat: "vin" },
   { path: "vin-rose", cat: "vin" },
+  { path: "vin-licoros", cat: "vin" },
+  { path: "vin-aromatizat", cat: "vin" },
   { path: "gin", cat: "spirtoase" },
   { path: "vodka", cat: "spirtoase" },
   { path: "rom", cat: "spirtoase" },
@@ -43,6 +60,11 @@ const CATS = [
   { path: "traditionale-palinca", cat: "spirtoase" },
   { path: "traditionale-rachiu", cat: "spirtoase" },
   { path: "traditionale-tuica", cat: "spirtoase" },
+  { path: "traditionale-absinth", cat: "spirtoase" },
+  { path: "traditionale-cachaca", cat: "spirtoase" },
+  { path: "traditionale-grappa", cat: "spirtoase" },
+  { path: "traditionale-ouzo", cat: "spirtoase" },
+  { path: "traditionale-sake", cat: "spirtoase" },
   { path: "lichior", cat: "lichior" },
   { path: "sampanie", cat: "sampanie" },
   { path: "prosecco", cat: "sampanie" },

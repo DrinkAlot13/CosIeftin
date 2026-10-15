@@ -12,13 +12,27 @@
 //     That means plain `fetch`, no Playwright, no crash-prone long-lived Page (see
 //     scripts/adapters/runner.ts's WineMag postmortem for what that cost there).
 //
-// WHY THESE 12 CATEGORIES. king.ro's own llms.txt lists the full nav; "Soft Drinks" is
+// WHY THESE 18 CATEGORIES. king.ro's own llms.txt lists the full nav; "Soft Drinks" is
 // non-alcoholic (out of scope for this section), and "Top 100"/"Noutăți"/"Limited Edition"/
 // "Rare & Exceptional"/"Savureaza Victoria" are curated CROSS-CATEGORY collections — scraping
 // them would only re-find products already reachable from their real category, the same
 // reasoning as skipping WineMag's brand pages. "bauturi-alcoolice" and "ready-to-drink" were
 // tried and dropped: both returned a page with no ItemList at all (a different template, not a
 // product grid), measured via a quick probe rather than assumed working.
+//
+// Checked live on 2026-10-15 against king.ro's own category sitemap (`sitemap-categories.xml`,
+// ~140 category slugs): its own product sitemap has 4,259 URLs against ~3,111 scraped at the
+// time, so every candidate slug was probed for `numberOfItems` before deciding. Confirmed most
+// are sub-filters of a parent already scraped here — vinuri-rosii/vinuri-albe/vinuri-romanesti/
+// vinuri-cabernet-sauvignon/etc. all nest under "vinuri" (overlap, not new products), and
+// scotch-whisky/whisky-single-malts/blended-whisky/whiskey-bourbon/american-whiskey all nest
+// under "whisky-whiskey" the same way. 6 slugs were genuinely NOT covered by any parent already
+// scraped: prosecco (76), cava (9), grappa (6), bitter (19), absint (5), vinuri-import (68).
+// Added below. The remaining sitemap gap (roughly 1,000 products) is not accounted for by any
+// category this recon found — most likely individual legacy/rare-listing pages reachable only
+// outside normal category browsing, or discontinued pages still in the sitemap. Not chased
+// further: visiting all 4,259 product pages individually under this site's rate limit (minutes
+// per request when it fires) was judged not worth it for an unconfirmed remainder this small.
 //
 // Run: npm run scrape:king
 
@@ -41,6 +55,7 @@ const MAX_PAGES = 80; // 80 * 24 = 1920, comfortably above the largest category 
 const CATEGORIES = [
   "vinuri", "vinuri-spumante", "sampanie", "whisky-whiskey", "rum-rom", "gin", "vodka",
   "coniac", "brandy-armagnac", "lichior", "tequila", "bauturi-miniatura",
+  "prosecco", "cava", "grappa", "bitter", "absint", "vinuri-import",
 ];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

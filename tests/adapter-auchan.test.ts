@@ -130,11 +130,13 @@ describe("Auchan adapter — the gates it now inherits", () => {
   });
 
   it("covers every category the bespoke scraper covered", () => {
-    // The bespoke scraper walked 44 VTEX subcategory ids. Losing any of them would look
-    // like a price drop in coverage, not a bug.
-    expect(auchan.routes.length).toBe(44);
+    // The bespoke scraper walked 44 VTEX subcategory ids. 19 more were added 2026-10-15 after
+    // the live VTEX category tree showed 4 whole departments — congelate, ready meals/mezeluri,
+    // carne-peste, dietetic/international — had never been routed at all (~5,444 real items).
+    // Losing any of the 63 would look like a drop in coverage, not a bug.
+    expect(auchan.routes.length).toBe(63);
     const cats = new Set(auchan.routes.map((r) => r.cat));
-    for (const c of ["lactate", "mezeluri", "panificatie", "legume-fructe", "bauturi", "bacanie", "menaj"]) {
+    for (const c of ["lactate", "mezeluri", "panificatie", "legume-fructe", "bauturi", "bacanie", "menaj", "carne-peste", "congelate"]) {
       expect(cats.has(c)).toBe(true);
     }
   });

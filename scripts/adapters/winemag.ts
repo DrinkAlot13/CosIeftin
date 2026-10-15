@@ -38,11 +38,22 @@ const CATEGORIES: { slug: string; cat: string }[] = [
   // subset of the colour categories above) and vinuri-ecologice (34 — organic wines, may
   // partially overlap the colour categories but the runner dedupes by url+name, so the only
   // cost of any overlap is a few extra requests). cidru (cider, 1 item) is trivial but free.
-  // vinuri-import, vinuri-magnum, miniaturi, spirits, cafea, ceai, bauturi-fara-alcool and
-  // alimente were NOT verified — hit WineMag's own rate limiting (its anti-bot "Checking your
-  // browser" page) partway through checking these and backed off rather than push through it.
+  // Checked live on 2026-10-15 via each page's own schema.org ItemList numberOfItems (rate
+  // limit had cooled off): vinuri-import 283, vinuri-magnum 10, miniaturi 53 — all genuine
+  // wine-format variants (imported bottling, magnum size, mini bottles), not subsets of the
+  // colour categories, so added below. spirits (2,189) is excluded: it is WineMag's own
+  // cross-category "all spirits" aggregator, and every spirit category below (coniac, rom,
+  // gin, vodka, whisky, tuica, …) already covers that ground individually — adding it would
+  // only refetch what those already find (harmless per the runner's dedupe, but zero benefit
+  // under a 5s crawl delay). cafea/ceai/alimente/bauturi-fara-alcool (16/29/58/435) are real
+  // but non-alcohol grocery items sold by a wine shop; WineMag's merchant record here is
+  // alcohol-section-only, and section-splitting it (Metro's pattern) for under 550 items
+  // combined is not worth the added complexity right now.
   { slug: "vinuri-bag-in-box", cat: "vin" },
   { slug: "vinuri-ecologice", cat: "vin" },
+  { slug: "vinuri-import", cat: "vin" },
+  { slug: "vinuri-magnum", cat: "vin" },
+  { slug: "miniaturi", cat: "vin" },
   { slug: "cidru", cat: "cidru" },
   // Spirits — no shared parent category exists for these, so each is its own route.
   { slug: "coniac-2", cat: "coniac" },
