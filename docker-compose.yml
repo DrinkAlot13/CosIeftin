@@ -48,3 +48,120 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 300 --label-enable --cleanup
+
+  # --------------------------------------------------------------------------
+  # Price Finder integration — a completely separate app (own Next.js, own
+  # Prisma/SQLite DB, own Playwright+SearXNG deps) reachable at
+  # cosieftin.ro/findprices. It is NOT merged into this codebase; `cosmic`
+  # proxies to it server-side via the rewrite in next.config.mjs
+  # (`/findprices` and `/findprices/:path*` -> `http://price-finder:3300/...`).
+  # That rewrite depends on both containers sharing this one compose file's
+  # default network, which gives every service a DNS name equal to its
+  # service name — "price-finder" below resolves from inside `cosmic`
+  # without any port being published to the host.
+  #
+  # ASSUMPTION, flagged rather than guessed at silently: `build.context`
+  # below is `../price-finder`, i.e. this assumes the deployment server has
+  # BOTH repos checked out side by side as sibling directories
+  # (.../grocery-compare and .../price-finder). This is the only option that
+  # doesn't require copying price-finder's source into this repo (which the
+  # integration brief explicitly said not to do) or publishing a prebuilt
+  # image for it (price-finder has no CI/registry pipeline today, unlike
+  # `cosmic`'s ghcr.io/Watchtower setup above). If the friend's server does
+  # NOT have price-finder cloned next to this repo, `docker compose up
+  # --build` will fail on this service with "path not found" — clone
+  # price-finder to that sibling path first, or change `context:` to wherever
+  # it actually lives on that machine.
+  #
+  # Based on price-finder's own docker-compose.standalone.yml (env vars,
+  # healthcheck) — not guessed. Differences from that file: no `ports:`
+  # (only `cosmic` and `searxng` on the internal network can reach it — the
+  # standalone file publishes 3300 for direct localhost use, which doesn't
+  # apply here), `NEXT_BASE_PATH=/findprices` build arg (see price-finder's
+  # next.config.mjs — needed so every asset/API path the app itself renders
+  # already carries the /findprices prefix the rewrite expects), and
+  # container/volume names prefixed `cosieftin-findprices-*` rather than
+  # reusing price-finder's own `price-finder-app`/`price-finder-searxng`
+  # container names verbatim. This is NOT just stylistic: a `docker ps` on
+  # this very dev machine while testing this integration found a standalone
+  # price-finder instance already running under those exact container
+  # names (port 8888 published) — reusing them would collide outright on
+  # any host that ever runs both a standalone price-finder AND this
+  # cosieftin-embedded one side by side. Docker container names must be
+  # globally unique on a host; service names (the map keys below) only need
+  # to be unique within this compose file and are what the rewrite's
+  # internal DNS lookup actually uses.
+  price-finder:
+    build:
+      context: ../price-finder
+      dockerfile: Dockerfile
+      args:
+        NEXT_BASE_PATH: /findprices
+    container_name: cosieftin-findprices-app
+    restart: unless-stopped
+    depends_on:
+      price-finder-searxng:
+        condition: service_healthy
+    # No `ports:` — reachable only from `cosmic`, over the internal compose
+    # network, as http://price-finder:3300.
+    environment:
+      - DATABASE_URL=file:/data/price-finder.db
+      - SEARXNG_URL=http://price-finder-searxng:8080
+      # LLM extraction fallback stays OFF (zero API spend) unless you
+      # deliberately set these two in .env — same default as price-finder's
+      # own standalone compose file.
+      - LLM_PROVIDER=${PRICE_FINDER_LLM_PROVIDER:-none}
+      - LLM_API_KEY=${PRICE_FINDER_LLM_API_KEY:-}
+      - LLM_MODEL=${PRICE_FINDER_LLM_MODEL:-claude-haiku-4-5}
+      - FX_API_URL=${PRICE_FINDER_FX_API_URL:-https://api.frankfurter.app}
+      - MAX_CANDIDATES_PER_SEARCH=${PRICE_FINDER_MAX_CANDIDATES_PER_SEARCH:-60}
+      - MAX_CANDIDATES_PER_DOMAIN=${PRICE_FINDER_MAX_CANDIDATES_PER_DOMAIN:-4}
+      - SEARXNG_PAGES=${PRICE_FINDER_SEARXNG_PAGES:-2}
+      - MAX_CONCURRENT_FETCHES=${PRICE_FINDER_MAX_CONCURRENT_FETCHES:-8}
+      - PER_DOMAIN_DELAY_MS=${PRICE_FINDER_PER_DOMAIN_DELAY_MS:-1500}
+      - FETCH_TIMEOUT_MS=${PRICE_FINDER_FETCH_TIMEOUT_MS:-20000}
+      - SEARCH_TIMEOUT_MS=${PRICE_FINDER_SEARCH_TIMEOUT_MS:-90000}
+      - DEFAULT_COUNTRY=${PRICE_FINDER_DEFAULT_COUNTRY:-RO}
+      - MATCH_THRESHOLD=${PRICE_FINDER_MATCH_THRESHOLD:-0.4}
+      - RUN_RETENTION_DAYS=${PRICE_FINDER_RUN_RETENTION_DAYS:-0}
+      - APP_PASSWORD=${PRICE_FINDER_APP_PASSWORD:-}
+      - AFFILIATE_TAGS=${PRICE_FINDER_AFFILIATE_TAGS:-{}}
+    volumes:
+      - price-finder-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3300/findprices/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # price-finder's own discovery engine. Namespaced container/volume names so
+  # this never collides with another SearXNG instance someone might run on
+  # the same host. Not reachable from outside this compose network — same
+  # "no published port" choice price-finder's own standalone file makes.
+  price-finder-searxng:
+    image: searxng/searxng:latest
+    container_name: cosieftin-findprices-searxng
+    volumes:
+      - ../price-finder/docker/searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8888/
+      - SEARXNG_SECRET=${PRICE_FINDER_SEARXNG_SECRET:?set a real random secret in .env}
+      - UWSGI_WORKERS=${PRICE_FINDER_SEARXNG_WORKERS:-4}
+      - UWSGI_THREADS=${PRICE_FINDER_SEARXNG_THREADS:-4}
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  price-finder-data:

@@ -49,6 +49,7 @@ export function Header({ categories }: { categories: MenuCategory[] }) {
             </li>
             <li><Link href="/retete"><span aria-hidden>🍳</span> Rețete</Link></li>
             <li><Link href="/carduri"><span aria-hidden>💳</span> Carduri</Link></li>
+            <li><Link href="/findprices"><span aria-hidden>🔎</span> Caută Preț</Link></li>
           </ul>
         </div>
       </nav>

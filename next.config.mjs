@@ -3,6 +3,35 @@ const nextConfig = {
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
 
+  async rewrites() {
+    return [
+      // /findprices is Price Finder — a completely separate Next.js app
+      // (own package.json, own Prisma/SQLite DB, own Playwright+SearXNG
+      // deps) proxied server-side so it feels like one site at one domain
+      // instead of a separate app on a separate port. `destination` points
+      // at the `price-finder` service's Docker-internal DNS name (see
+      // docker-compose.yml) — this ONLY resolves inside the compose
+      // network; price-finder's container publishes no host port, so it
+      // isn't reachable any other way.
+      //
+      // price-finder's own next.config.mjs is built with
+      // `NEXT_BASE_PATH=/findprices` for this deployment (see its comment),
+      // so every route/asset/API path it renders already carries the
+      // /findprices prefix — this is a plain 1:1 passthrough, no path
+      // rewriting on either side. Both rules are needed: the bare
+      // "/findprices" source (no trailing segment) and the wildcard for
+      // everything under it (pages, /_next/*, /api/*).
+      {
+        source: "/findprices",
+        destination: "http://price-finder:3300/findprices",
+      },
+      {
+        source: "/findprices/:path*",
+        destination: "http://price-finder:3300/findprices/:path*",
+      },
+    ];
+  },
+
   async redirects() {
     return [
       {
