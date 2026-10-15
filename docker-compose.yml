@@ -52,9 +52,9 @@ services:
   # --------------------------------------------------------------------------
   # Price Finder integration — a completely separate app (own Next.js, own
   # Prisma/SQLite DB, own Playwright+SearXNG deps) reachable at
-  # cosieftin.ro/findprices. It is NOT merged into this codebase; `cosmic`
+  # cosieftin.ro/cautapret. It is NOT merged into this codebase; `cosmic`
   # proxies to it server-side via the rewrite in next.config.mjs
-  # (`/findprices` and `/findprices/:path*` -> `http://price-finder:3300/...`).
+  # (`/cautapret` and `/cautapret/:path*` -> `http://price-finder:3300/...`).
   # That rewrite depends on both containers sharing this one compose file's
   # default network, which gives every service a DNS name equal to its
   # service name — "price-finder" below resolves from inside `cosmic`
@@ -77,9 +77,9 @@ services:
   # healthcheck) — not guessed. Differences from that file: no `ports:`
   # (only `cosmic` and `searxng` on the internal network can reach it — the
   # standalone file publishes 3300 for direct localhost use, which doesn't
-  # apply here), `NEXT_BASE_PATH=/findprices` build arg (see price-finder's
+  # apply here), `NEXT_BASE_PATH=/cautapret` build arg (see price-finder's
   # next.config.mjs — needed so every asset/API path the app itself renders
-  # already carries the /findprices prefix the rewrite expects), and
+  # already carries the /cautapret prefix the rewrite expects), and
   # container/volume names prefixed `cosieftin-findprices-*` rather than
   # reusing price-finder's own `price-finder-app`/`price-finder-searxng`
   # container names verbatim. This is NOT just stylistic: a `docker ps` on
@@ -96,7 +96,7 @@ services:
       context: ../price-finder
       dockerfile: Dockerfile
       args:
-        NEXT_BASE_PATH: /findprices
+        NEXT_BASE_PATH: /cautapret
     container_name: cosieftin-findprices-app
     restart: unless-stopped
     depends_on:
@@ -129,7 +129,7 @@ services:
     volumes:
       - price-finder-data:/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3300/findprices/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3300/cautapret/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
